@@ -9,8 +9,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	log "basesk/common/logger"
-	"basesk/conf"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
 
 	//must be update v8
 	"github.com/go-redis/redis/v7"
@@ -56,6 +56,18 @@ func NewRedisDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 
 func (p *RedisDB) Start() error {
 	return nil
+}
+
+func (p *RedisDB) Close() error {
+	return p.client.Close()
+}
+
+func (p *RedisDB) Ping() error {
+	return p.client.Ping().Err()
+}
+
+func (r *RedisDB) Terminate() {
+	log.Info("Terminated Database")
 }
 
 func (r *RedisDB) SetCache(key, data string) error {

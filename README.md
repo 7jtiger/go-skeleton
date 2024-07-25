@@ -1,4 +1,4 @@
-# basesk-servern (server using mvc model with go-lang)
+# go-skeleton-servern (server using mvc model with go-lang)
 
 Server-client 아키텍처 패턴에서 server 파트를 표현한 예제 코드와 폴더 구조 입니다.
 <br/>예시 코드는 Mongo DB 사용으로작성되어 있습니다.

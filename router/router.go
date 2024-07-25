@@ -3,16 +3,17 @@
 import (
 	"encoding/base32"
 
-	"basesk/common/logger"
-	"basesk/conf"
+	"go-skeleton/common/logger"
+	"go-skeleton/conf"
 
-	ctl "basesk/controller"
+	ctl "go-skeleton/controller"
 
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
 
-	"basesk/docs"
+	"go-skeleton/docs"
 
 	ginSwg "github.com/swaggo/gin-swagger"
 
@@ -21,7 +22,7 @@ import (
 
 type Router struct {
 	cfg     *conf.Config
-	wl map[string]string
+	wl      map[string]string
 	ct      *ctl.Controller
 	hHealth *ctl.Health
 }
@@ -144,8 +145,8 @@ func (p *Router) Idx() *gin.Engine {
 
 	wd := e.Group("wd/v01", p.otpAuth())
 	{
-		wd.POST("/req", p.dt.AddDeposit)
-		wd.GET("/myinfo/:id", p.pt.GetMyInfo)
+		wd.POST("/req", p.hHealth.Check)
+		wd.GET("/myinfo/:id", p.hHealth.Check)
 	}
 
 	return e

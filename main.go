@@ -1,12 +1,12 @@
 ﻿package main
 
 import (
-	"basesk/common/logger"
-	"basesk/conf"
-	ctl "basesk/controller"
-	"basesk/models"
-	rt "basesk/router"
-	schd "basesk/scheduler"
+	"go-skeleton/common/logger"
+	"go-skeleton/conf"
+	ctl "go-skeleton/controller"
+	"go-skeleton/models"
+	rt "go-skeleton/router"
+	schd "go-skeleton/scheduler"
 
 	"context"
 	"flag"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	com "basesk/common"
+	com "go-skeleton/common"
 )
 
 type GenMap struct {

@@ -1,7 +1,7 @@
 package scheduler
 
 import (
-	log "basesk/common/logger"
+	log "go-skeleton/common/logger"
 )
 
 type Mailing struct {

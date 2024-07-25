@@ -7,8 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	log "basesk/common/logger"
-	"basesk/conf"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
 )
 
 // ScopeDB : 유저정보를 제공
@@ -55,6 +55,18 @@ func (p *AccountDB) Start() error {
 		close(p.start)
 		return
 	}()
+}
+
+func (p *AccountDB) Terminate() {
+	log.Info("Terminated Database")
+}
+
+func (p *AccountDB) Close() error {
+	return p.client.Disconnect(context.TODO())
+}
+
+func (p *AccountDB) Ping() error {
+	return p.client.Ping(context.TODO(), nil)
 }
 
 func (p *AccountDB) GetAccount() {

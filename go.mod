@@ -1,4 +1,4 @@
-module basesk
+module go-skeleton
 
 go 1.21.5
 
@@ -18,11 +18,13 @@ require (
 	github.com/ethereum/go-ethereum v1.10.2
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-redis/redis/v7 v7.4.1
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/google/uuid v1.3.0
 	github.com/jlaffaye/ftp v0.1.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/m0t0k1ch1/go-slack-poster v0.3.0
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
+	github.com/pquerna/otp v1.4.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.5.3
@@ -36,10 +38,12 @@ require (
 require (
 	cosmossdk.io/errors v1.0.0-beta.7 // indirect
 	cosmossdk.io/math v1.0.0-rc.0 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
 	github.com/bytedance/sonic v1.8.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect

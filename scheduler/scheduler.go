@@ -1,10 +1,10 @@
 package scheduler
 
 import (
-	logs "basesk/common/logger"
-	"basesk/conf"
-	"basesk/models"
 	"fmt"
+	logs "go-skeleton/common/logger"
+	"go-skeleton/conf"
+	"go-skeleton/models"
 	"strings"
 	"time"
 )

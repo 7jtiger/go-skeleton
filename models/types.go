@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"basesk/protocol"
+	"go-skeleton/protocol"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/shopspring/decimal"

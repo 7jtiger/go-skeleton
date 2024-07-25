@@ -3,7 +3,7 @@ package controller
 import (
 	"errors"
 	"fmt"
-	// "basesk/common/util"
+	// "go-skeleton/common/util"
 )
 
 var defaultGasLimit = uint64(100000000)

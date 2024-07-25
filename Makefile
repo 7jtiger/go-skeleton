@@ -7,7 +7,7 @@ GOGET=$(GO) get
 GORUN=$(GO) run
 
 # Binary names
-PACKAGE = basesk
+PACKAGE = go-skeleton
 # GOPATH  = $(CURDIR)/.gopath
 BASE    = $(CURDIR)$(PACKAGE)
 FLAG	= GOOS=linux GOARCH=amd64

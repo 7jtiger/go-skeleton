@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"sync"
 
-	log "basesk/common/logger"
-	"basesk/conf"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
 )
 
 const (
@@ -51,15 +51,15 @@ func NewModel(cf *conf.Config) (*Repositories, error) {
 		}
 	}
 
-		r.lock.Lock()
-		defer r.lock.Unlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
 
-		for t, e := range r.elems {
-			if err := e.Interface().(IRepository).Start(); err != nil {
-				log.Error("NewRepositories", "repository", t, "error", err)
+	for t, e := range r.elems {
+		if err := e.Interface().(IRepository).Start(); err != nil {
+			log.Error("NewRepositories", "repository", t, "error", err)
 			return nil, err
-			}
 		}
+	}
 
 	return r, nil
 }
@@ -74,13 +74,13 @@ func (p *Repositories) Register(constructor RepositoryConstructor, config *conf.
 		return nil
 	}
 
-		p.lock.Lock()
-		defer p.lock.Unlock()
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
 	if _, ok := p.elems[reflect.TypeOf(r)]; ok {
-			return fmt.Errorf("duplicated instance of %v", reflect.TypeOf(r))
+		return fmt.Errorf("duplicated instance of %v", reflect.TypeOf(r))
 	}
-			p.elems[reflect.TypeOf(r)] = reflect.ValueOf(r)
+	p.elems[reflect.TypeOf(r)] = reflect.ValueOf(r)
 	return nil
 }
 

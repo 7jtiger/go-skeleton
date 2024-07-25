@@ -1,4 +1,4 @@
-﻿[server] ##nomal type
+[server] ##nomal type
 mode = "dev"
 port = ":8080"
 
@@ -38,14 +38,26 @@ duration = 3600
 args = "resv"
 
 [[works]]
-name = "exam"
-desc = "exam"
-excute = "x"
-start = 1
-duration = 60
-args = "exam"
+name = "bankChecker"
+desc = "at 10:00 AM, cron banker deposit check status 2 -> 4, 24h"
+execute = "cron"
+start = 10
+duration = 24
+args = "0 10 * * *"
+
+[[works]]
+name = "waitChecker"
+desc = "at 10:10 AM, cron banker waitpool -> deposit, 24h"
+execute = "cron"
+start = 10
+duration = 24
+args = "10 10 * * *"
 
 [loginfo]
 fpath = "./logs/banker"
 maxAgeHour = 1440
 rotateHour = 24
+
+[whitelist]
+ips = ["localhost", "127.0.0.1", "192.168.48.187", "192.168.48.162"]
+

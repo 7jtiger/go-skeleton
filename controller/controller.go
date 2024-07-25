@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"basesk/models"
+	"go-skeleton/models"
 
 	"github.com/gin-gonic/gin"
 
-	log "basesk/common/logger"
-	"basesk/conf"
-	"basesk/protocol"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
+	"go-skeleton/protocol"
 )
 
 // Controller

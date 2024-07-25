@@ -2,16 +2,14 @@
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 
-	log "banker/common/logger"
-	"banker/conf"
-	"banker/protocol"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
 )
 
 // ScopeDB : 유저정보를 제공
@@ -92,5 +90,3 @@ func (p *BankerDB) heartbeat() {
 		}
 	}
 }
-
-

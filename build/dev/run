@@ -5,15 +5,15 @@ BASE="."
 WOG="nohup"
 LOGPATH="$BASE/logs"
 
-CNAME="basesktest"
-IDNT="basesk-testnet"
-DMON="basesk"
+CNAME="go-skeletontest"
+IDNT="go-skeleton-testnet"
+DMON="go-skeleton"
 BIN="$BASE/$DMON"
 LOG=$LOGPATH/$IDNT.log
 
 DDIR="$BASE/home"
 
-echo "basesk network"
+echo "go-skeleton network"
 pid=""
 getpid()
 {

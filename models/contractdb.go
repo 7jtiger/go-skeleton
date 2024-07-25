@@ -8,9 +8,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	log "banker/common/logger"
-	"banker/conf"
-	pt "banker/protocol"
+	log "go-skeleton/common/logger"
+	"go-skeleton/conf"
 )
 
 // ScopeDB : 유저정보를 제공
@@ -88,15 +87,17 @@ func (p *ContractDB) heartbeat() {
 	}
 }
 
-func (p *ContractDB) GetContractABI(db *sql.DB, address string) (*pt.Contract, error) {
-	query := "SELECT id, address, abi FROM contracts WHERE address = ?"
-	row := db.QueryRow(query, address)
+func (p *ContractDB) GetContractABI(db *sql.DB, address string) {
+	/*
+		 	query := "SELECT id, address, abi FROM contracts WHERE address = ?"
+			row := db.QueryRow(query, address)
 
-	var cABI pt.Contract
-	err := row.Scan(&cABI.CID, &cABI.CAddress, &cABI.CName, &cABI.CABI, &cABI.CType, &cABI.CDate)
-	if err != nil {
-		return nil, err
-	}
+			var cABI pt.Contract
+			err := row.Scan(&cABI.CID, &cABI.CAddress, &cABI.CName, &cABI.CABI, &cABI.CType, &cABI.CDate)
+			if err != nil {
+				return nil, err
+			}
 
-	return &cABI, nil
+			return &cABI, nil
+	*/
 }

@@ -1,4 +1,4 @@
-﻿package conf
+package conf
 
 import (
 	"os"
@@ -37,6 +37,12 @@ type Config struct {
 		MaxAgeHour int
 		RotateHour int
 	}
+
+	// WhiteList map[string]string
+	WhiteList struct {
+		Ips []string
+	}
+	// WhiteList map[string]string
 }
 
 func NewConfig(fpath string) *Config {

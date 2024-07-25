@@ -12,8 +12,8 @@ import (
 
 	"time"
 
-	"basesk/common/utils"
-	"basesk/conf"
+	"go-skeleton/common/utils"
+	"go-skeleton/conf"
 
 	// "github.com/gin-gonic/gin"
 

@@ -1,9 +1,9 @@
 ﻿package controller
 
 import (
-	"basesk/conf"
-	"basesk/models"
-	"basesk/protocol"
+	"go-skeleton/conf"
+	"go-skeleton/models"
+	"go-skeleton/protocol"
 
 	"github.com/gin-gonic/gin"
 )
