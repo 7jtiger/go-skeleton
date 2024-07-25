@@ -1,0 +1,35 @@
+definitions:
+  protocol.RespHeader:
+    properties:
+      desc:
+        type: string
+      result:
+        $ref: '#/definitions/protocol.ResultCode'
+      resultString:
+        type: string
+    type: object
+  protocol.ResultCode:
+    enum:
+    - 0
+    type: integer
+    x-enum-varnames:
+    - Success
+info:
+  contact: {}
+paths:
+  /health/check:
+    get:
+      consumes:
+      - application/json
+      description: 서버 살아있는지 확인
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Check
+      tags:
+      - health
+swagger: "2.0"

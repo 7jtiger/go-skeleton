@@ -1,0 +1,110 @@
+#!/bin/bash
+
+BASE="."
+#WOG=""
+WOG="nohup"
+LOGPATH="$BASE/logs"
+
+CNAME="basesktest"
+IDNT="basesk-testnet"
+DMON="basesk"
+BIN="$BASE/$DMON"
+LOG=$LOGPATH/$IDNT.log
+
+DDIR="$BASE/home"
+
+echo "basesk network"
+pid=""
+getpid()
+{
+        pid=`ps -ef | grep $DMON |grep -v grep| awk '{print $2}'`
+        echo "$pid"
+}
+
+start()
+{
+        if [ "x$pid" = "x" ];
+        then
+                #$PROCESS_FULL_PATH
+		$BIN > $LOG &
+                echo  "start $PROCESS ..."
+        else
+                echo -e "\033[01malready running... pid $pid"
+                echo -e "\033[0m"
+        fi
+}
+
+stop()
+{
+        if [ "x$pid" = "x" ];
+        then
+                echo "$DMON is not running..."
+        else
+                kill -15 $pid
+                echo "stop $DMON..."
+                echo "process $pid killed"
+        fi
+}
+
+
+status()
+{
+        if [ "x$pid" = "x" ];
+        then
+            echo -e "$DMON is not running"
+            exit 1
+        else
+            echo -e "\033[01m $IDNT is running...[pid $pid]"
+            echo "=========================="
+            cat /proc/$pid/status | grep VmPeak
+            cat /proc/$pid/status | grep VmSize
+            echo -e "\033[0m"
+        exit 0
+        fi
+}
+
+update()
+{
+	cp -rf conf/ ./bak/
+}
+
+supd()
+{
+	~/go/bin/swag init --parseDependency
+}
+
+# get process pid
+getpid
+
+case "$1" in
+        s)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+        rs)
+                stop
+                getpid
+                start
+                ;;
+        stat)
+                status
+                exit 1
+                ;;
+        t)
+                tail -f $LOG
+                ;;
+        up)
+		update
+		start
+		supd
+		;;
+        *)
+                echo " Usage: ./$DMON {start|stop|restart|status}"
+                exit 1
+                ;;
+
+esac
+exit 0
+

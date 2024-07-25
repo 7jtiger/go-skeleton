@@ -1,0 +1,51 @@
+﻿[server] ##nomal type
+mode = "dev"
+port = ":8080"
+
+[network]
+rpc = "http://dusdx.gurufin.io:8545"
+
+[db] #data access object
+[db.banker] #이중 map type map[string]map[string]interface{}
+host = "localhost:3306"
+user = "admin"
+pass = "admin"
+name = "bankerdb"
+
+[db.contract]
+host = "localhost:3306"
+user = "admin"
+pass = "admin"
+name = "contractdb"
+
+[db.redis]
+host = "https://localhost"
+user = "admin"
+pass = "admin!@"
+name = "redis"
+
+#worker pool job object
+# start 0 : 00:00:00 start
+# start 1 : *:*:00 start
+# start 5 : *:*:5 start, 5min start
+# duration : seconds
+[[works]] #배열구조, jobs []job
+name = "depositCheck"
+desc = "first deposit check status 1 -> 2, 1h"
+execute = "run"
+start = 0
+duration = 3600
+args = "resv"
+
+[[works]]
+name = "exam"
+desc = "exam"
+excute = "x"
+start = 1
+duration = 60
+args = "exam"
+
+[loginfo]
+fpath = "./logs/banker"
+maxAgeHour = 1440
+rotateHour = 24

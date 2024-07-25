@@ -1,0 +1,87 @@
+#!/bin/bash
+BASE="basesk"
+
+DOCNAME="basesk"
+
+OUTPORT=22400
+#OUTPORT=80
+#INPORT=8080
+INPORT=22400
+
+dcps()
+{
+	docker ps -a | grep $DOCNAME
+}
+
+dcimages()
+{
+	docker images | grep $DOCNAME
+}
+
+dcbuild()
+{
+	docker build -t $DOCNAME . &&
+	#docker run -d -p $MPORT:$MPORT --name $DOCNAME $DOCNAME
+	docker run -d -p $OUTPORT:$INPORT --name $DOCNAME $DOCNAME
+}
+
+dcremove()
+{
+	docker stop $DOCNAME 
+	did=`docker ps -a | grep $DOCNAME |grep -v grep| awk '{print $1}'`
+	echo "$DOCNAME docker ps $did"
+	docker rm -f $did 
+	docker rm -f $DOCNAME 
+	echo "================rm dc================================"
+
+
+	iid=`docker images | grep $DOCNAME |grep -v grep| awk '{print $3}'`
+	echo "docker images $iid"
+
+	docker rmi -f $iid
+	docker rmi -f $DOCNAME:latest
+	docker rmi -f $DOCNAME:*
+	echo "================rm dc================================"
+	
+	noid=`docker images | grep none |grep -v grep| awk '{print $3}'`
+	echo "docker images $noid"
+	
+	docker rmi -f $noid
+
+}
+
+case "$1" in
+	ps)
+		dcps
+		;;
+	img)
+		dcimages
+		;;
+	bld)
+		dcbuild
+		;;
+	exc)
+		docker exec -it $DOCNAME /bin/bash
+		;;
+	stop)
+		docker stop $DOCNAME
+		;;
+	rm)
+		dcremove
+		;;
+	push)
+                PATH_URL="ctkrpoc.azurecr.io/poc"
+                LABEL="latest"
+
+                docker stop $DOCNAME &&
+                docker tag $DOCNAME $PATH_URL/$DOCNAME &&
+                docker push $PATH_URL/$DOCNAME:$LABEL
+                ;;
+        *)
+                echo " Usage: ./$DMON {s : start stop : $DMON stop restart : $DMON restart }"
+                exit 1
+                ;;
+
+esac
+exit 0
+

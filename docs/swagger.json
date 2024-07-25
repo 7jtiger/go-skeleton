@@ -1,0 +1,56 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/health/check": {
+            "get": {
+                "description": "서버 살아있는지 확인",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "protocol.RespHeader": {
+            "type": "object",
+            "properties": {
+                "desc": {
+                    "type": "string"
+                },
+                "result": {
+                    "$ref": "#/definitions/protocol.ResultCode"
+                },
+                "resultString": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.ResultCode": {
+            "type": "integer",
+            "enum": [
+                0
+            ],
+            "x-enum-varnames": [
+                "Success"
+            ]
+        }
+    }
+}
