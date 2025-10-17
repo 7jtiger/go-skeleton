@@ -1,0 +1,8 @@
+---
+description: Reference file for model, schema, and database-related work, .cursor/mds/models.md
+1. Reference file for Account and User information: .cursor/mds/account_db.md
+2. Reference file for History and History DB related information: .cursor/mds/history_db.md
+3. Reference file for Redis DB related information: .cursor/mds/redis_db.md
+globs:
+alwaysApply: false
+---

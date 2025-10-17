@@ -1,16 +1,16 @@
-﻿package models
+package models
 
 import (
 	"fmt"
 	"reflect"
 	"sync"
 
-	log "go-skeleton/common/logger"
-	"go-skeleton/conf"
+	log "ms-gateway/common/logger"
+	"ms-gateway/conf"
 )
 
 const (
-	noDoc = "mongo: no documents in result"
+	noDoc = "mysql: no documents in result"
 )
 
 // repository 타입
@@ -27,6 +27,7 @@ type RepositoryConstructor func(conf *conf.Config, root *Repositories) (IReposit
 // repositories manager
 type Repositories struct {
 	lock  sync.RWMutex
+	lk    sync.RWMutex
 	cfg   *conf.Config
 	elems map[reflect.Type]reflect.Value
 }
@@ -39,10 +40,13 @@ func NewModel(cf *conf.Config) (*Repositories, error) {
 	}
 
 	constructors := []RepositoryConstructor{
-		// {NewRedisDB, cf}, //다른 respository로서 제일먼저 추가되어야함.
-		// {NewAccountDB, cf},
-		NewContractDB,
-		NewBankerDB,
+		NewAccountDB,
+		NewHistoryDB,
+		NewItemDB,
+		NewRedisDB,
+		// NewContractDB,
+		// NewBankerDB,
+		// NewConnectNetwork,
 	}
 
 	for _, constructor := range constructors {
@@ -59,6 +63,7 @@ func NewModel(cf *conf.Config) (*Repositories, error) {
 			log.Error("NewRepositories", "repository", t, "error", err)
 			return nil, err
 		}
+		log.Info("Repository started", "type", t)
 	}
 
 	return r, nil
@@ -86,8 +91,8 @@ func (p *Repositories) Register(constructor RepositoryConstructor, config *conf.
 
 // 주어진 rs의 타입의 respository를 찾아서 받은 rs에 값을 넣음.
 func (p *Repositories) Get(rs ...interface{}) error {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
+	p.lk.Lock()
+	defer p.lk.Unlock()
 
 	var notFounds []reflect.Type
 

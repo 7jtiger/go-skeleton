@@ -1,4 +1,4 @@
-.vscode/
+﻿.vscode/
 bak
 bak/*
 data
@@ -8,7 +8,7 @@ data/abi/
 logs/
 logs/*
 
-guru-crawler
+main
 
 .boost/
 .boost*

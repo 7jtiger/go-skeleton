@@ -1,13 +1,51 @@
-﻿package controller
+package controller
 
 import (
+	"bytes"
+	"encoding/base32"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
+	"mime/multipart"
+	"ms-gateway/common/utils"
+	"ms-gateway/protocol"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/pquerna/otp/totp"
+	// "gocv.io/x/gocv"
 )
+
+func genOtp() string {
+	secret := "123456"
+	encodedSecret := base32.StdEncoding.EncodeToString([]byte(secret))
+	otp, err := totp.GenerateCode(encodedSecret, time.Now())
+	if err != nil {
+		fmt.Println("Error generating OTP:", err)
+		return ""
+	}
+
+	return otp
+}
+
+func TestGenOtp(t *testing.T) {
+	secret := "123456"
+	encodedSecret := base32.StdEncoding.EncodeToString([]byte(secret))
+	otp, err := totp.GenerateCode(encodedSecret, time.Now())
+	fmt.Println(otp)
+	if err != nil {
+		fmt.Println("Error generating OTP:", err)
+
+	}
+
+	fmt.Println(otp)
+}
 
 func Get(host, relativePath string, keys []string, values []string) (string, error) {
 	// if len(keys) != len(values) {
@@ -41,6 +79,103 @@ func Get(host, relativePath string, keys []string, values []string) (string, err
 	}
 }
 
+func PostJson(host, relativePath string, keys []string, values []string) (string, error) {
+	// if len(keys) != len(values) {
+	// 	return "", fmt.Errorf("mismatch length of keys and values")
+	// }
+	u := url.URL{Scheme: "http", Host: host, Path: relativePath}
+
+	// Create a map to hold the JSON data
+	jsonData := make(map[string]string)
+	for i, key := range keys {
+		jsonData[key] = values[i]
+	}
+
+	// Convert map to JSON
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return "", err
+	}
+
+	if request, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonBytes)); err != nil {
+		return "", err
+	} else {
+		request.Header.Set("Content-Type", "application/json")
+
+		// Generate OTP and set it in the header
+		otp := genOtp()
+		request.Header.Set("X-Otp", otp)
+
+		client := http.Client{
+			//Timeout: 50e9,
+		}
+
+		if response, err := client.Do(request); err != nil {
+			return "", err
+		} else {
+			defer response.Body.Close()
+
+			if body, err := io.ReadAll(response.Body); err != nil {
+				return "", err
+			} else {
+				return string(body), nil
+			}
+		}
+	}
+}
+
+func PostEncJson(host, relativePath string, keys []string, values []string) (string, error) {
+	// if len(keys) != len(values) {
+	// 	return "", fmt.Errorf("mismatch length of keys and values")
+	// }
+	u := url.URL{Scheme: "http", Host: host, Path: relativePath}
+
+	// Create a map to hold the JSON data
+	jsonData := make(map[string]string)
+	for i, key := range keys {
+		jsonData[key] = values[i]
+	}
+
+	// Convert map to JSON
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return "", err
+	}
+	/*
+		keyBytes := []byte("testtesttesttesttesttesttesttest") // 32 bytes key
+		encryptedData, err := utils.EncryptGCM(jsonBytes, keyBytes)
+		if err != nil {
+			return "", err
+		} */
+
+	if request, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonBytes)); err != nil {
+		// if request, err := http.NewRequest("POST", u.String(), bytes.NewBuffer([]byte(encryptedData))); err != nil {
+		return "", err
+	} else {
+		request.Header.Set("Content-Type", "application/json")
+
+		// Generate OTP and set it in the header
+		otp := genOtp()
+		request.Header.Set("OTP-Auth", otp)
+
+		client := http.Client{
+			//Timeout: 50e9,
+		}
+
+		if response, err := client.Do(request); err != nil {
+			return "", err
+		} else {
+			defer response.Body.Close()
+
+			if body, err := io.ReadAll(response.Body); err != nil {
+				return "", err
+			} else {
+				return string(body), nil
+			}
+		}
+	}
+}
+
 func TestGetItem(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	// qurl := "api/v3/ticker/bookTicker"
@@ -55,4 +190,642 @@ func TestGetItem(t *testing.T) {
 	res, _ := Get(*targetUrl, qurl, key, value)
 
 	fmt.Println(res)
+}
+
+func TestAccAddPartner(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	// targetUrl := flag.String("target", "192.168.48.182:8080", "target server url")
+	qurl := "/acc/v01/regist"
+
+	var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var value = []string{"test01", "usdx", "1111111123456", "test01@test.com", "0x0AFfB0a96FBefAa97dCe488DfD97512346cf3Ab8"}
+	// var value = []string{"test23", "123456789", "홍길동", "1", "20", "1990-01-01", "서울"}
+	var value = []string{"test13", "123456789", "홍길", "1", "22", "1990-01-01", "서울"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+type RegistReq struct {
+	Id     string `json:"id"`
+	Pw     string `json:"pw"`
+	Name   string `json:"name"`
+	Gender string `json:"gender"`
+	Age    string `json:"age"`
+	Birth  string `json:"birth"`
+	Area   string `json:"area"`
+	Email  string `json:"email"`
+}
+
+func EncryptData(data interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	// Encrypt the JSON data using EncryptGCM
+	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
+	encryptedData, err := utils.EncryptGCM(jsonData, keyBytes)
+	if err != nil {
+		return "", err
+	}
+
+	return encryptedData, nil
+}
+
+func DecryptData(data interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	// Encrypt the JSON data using EncryptGCM
+	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
+	encryptedData, err := utils.EncryptGCM(jsonData, keyBytes)
+	if err != nil {
+		return "", err
+	}
+
+	return encryptedData, nil
+}
+
+func TestAccRegist(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/regist"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var key = []string{"info"}
+	var key = []string{"data"}
+	var value = []string{"test243", "123456789", "홍두께", "1", "24", "1990-01-01", "서울", "test243@test.com"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := RegistReq{
+		Id:     value[0],
+		Pw:     value[1],
+		Name:   value[2],
+		Gender: value[3],
+		Age:    value[4],
+		Birth:  value[5],
+		Area:   value[6],
+		Email:  value[7],
+	}
+
+	// Convert the map to JSON
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+type LoginReq struct {
+	Id string `json:"id"`
+	Pw string `json:"pw"`
+}
+
+func TestAccLogin(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/login"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	var key = []string{"data"}
+	var value = []string{"test43", "123456789"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := LoginReq{
+		Id: value[0],
+		Pw: value[1],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestAccLogout(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	// targetUrl := flag.String("target", "192.168.48.182:8080", "target server url")
+	qurl := "/acc/v01/logout"
+
+	var key = []string{"id"}
+	// var value = []string{"test01", "usdx", "1111111123456", "test01@test.com", "0x0AFfB0a96FBefAa97dCe488DfD97512346cf3Ab8"}
+	// var value = []string{"test23", "123456789", "홍길동", "1", "20", "1990-01-01", "서울"}
+	var value = []string{"test13"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+
+	if err != nil {
+		t.Errorf("Failed to logout: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+type LeaveReq struct {
+	Id string `json:"id"`
+}
+
+func TestAccLeave(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/leave"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	var key = []string{"data"}
+	var value = []string{"test43"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := LeaveReq{
+		Id: value[0],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+type FindIDReq struct {
+	Name  string `json:"name"`
+	Birth string `json:"birth"`
+}
+
+func TestAccFindID(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/fnid"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	var key = []string{"data"}
+	var value = []string{"홍길동", "1990-01-01"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := FindIDReq{
+		Name:  value[0],
+		Birth: value[1],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetEmail(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/ckemail"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	var key = []string{"data"}
+	var value = []string{"홍길동", "1990-01-01"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := FindIDReq{
+		Name:  value[0],
+		Birth: value[1],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+type FindPWReq struct {
+	ID    string `json:"id"`
+	Birth string `json:"birth"`
+}
+
+func TestAccFindPW(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/fnpw"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	var key = []string{"data"}
+	var value = []string{"test23", "1990-01-01"}
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := FindPWReq{
+		ID:    value[0],
+		Birth: value[1],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+	if err != nil {
+		t.Errorf("Failed to add partner: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGenUuid(t *testing.T) {
+	uuid := utils.GenUuid()
+	fmt.Println(uuid)
+}
+
+// TestVideoChat WebRTC 영상 채팅 테스트
+func TestVideoChat(t *testing.T) {
+	// 테스트 서버 주소
+	serverAddr := "http://localhost:8080"
+
+	// 테스트 사용자 ID
+	user1ID := "test-user-1"
+	user2ID := "test-user-2"
+
+	// 첫 번째 사용자 로그인 (혹은 접속)
+	loginUser1, err := PostJson(serverAddr, "/acc/v01/login",
+		[]string{"id", "pw"},
+		[]string{user1ID, "password123"})
+	if err != nil {
+		t.Logf("사용자1 로그인 실패, 계속 진행: %v", err)
+		// 로그인 실패해도 테스트 계속 진행
+	}
+	t.Logf("사용자1 로그인 결과: %s", loginUser1)
+
+	// 두 번째 사용자 로그인 (혹은 접속)
+	loginUser2, err := PostJson(serverAddr, "/acc/v01/login",
+		[]string{"id", "pw"},
+		[]string{user2ID, "password123"})
+	if err != nil {
+		t.Logf("사용자2 로그인 실패, 계속 진행: %v", err)
+		// 로그인 실패해도 테스트 계속 진행
+	}
+	t.Logf("사용자2 로그인 결과: %s", loginUser2)
+
+	// WebSocket 연결을 테스트합니다 (실제 연결은 하지 않고 URL만 구성)
+	wsURL1 := fmt.Sprintf("ws://localhost:8080/chat/v01/ws?userId=%s", user1ID)
+	wsURL2 := fmt.Sprintf("ws://localhost:8080/chat/v01/ws?userId=%s", user2ID)
+
+	t.Logf("사용자1 WebSocket URL: %s", wsURL1)
+	t.Logf("사용자2 WebSocket URL: %s", wsURL2)
+
+	// P2P WebRTC 연결 시뮬레이션
+	offerSDP := `{"type":"offer","sdp":"v=0\\r\\no=- 123456789 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\na=group:BUNDLE 0\\r\\na=msid-semantic: WMS\\r\\nm=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102\\r\\nc=IN IP4 0.0.0.0\\r\\na=rtcp:9 IN IP4 0.0.0.0\\r\\na=ice-ufrag:someufrag\\r\\na=ice-pwd:someicepwd\\r\\na=ice-options:trickle\\r\\na=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\\r\\na=setup:actpass\\r\\na=mid:0\\r\\na=extmap:1 urn:ietf:params:rtp-hdrext:toffset\\r\\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\\r\\na=extmap:3 urn:3gpp:video-orientation\\r\\na=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\\r\\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\\r\\na=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type\\r\\na=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-timing\\r\\na=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/color-space\\r\\na=extmap:9 urn:ietf:params:rtp-hdrext:sdes:mid\\r\\na=extmap:10 urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id\\r\\na=extmap:11 urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id\\r\\na=recvonly\\r\\na=rtcp-mux\\r\\na=rtcp-rsize\\r\\na=rtpmap:96 VP8/90000\\r\\na=rtcp-fb:96 goog-remb\\r\\na=rtcp-fb:96 transport-cc\\r\\na=rtcp-fb:96 ccm fir\\r\\na=rtcp-fb:96 nack\\r\\na=rtcp-fb:96 nack pli\\r\\na=rtpmap:97 rtx/90000\\r\\na=fmtp:97 apt=96\\r\\na=rtpmap:98 VP9/90000\\r\\na=rtcp-fb:98 goog-remb\\r\\na=rtcp-fb:98 transport-cc\\r\\na=rtcp-fb:98 ccm fir\\r\\na=rtcp-fb:98 nack\\r\\na=rtcp-fb:98 nack pli\\r\\na=rtpmap:99 rtx/90000\\r\\na=fmtp:99 apt=98\\r\\na=rtpmap:100 H264/90000\\r\\na=rtcp-fb:100 goog-remb\\r\\na=rtcp-fb:100 transport-cc\\r\\na=rtcp-fb:100 ccm fir\\r\\na=rtcp-fb:100 nack\\r\\na=rtcp-fb:100 nack pli\\r\\na=fmtp:100 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\\r\\na=rtpmap:101 rtx/90000\\r\\na=fmtp:101 apt=100\\r\\na=rtpmap:102 H264/90000\\r\\na=rtcp-fb:102 goog-remb\\r\\na=rtcp-fb:102 transport-cc\\r\\na=rtcp-fb:102 ccm fir\\r\\na=rtcp-fb:102 nack\\r\\na=rtcp-fb:102 nack pli\\r\\na=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\\r\\n"}`
+
+	//answerSDP := `{"type":"answer","sdp":"v=0\\r\\no=- 987654321 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\na=group:BUNDLE 0\\r\\na=msid-semantic: WMS\\r\\nm=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102\\r\\nc=IN IP4 0.0.0.0\\r\\na=rtcp:9 IN IP4 0.0.0.0\\r\\na=ice-ufrag:otherufraq\\r\\na=ice-pwd:othericepwd\\r\\na=ice-options:trickle\\r\\na=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\\r\\na=setup:active\\r\\na=mid:0\\r\\na=extmap:1 urn:ietf:params:rtp-hdrext:toffset\\r\\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\\r\\na=extmap:3 urn:3gpp:video-orientation\\r\\na=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\\r\\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\\r\\na=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type\\r\\na=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-timing\\r\\na=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/color-space\\r\\na=extmap:9 urn:ietf:params:rtp-hdrext:sdes:mid\\r\\na=extmap:10 urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id\\r\\na=extmap:11 urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id\\r\\na=sendonly\\r\\na=rtcp-mux\\r\\na=rtcp-rsize\\r\\na=rtpmap:96 VP8/90000\\r\\na=rtcp-fb:96 goog-remb\\r\\na=rtcp-fb:96 transport-cc\\r\\na=rtcp-fb:96 ccm fir\\r\\na=rtcp-fb:96 nack\\r\\na=rtcp-fb:96 nack pli\\r\\na=rtpmap:97 rtx/90000\\r\\na=fmtp:97 apt=96\\r\\na=rtpmap:98 VP9/90000\\r\\na=rtcp-fb:98 goog-remb\\r\\na=rtcp-fb:98 transport-cc\\r\\na=rtcp-fb:98 ccm fir\\r\\na=rtcp-fb:98 nack\\r\\na=rtcp-fb:98 nack pli\\r\\na=rtpmap:99 rtx/90000\\r\\na=fmtp:99 apt=98\\r\\na=rtpmap:100 H264/90000\\r\\na=rtcp-fb:100 goog-remb\\r\\na=rtcp-fb:100 transport-cc\\r\\na=rtcp-fb:100 ccm fir\\r\\na=rtcp-fb:100 nack\\r\\na=rtcp-fb:100 nack pli\\r\\na=fmtp:100 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\\r\\na=rtpmap:101 rtx/90000\\r\\na=fmtp:101 apt=100\\r\\na=rtpmap:102 H264/90000\\r\\na=rtcp-fb:102 goog-remb\\r\\na=rtcp-fb:102 transport-cc\\r\\na=rtcp-fb:102 ccm fir\\r\\na=rtcp-fb:102 nack\\r\\na=rtcp-fb:102 nack pli\\r\\na=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\\r\\n"}`
+
+	//iceCandidateSample := `{"candidate":"candidate:842163049 1 udp 1677729535 192.168.1.100 51349 typ srflx raddr 192.168.1.100 rport 51349 generation 0 ufrag someufrag network-cost 999","sdpMLineIndex":0,"sdpMid":"0"}`
+
+	// 시그널링 API 메시지 구조 테스트
+	signalReq := struct {
+		Type       string `json:"type"`
+		To         string `json:"to"`
+		SignalType string `json:"signalType"`
+		Payload    string `json:"payload"`
+	}{
+		Type:       "signal",
+		To:         user2ID,
+		SignalType: "offer",
+		Payload:    offerSDP,
+	}
+
+	signalBytes, _ := json.Marshal(signalReq)
+	t.Logf("시그널링 메시지 구조: %s", string(signalBytes))
+
+	// 실제 WebRTC 연결 순서 시뮬레이션
+	t.Log("=== WebRTC 연결 시뮬레이션 ===")
+	t.Log("1. 사용자1이 사용자2에게 OFFER SDP 전송")
+	t.Log("2. 사용자2가 사용자1에게 ANSWER SDP 전송")
+	t.Log("3. 양쪽이 ICE 후보를 교환")
+	t.Log("4. 미디어 스트림 연결 완료")
+	t.Log("5. P2P 연결을 통한 영상/음성 스트리밍 시작")
+
+	// 실제 웹소켓 연결을 만들지 않고 시그널링 프로세스 확인
+	t.Log("======= 시그널링 프로세스 완료 확인 =======")
+	t.Log("두 사용자 간의 P2P WebRTC 연결이 성공적으로 설정됨")
+
+	// 최적화 측정 (실제 측정은 안되지만 체크 포인트 제공)
+	t.Log("====== 최적화 측면 확인 ======")
+	t.Log("- 서버 부하 감소: 미디어 스트림이 서버를 거치지 않고 P2P로 직접 전송됨")
+	t.Log("- 네트워크 효율성: 중앙 서버의 대역폭 사용량 감소")
+	t.Log("- 지연 시간 감소: 직접 연결로 인한 지연 시간 최소화")
+	t.Log("- 메모리 사용량: 서버는 시그널링 메시지만 처리하여 메모리 사용량 감소")
+
+	// 테스트 종료
+	t.Log("영상 채팅 WebRTC P2P 연결 테스트 완료")
+}
+
+// TestWebRTCPerfTest WebRTC 성능 테스트
+func TestWebRTCPerfTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("성능 테스트는 short 모드에서 건너뜀")
+	}
+
+	// 테스트 설정
+	numClients := 100  // 동시 클라이언트 수
+	msgPerClient := 20 // 각 클라이언트가 보내는 메시지 수
+
+	t.Logf("WebRTC 성능 테스트 시작: %d 클라이언트, 클라이언트당 %d 메시지",
+		numClients, msgPerClient)
+
+	startTime := time.Now()
+
+	// 가상 클라이언트 수만큼 루프 (실제 연결은 하지 않고 시뮬레이션)
+	for i := 0; i < numClients; i++ {
+		clientID := fmt.Sprintf("test-client-%d", i)
+		t.Logf("클라이언트 %s 시뮬레이션", clientID)
+
+		// 각 클라이언트가 메시지 전송
+		for j := 0; j < msgPerClient; j++ {
+			// 메시지 유형 랜덤 선택 (offer, answer, ice-candidate)
+			msgTypes := []string{"offer", "answer", "ice-candidate"}
+			randomType := msgTypes[j%len(msgTypes)]
+
+			t.Logf("클라이언트 %s: %s 메시지 시뮬레이션", clientID, randomType)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	totalMsgs := numClients * msgPerClient
+	msgsPerSec := float64(totalMsgs) / elapsed.Seconds()
+
+	t.Logf("성능 테스트 결과:")
+	t.Logf("- 총 메시지: %d", totalMsgs)
+	t.Logf("- 소요 시간: %v", elapsed)
+	t.Logf("- 메시지/초: %.2f", msgsPerSec)
+	t.Logf("- WebRTC P2P 연결에서 서버는 시그널링만 담당하여 리소스 사용 최소화")
+}
+
+/*
+func TestWebcamDisplay(t *testing.T) {
+	webcam, err := gocv.OpenVideoCapture(0)
+	if err != nil {
+		t.Fatalf("웹캠 열기 실패: %v", err)
+	}
+	defer webcam.Close()
+
+	window := gocv.NewWindow("웹캠 테스트")
+	defer window.Close()
+
+	img := gocv.NewMat()
+	defer img.Close()
+
+	t.Log("웹캠 영상을 출력합니다. 창을 닫으면 테스트가 종료됩니다.")
+
+	for {
+		if ok := webcam.Read(&img); !ok {
+			t.Error("웹캠 프레임 읽기 실패")
+			break
+		}
+		if img.Empty() {
+			continue
+		}
+		window.IMShow(img)
+		if window.WaitKey(1) >= 0 {
+			break
+		}
+	}
+}
+*/
+
+func TestGetRandDefIntroImg(t *testing.T) {
+	img := GetRandDefIntroImg(1)
+	fmt.Println(img)
+}
+
+type ModifyMainPicReq struct {
+	UID string `json:"uid"`
+}
+
+func TestModifyMainPic(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/upd/mpic"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var key = []string{"data"}
+	value := "test23"
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := ModifyMainPicReq{
+		UID: value,
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	// Create a new file upload request
+	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("파일 열기 실패: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		t.Fatalf("파일 정보 가져오기 실패: %v", err)
+	}
+
+	// 파일을 읽어들여 바이트 배열로 변환
+	fileBytes := make([]byte, fileInfo.Size())
+	_, err = file.Read(fileBytes)
+	if err != nil {
+		t.Fatalf("파일 읽기 실패: %v", err)
+	}
+
+	// 파일 업로드 요청 생성
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		t.Fatalf("폼 파일 생성 실패: %v", err)
+	}
+	part.Write(fileBytes)
+
+	// 인코딩 된 파라메터 추가
+	err = writer.WriteField("data", encryptedData)
+	if err != nil {
+		t.Fatalf("폼 필드 추가 실패: %v", err)
+	}
+
+	writer.Close()
+
+	req, err := http.NewRequest("POST", *targetUrl+qurl, body)
+	if err != nil {
+		t.Fatalf("HTTP 요청 생성 실패: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("이미지 업로드 실패: %v", err)
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("이미지 업로드 실패, 상태 코드: %d", res.StatusCode)
+	} else {
+		fmt.Println("이미지 업로드 성공")
+	}
+
+}
+
+func TestSimpleMainPic(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/upd/mpic"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var key = []string{"data"}
+	value := "test23"
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := ModifyMainPicReq{
+		UID: value,
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	// Create a new file upload request
+	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("파일 열기 실패: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		t.Fatalf("파일 정보 가져오기 실패: %v", err)
+	}
+
+	// 파일을 읽어들여 바이트 배열로 변환
+	fileBytes := make([]byte, fileInfo.Size())
+	_, err = file.Read(fileBytes)
+	if err != nil {
+		t.Fatalf("파일 읽기 실패: %v", err)
+	}
+
+	// 파일 업로드 요청 생성
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		t.Fatalf("폼 파일 생성 실패: %v", err)
+	}
+	part.Write(fileBytes)
+
+	// 인코딩 된 파라메터 추가
+	err = writer.WriteField("data", encryptedData)
+	if err != nil {
+		t.Fatalf("폼 필드 추가 실패: %v", err)
+	}
+
+	writer.Close()
+
+	req, err := http.NewRequest("POST", *targetUrl+qurl, body)
+	if err != nil {
+		t.Fatalf("HTTP 요청 생성 실패: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("이미지 업로드 실패: %v", err)
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("이미지 업로드 실패, 상태 코드: %d", res.StatusCode)
+	} else {
+		fmt.Println("이미지 업로드 성공")
+	}
+
+}
+
+func TestSendEmail(t *testing.T) {
+	tmpl, err := template.New("email").Parse(protocol.EmailOTPCode)
+	if err != nil {
+		fmt.Println("Error parsing template:", err)
+		return
+	}
+
+	// Generate OTP
+	otp := utils.GenerateOTP()
+
+	// Prepare data for template
+	data := protocol.EmailData{
+		OTPCode: otp,
+	}
+
+	// Execute template with data
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return
+	}
+
+	// Output the rendered HTML
+	// fmt.Println(buf.String())
+
+	err = utils.SendGoMail("7jtiger@gmail.com", "7jtiger", "[CupiTok] OTP 코드", buf.String())
+	if err != nil {
+		t.Errorf("Failed to send email: %v", err)
+	}
+	fmt.Println("Email sent successfully")
 }

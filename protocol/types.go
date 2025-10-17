@@ -1,7 +1,10 @@
-﻿package protocol
+package protocol
 
 import (
+	"bytes"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 모든 응답의 헤더
@@ -31,4 +34,38 @@ var LangCode = map[string]bool{
 	"tss": true,
 	"es":  true,
 	"ja":  true,
+}
+
+type Pagination struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+	Total int `json:"total"`
+}
+
+type DefaultPaginationQuery struct {
+	Page  int `form:"page,default=1" binding:"min=1"`
+	Limit int `form:"limit,default=10" binding:"min=1"`
+}
+
+type AesDataForm struct {
+	Data string `json:"data"`
+}
+
+type BodyWriter struct {
+	gin.ResponseWriter
+	Body *bytes.Buffer
+}
+
+type RespDataHeader struct {
+	Result       ResultCode  `json:"result"`
+	ResultString string      `json:"resultString"`
+	Data         interface{} `json:"data"`
+}
+
+func NewRespDataHeader(resultCode ResultCode, data interface{}) *RespDataHeader {
+	return &RespDataHeader{
+		Result:       resultCode,
+		ResultString: resultCode.toString(),
+		Data:         data,
+	}
 }

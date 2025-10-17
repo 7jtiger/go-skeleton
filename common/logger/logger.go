@@ -1,4 +1,4 @@
-﻿package logger
+package logger
 
 import (
 	"bytes"
@@ -12,9 +12,6 @@ import (
 
 	"time"
 
-	"go-skeleton/common/utils"
-	"go-skeleton/conf"
-
 	// "github.com/gin-gonic/gin"
 
 	"github.com/gin-gonic/gin"
@@ -24,16 +21,19 @@ import (
 )
 
 var logger *zap.Logger
-var stag string
 
-func InitLogger(cfg *conf.Config) error {
+// var stag string
+// var name string
+
+// func InitLogger(cfg *conf.Config) error {
+func InitLogger(name, mod string, maxAgeHour, rotateHour int) error {
 	now := time.Now()
-	lPath := fmt.Sprintf("%s_%s.log", cfg.LogInfo.Fpath, now.Format("2006-01-02"))
+	lPath := fmt.Sprintf("%s_%s.log", "./logs/"+name, now.Format("2006-01-02"))
 
 	rotator, err := rotatelogs.New(
 		lPath,
-		rotatelogs.WithMaxAge(time.Duration(cfg.LogInfo.MaxAgeHour)*time.Hour),
-		rotatelogs.WithRotationTime(time.Duration(cfg.LogInfo.RotateHour)*time.Hour))
+		rotatelogs.WithMaxAge(time.Duration(maxAgeHour)*time.Hour),
+		rotatelogs.WithRotationTime(time.Duration(rotateHour)*time.Hour))
 	if err != nil {
 		return err
 	}
@@ -56,8 +56,7 @@ func InitLogger(cfg *conf.Config) error {
 	cw := zapcore.AddSync(os.Stdout)
 	var core zapcore.Core
 
-	stag = cfg.Server.Mode
-	if stag == "dev" {
+	if mod == "dev" {
 		core = zapcore.NewTee(
 			zapcore.NewCore(zapcore.NewJSONEncoder(encCfg), w, zap.DebugLevel),
 			zapcore.NewCore(zapcore.NewConsoleEncoder(encCfg), cw, zap.DebugLevel),
@@ -114,9 +113,12 @@ func Error(ctx ...interface{}) {
 	}
 
 	logger.Error("error", zap.String("Err", b.String()))
-	if stag != "dev" {
-		go utils.SendTelegramAlert(stag, b.String())
-	}
+}
+
+// Errorf는 형식화된 문자열과 인수를 사용하여 에러 메시지를 로깅합니다.
+func Errorf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	logger.Error("error", zap.String("Err", msg))
 }
 
 func Crit(ctx ...interface{}) {
@@ -126,9 +128,6 @@ func Crit(ctx ...interface{}) {
 	}
 
 	logger.Panic("panic", zap.String("Crit", b.String()))
-	if stag != "dev" {
-		go utils.SendTelegramAlert(stag, b.String())
-	}
 }
 
 // func Debug(ctx ...interface{}) { log(zapcore.DebugLevel, ctx...) }

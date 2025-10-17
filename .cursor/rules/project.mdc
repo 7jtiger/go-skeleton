@@ -1,0 +1,55 @@
+---
+description: Project structure and reference files
+globs:
+alwaysApply: true
+---
+
+Project Overview
+This project supports video chat, text chat, and audio chat using webRTC, with user management capabilities and payment & user convenience features.
+
+Directory:
+/home/jino/go/src/ms-gateway/
+
+Most services receive requests from the router and process business logic in the controller folder, then query the database using service schemas and database-related files in the models folder to return responses according to protocols defined in the protocol files. For batch processing requirements, files in the scheduler folder handle batch processing.
+
+Guidelines
+When adding features, follow this structure: add the corresponding URL to the router, define the corresponding function in the controller, call the corresponding function in the model to query data, and call the corresponding function in the protocol to return responses.
+When defining each function, check for duplicate content and verify if there are duplicates in the common folder. If duplicates exist, refer to the duplicate content when writing.
+Add test code to ctl_test.go that can test the corresponding functionality with debug functionality in mind for test execution, enabling end-to-end testing from router to controller to model with a single RESTful API call, written as a single function.
+functionality.
+
+
+Common:
+Commonly used files
+/home/jino/go/src/ms-gateway/common/
+Reference file: .cursor/mds/common.md
+
+Conf:
+Configuration files required for the project
+/home/jino/go/src/ms-gateway/conf/
+Reference file: .cursor/mds/conf.md
+
+Controller: 
+Files that receive requests from the router and process business logic
+/home/jino/go/src/ms-gateway/controller/
+Reference file: .cursor/mds/controller.mdc
+
+Models:
+Service schema and database-related files
+/home/jino/go/src/ms-gateway/models/
+Reference file: .cursor/mds/models.mdc
+
+Protocol:
+Protocol-related files for communication with clients
+/home/jino/go/src/ms-gateway/protocol/
+Reference file: .cursor/mds/protocol.md
+
+Router:
+Starting point of the service with router configuration files
+/home/jino/go/src/ms-gateway/router/
+Reference file: .cursor/mds/router.md
+
+Scheduler:
+Files that manage periodically executed tasks
+/home/jino/go/src/ms-gateway/scheduler/
+Reference file: .cursor/mds/scheduler.mdc

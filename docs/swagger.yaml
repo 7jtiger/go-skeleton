@@ -1,4 +1,13 @@
 definitions:
+  protocol.OkResp:
+    properties:
+      desc:
+        type: string
+      result:
+        $ref: '#/definitions/protocol.ResultCode'
+      resultString:
+        type: string
+    type: object
   protocol.RespHeader:
     properties:
       desc:
@@ -14,22 +23,233 @@ definitions:
     type: integer
     x-enum-varnames:
     - Success
+  protocol.UserInfoResp:
+    properties:
+      age:
+        type: string
+      area:
+        type: string
+      atJoin:
+        type: string
+      birth:
+        type: string
+      email:
+        type: string
+      gender:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      nick:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
-  /health/check:
+  /acc/v01/check/:id:
     get:
       consumes:
       - application/json
-      description: 서버 살아있는지 확인
+      description: |-
+        When /acc/v01/check/:id is called, it returns "ok" on success and a message on failure.
+        id : user id
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Bad Request
+          schema:
             $ref: '#/definitions/protocol.RespHeader'
-      summary: Check
+      summary: check user id
       tags:
-      - health
+      - user
+  /acc/v01/fnid:
+    post:
+      consumes:
+      - application/json
+      description: Find user ID by name and birth date
+      parameters:
+      - description: 'Encrypted data by aes256 {name : xxx, birth 1990-01-01}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Find user ID
+      tags:
+      - user
+  /acc/v01/fnpw:
+    post:
+      consumes:
+      - application/json
+      description: Find user password by id and birth date
+      parameters:
+      - description: 'Encrypted data by aes256 {id : xxx, email : xxx, birth 1990-01-01}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Find user PW
+      tags:
+      - user
+  /acc/v01/info/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get user information
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User information
+          schema:
+            $ref: '#/definitions/protocol.UserInfoResp'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get user information
+      tags:
+      - user
+  /acc/v01/leave:
+    post:
+      consumes:
+      - application/json
+      description: Performs user leave. Returns "success" message on success.
+      parameters:
+      - description: 'Encrypted data by aes256 {id : xxx}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Leave a user
+      tags:
+      - user
+  /acc/v01/login:
+    post:
+      consumes:
+      - application/json
+      description: Calls /acc/v01/login to login a user. Returns "success" message
+        on success.
+      parameters:
+      - description: 'Encrypted data by aes256 {id : xxx, pw : hash}'
+        in: body
+        name: info
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Login a user
+      tags:
+      - user
+  /acc/v01/logout:
+    post:
+      consumes:
+      - application/json
+      description: Performs logout. Returns "success" message on success.
+      parameters:
+      - description: ID of the user to logout
+        in: body
+        name: id
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Logout a user
+      tags:
+      - user
+  /acc/v01/regist:
+    post:
+      consumes:
+      - application/json
+      description: Calls /acc/v01/regist to register a new user. Returns "success"
+        message on success.
+      parameters:
+      - description: 'Encrypted data {id : xxx, pw : hash, name : xxx, gender : xxx,
+          age : xxx, birth : 1990-01-01, area : xxx, email : xxx}'
+        in: body
+        name: info
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Register a new user
+      tags:
+      - user
 swagger: "2.0"

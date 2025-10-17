@@ -1,51 +1,71 @@
-﻿# Go parameters
-GO=go
-GOBUILD=$(GO) build
-GOCLEAN=$(GO) clean
-GOTEST=$(GO) test
-GOGET=$(GO) get
-GORUN=$(GO) run
+# Go parameters
+GO := go
+GOBUILD := $(GO) build
+GOCLEAN := $(GO) clean
+GOTEST := $(GO) test
+GOGET := $(GO) get
+GORUN := $(GO) run
 
 # Binary names
-PACKAGE = go-skeleton
-# GOPATH  = $(CURDIR)/.gopath
-BASE    = $(CURDIR)$(PACKAGE)
-FLAG	= GOOS=linux GOARCH=amd64
+PACKAGE := ms-gateway
+BASE := $(CURDIR)
+BUILD_DIR := $(BASE)/build
+BINARY := $(BUILD_DIR)/$(PACKAGE)
 
-Q = $(if $(filter 1,$V),,@)
-M = $(shell printf "\033[34;1m▶\033[0m")
+# Flags
+LDFLAGS := -ldflags="-s -w"
+BUILDFLAGS := -v
 
-# make 명령어를 실행하면 all 타겟이 실행되어 test와 build가 차례대로 실행
-all: $(BASE) ; $(info $(M) building executable…) @ ## Build program binary
-	@$(GO) mod tidy
-	$Q $(FLAG) $(GOBUILD) -o build/$(PACKAGE)
-	@mkdir -p $(CURDIR)/build/conf
-	@mkdir -p $(CURDIR)/build/data
-	@mkdir -p $(CURDIR)/build/logs
-	@cp -f $(CURDIR)/conf/config.toml $(CURDIR)/build/conf/config.toml
-	@cp -f $(CURDIR)/run $(CURDIR)/build/
+# Environment variables
+export GOOS := linux
+export GOARCH := amd64
 
-build:
-	$(GOBUILD) -o $(PACKAGE)
+# File list
+SOURCES := $(shell find . -name '*.go')
+CONFIGS := $(wildcard conf/*.toml)
 
+# PHONY target
+.PHONY: all build test clean run exe swg
+
+# Default target
+all: build
+
+# Build target
+build: $(BINARY)
+
+$(BINARY): $(SOURCES)
+	@echo "Building $(PACKAGE)..."
+	@mkdir -p $(BUILD_DIR)/conf $(BUILD_DIR)/data $(BUILD_DIR)/logs
+	$(GOBUILD) $(BUILDFLAGS) $(LDFLAGS) -o $@ 
+	@cp -f $(CONFIGS) $(BUILD_DIR)/conf/
+
+# Test target
 test:
 	$(GOTEST) -v ./...
 
-# clean은 빌드한 바이너리 파일을 삭제
+# Clean target
 clean:
+	@echo "Cleaning..."
+	@rm -rf $(BUILD_DIR)
 	$(GOCLEAN)
-	rm -f $(PACKAGE)
-	rm -f build/$(PACKAGE)
 
+# Run target
 run:
 	$(GORUN) main.go
 
-# run은 build를 실행하고 바로 프로그램을 실행
-exe:
-	$(GOBUILD) -o $(PACKAGE)
-	./$(PACKAGE)
+# Build and run target
+exe: build
+	./$(BINARY)
 
-# Swagger 빌드
+# Swagger build target
 swg:
 	@echo "Building Swagger..."
 	@swag init -g main.go
+
+# Dependency management
+$(GO_FILES): go.mod go.sum
+	@echo "Checking dependencies..."
+	@$(GO) mod tidy
+
+# Parallel execution support
+.NOTPARALLEL:

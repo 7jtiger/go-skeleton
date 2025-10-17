@@ -1,0 +1,73 @@
+2025-06-25T15:03:39.489+0900	INFO	logging init file start
+2025-06-25T15:03:39.491+0900	DEBUG	debug	{"Debug": "ready server...."}
+2025-06-25T15:03:39.493+0900	INFO	info	{"Info": "load repository : account db"}
+2025-06-25T15:03:39.493+0900	INFO	info	{"Info": "load repository : History db"}
+2025-06-25T15:03:39.493+0900	INFO	info	{"Info": "load repository : Item db"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "load repository : RedisDB"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "Repository startedtype*models.HistoryDB"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "Repository startedtype*models.ItemDB"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "Repository startedtype*models.RedisDB"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "Repository startedtype*models.AccountDB"}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "Initializing TURN server..."}
+2025-06-25T15:03:39.498+0900	INFO	info	{"Info": "TURN server using dynamic port allocation"}
+2025-06-25T15:03:39.499+0900	INFO	info	{"Info": "TURN server configured successfullylistenAddr0.0.0.0:3478realmms-gateway-turnchannelBindTimeout10m0sinboundMTU1500modedev"}
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2025-06-25T15:03:39.499+0900	INFO	info	{"Info": "start server : :8080"}
+2025-06-25T15:03:39.499+0900	INFO	info	{"Info": "TURN server monitoring started"}
+[GIN-debug] GET    /swagger/:any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (6 handlers)
+[GIN-debug] GET    /test                     --> ms-gateway/router.(*Router).Idx.func1 (6 handlers)
+[GIN-debug] GET    /serv/v01/version         --> ms-gateway/controller.(*AccountController).GetVersion-fm (7 handlers)
+[GIN-debug] GET    /serv/v01/wsconf          --> ms-gateway/controller.(*AccountController).GetWebRTCConfig-fm (7 handlers)
+[GIN-debug] GET    /acc/v01/check/:id        --> ms-gateway/controller.(*AccountController).CheckID-fm (7 handlers)
+[GIN-debug] GET    /acc/v01/ckemail/:email   --> ms-gateway/controller.(*AccountController).CheckEmail-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/regist           --> ms-gateway/controller.(*AccountController).RegistUserInfo-fm (8 handlers)
+[GIN-debug] POST   /acc/v01/login            --> ms-gateway/controller.(*AccountController).LoginUser-fm (8 handlers)
+[GIN-debug] POST   /acc/v01/logout           --> ms-gateway/controller.(*AccountController).LogoutUser-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/leave            --> ms-gateway/controller.(*AccountController).LeaveUser-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/fnid             --> ms-gateway/controller.(*AccountController).FindID-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/fnpw             --> ms-gateway/controller.(*AccountController).FindPW-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/cngpw            --> ms-gateway/controller.(*AccountController).ChangePW-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/modify           --> ms-gateway/controller.(*AccountController).ModifyUserInfo-fm (7 handlers)
+[GIN-debug] GET    /acc/v01/info/:id         --> ms-gateway/controller.(*AccountController).GetUserInfo-fm (7 handlers)
+[GIN-debug] POST   /acc/v01/delete/:id       --> ms-gateway/controller.(*AccountController).DeleteUser-fm (7 handlers)
+[GIN-debug] GET    /user/v01/myinfo          --> ms-gateway/router.(*Router).Idx.liteAuth.func10 (7 handlers)
+[GIN-debug] GET    /user/v01/wyinfo          --> ms-gateway/router.(*Router).Idx.liteAuth.func10 (7 handlers)
+[GIN-debug] GET    /home/v01/mavlist         --> ms-gateway/router.(*Router).Idx.(*Router).SecurityHeaders.func11 (6 handlers)
+[GIN-debug] GET    /home/v01/wavlist         --> ms-gateway/router.(*Router).Idx.(*Router).SecurityHeaders.func11 (6 handlers)
+[GIN-debug] GET    /home/v01/mclist          --> ms-gateway/router.(*Router).Idx.(*Router).SecurityHeaders.func11 (6 handlers)
+[GIN-debug] GET    /home/v01/wclist          --> ms-gateway/router.(*Router).Idx.(*Router).SecurityHeaders.func11 (6 handlers)
+[GIN-debug] PUT    /present/v01/target       --> ms-gateway/router.(*Router).Idx.liteAuth.func13 (7 handlers)
+[GIN-debug] GET    /mission/v01/list         --> ms-gateway/router.(*Router).Idx.liteAuth.func15 (7 handlers)
+[GIN-debug] GET    /mission/v01/detail/:id   --> ms-gateway/router.(*Router).Idx.liteAuth.func15 (7 handlers)
+[GIN-debug] GET    /story/v01/home/:id       --> ms-gateway/router.(*Router).Idx.liteAuth.func17 (7 handlers)
+[GIN-debug] GET    /story/v01/list/:stat/:id --> ms-gateway/router.(*Router).Idx.liteAuth.func17 (7 handlers)
+[GIN-debug] GET    /story/v01/detail/:idx    --> ms-gateway/router.(*Router).Idx.liteAuth.func17 (7 handlers)
+[GIN-debug] POST   /upload/v01/story/img     --> ms-gateway/router.(*Router).Idx.liteAuth.func19 (7 handlers)
+[GIN-debug] POST   /upload/v01/present       --> ms-gateway/router.(*Router).Idx.liteAuth.func19 (7 handlers)
+[GIN-debug] GET    /setting/v01/alert        --> ms-gateway/router.(*Router).Idx.liteAuth.func21 (7 handlers)
+[GIN-debug] GET    /noti/v01/list            --> ms-gateway/router.(*Router).Idx.liteAuth.func23 (7 handlers)
+[GIN-debug] GET    /noti/v01/detail/:idx     --> ms-gateway/router.(*Router).Idx.liteAuth.func23 (7 handlers)
+[GIN-debug] GET    /webrtc/v01/config        --> ms-gateway/controller.(*AccountController).GetWebRTCConfig-fm (8 handlers)
+[GIN-debug] GET    /webrtc/v01/available-users --> ms-gateway/controller.(*AccountController).GetAvailableUsers-fm (8 handlers)
+[GIN-debug] POST   /webrtc/v01/call-status   --> ms-gateway/controller.(*AccountController).UpdateCallStatus-fm (8 handlers)
+[GIN-debug] POST   /webrtc/v01/heartbeat     --> ms-gateway/controller.(*AccountController).UpdateWebRTCHeartbeat-fm (8 handlers)
+[GIN-debug] GET    /webrtc/v01/stats         --> ms-gateway/controller.(*AccountController).GetWebRTCStats-fm (8 handlers)
+[GIN-debug] GET    /webrtc/v01/test-stun     --> ms-gateway/controller.(*AccountController).TestStunServers-fm (8 handlers)
+[GIN-debug] POST   /webrtc/v01/test-stun-server --> ms-gateway/controller.(*AccountController).TestSpecificStunServer-fm (8 handlers)
+2025-06-25T15:03:39.499+0900	INFO	info	{"Info": "HTTP server listening on:8080"}
+2025-06-25T15:03:44.473+0900	INFO	/health	{"status": 404, "method": "GET", "path": "/health", "query": "", "ip": "127.0.0.1", "user-agent": "curl/7.81.0", "errors": "", "cost": "4.895µs"}
+[GIN] 2025/06/25 - 15:03:44 | 404 |      76.657µs |       127.0.0.1 | GET      "/health"
+2025-06-25T15:03:54.483+0900	WARN	warn	{"Warn": "Shutdown signal received, starting graceful shutdown..."}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "Stopping background services..."}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "Shutting down TURN server..."}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "TURN Server shutdown successfully"}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "Shutting down HTTP server..."}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "HTTP Server shutdown successfully"}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "TURN server monitoring stopped"}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "All services shutdown successfully"}
+2025-06-25T15:03:54.483+0900	INFO	info	{"Info": "Server exiting"}

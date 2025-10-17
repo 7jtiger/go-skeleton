@@ -1,0 +1,8 @@
+---
+description: When referring to the following for settings and server information, and when the code is modified, the referenced md file must also be updated.
+globs:
+alwaysApply: false
+---
+
+conf/config.toml
+conf/config.go

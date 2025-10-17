@@ -1,7 +1,7 @@
 package scheduler
 
 import (
-	log "go-skeleton/common/logger"
+	log "ms-gateway/common/logger"
 )
 
 type Mailing struct {

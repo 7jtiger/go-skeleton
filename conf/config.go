@@ -19,13 +19,81 @@ type Networks struct {
 	Rpc string
 }
 
+// ServerConf is for server config parameters
+type ServerConf struct {
+	Name      string
+	Mode      string
+	Port      string
+	HCheck    string
+	HCPort    string
+	BaseKey   string
+	JWTSecret string // JWT 토큰을 위한 비밀키
+	// Logger    *log.Logger
+}
+
 type Config struct {
 	Server struct {
-		Mode string
-		Port string
+		Name      string
+		Mode      string
+		Port      string
+		HCheck    string
+		HCPort    string
+		BaseKey   string
+		JWTSecret string
 	}
 
-	Network Networks
+	WebRTC struct {
+		SignalingServerUrl string
+		StunServers        []string
+		TurnServer         string
+		TurnUsername       string
+		TurnPassword       string
+		MaxVideoWidth      int
+		MaxVideoHeight     int
+		MaxVideoFrameRate  int
+		VideoBitrate       int
+		AudioBitrate       int
+		SessionTimeout     int // seconds
+		HeartbeatInterval  int // seconds
+	}
+
+	// TURN 서버 전용 설정
+	Turn struct {
+		Enabled       bool
+		ListenAddr    string
+		Realm         string
+		Username      string
+		Password      string
+		SharedSecret  string
+		CredentialTTL int // seconds
+
+		Relay struct {
+			MinPort    int
+			MaxPort    int
+			MaxRetries int
+		}
+
+		Performance struct {
+			ChannelBindTimeout int // seconds
+			InboundMTU         int
+			AllocationLifetime int // seconds
+		}
+
+		Security struct {
+			PermissionLifetime   int // seconds
+			EnableAuthentication bool
+			RequireCredentials   bool
+		}
+	}
+
+	HAChecker struct {
+		Checker    bool
+		ServerPort string
+		PeerIP     string
+		PeerPort   string
+		SetStatus  string
+	}
+	// Network Networks
 
 	DB map[string]map[string]interface{}
 

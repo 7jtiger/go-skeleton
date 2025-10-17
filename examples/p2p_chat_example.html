@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P 채팅 예제</title>
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .chat-container {
+      display: flex;
+      border: 1px solid #ddd;
+      height: 500px;
+    }
+    .user-list {
+      width: 200px;
+      border-right: 1px solid #ddd;
+      overflow-y: auto;
+    }
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .message-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .message-input {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid #ddd;
+    }
+    .message-input input {
+      flex: 1;
+      padding: 8px;
+    }
+    .message-input button {
+      margin-left: 10px;
+      padding: 8px 16px;
+    }
+    .user-item {
+      padding: 10px;
+      cursor: pointer;
+    }
+    .user-item:hover {
+      background-color: #f0f0f0;
+    }
+    .user-item.selected {
+      background-color: #e0e0e0;
+    }
+    .user-item.online {
+      color: green;
+    }
+    .user-item.offline {
+      color: #999;
+    }
+    .user-item.p2p-connected {
+      font-weight: bold;
+      color: blue;
+    }
+    .message {
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 5px;
+    }
+    .message.sent {
+      background-color: #dcf8c6;
+      align-self: flex-end;
+      text-align: right;
+    }
+    .message.received {
+      background-color: #f1f0f0;
+      align-self: flex-start;
+    }
+    .message.system {
+      background-color: #fffde7;
+      color: #666;
+      text-align: center;
+      font-style: italic;
+    }
+    .sender {
+      font-weight: bold;
+      font-size: 0.8em;
+    }
+    .timestamp {
+      color: #999;
+      font-size: 0.7em;
+      margin-left: 5px;
+    }
+    .connection-status {
+      padding: 10px;
+      background-color: #f0f0f0;
+      margin-bottom: 10px;
+    }
+    .connection-info {
+      display: flex;
+      justify-content: space-between;
+      background-color: #f8f9fa;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <h1>P2P 채팅 예제</h1>
+  
+  <div class="connection-info">
+    <div>
+      <label for="user-id">사용자 ID:</label>
+      <input type="text" id="user-id" value="user1">
+    </div>
+    <div>
+      <button id="connect-btn">연결</button>
+      <button id="disconnect-btn" disabled>연결 종료</button>
+    </div>
+  </div>
+  
+  <div class="connection-status" id="status">
+    연결 상태: 연결되지 않음
+  </div>
+  
+  <div class="chat-container">
+    <div class="user-list" id="user-list">
+      <!-- 사용자 목록 -->
+    </div>
+    <div class="chat-area">
+      <div class="message-list" id="message-list">
+        <!-- 메시지 목록 -->
+        <div class="message system">
+          왼쪽의 사용자 목록에서 채팅할 상대를 선택하세요.
+        </div>
+      </div>
+      <div class="message-input">
+        <input type="text" id="message-input" placeholder="메시지를 입력하세요..." disabled>
+        <button id="send-btn" disabled>전송</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- P2P 채팅 클라이언트 스크립트 -->
+  <script src="p2p_chat_client.js"></script>
+  
+  <script>
+    // DOM 요소
+    const userIdInput = document.getElementById('user-id');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const statusEl = document.getElementById('status');
+    const userListEl = document.getElementById('user-list');
+    const messageListEl = document.getElementById('message-list');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    
+    // 전역 변수
+    let chatClient = null;
+    let selectedUser = null;
+    const messageCache = {}; // userId -> [messages]
+    
+    // 연결 버튼 클릭
+    connectBtn.addEventListener('click', () => {
+      const userId = userIdInput.value.trim();
+      if (!userId) {
+        alert('사용자 ID를 입력하세요.');
+        return;
+      }
+      
+      // 채팅 클라이언트 초기화
+      chatClient = new P2PChatClient('ws://localhost:8080/chat/v01/ws');
+      
+      // 연결 상태 변경 핸들러
+      chatClient.onConnectionStatus((status, data) => {
+        updateConnectionStatus(status, data);
+      });
+      
+      // 메시지 수신 핸들러
+      chatClient.onMessage((message) => {
+        handleIncomingMessage(message);
+      });
+      
+      // 연결
+      chatClient.connect(userId);
+      
+      // UI 업데이트
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+      userIdInput.disabled = true;
+    });
+    
+    // 연결 종료 버튼 클릭
+    disconnectBtn.addEventListener('click', () => {
+      if (chatClient) {
+        chatClient.disconnect();
+        chatClient = null;
+      }
+      
+      // UI 업데이트
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      userIdInput.disabled = false;
+      messageInput.disabled = true;
+      sendBtn.disabled = true;
+      selectedUser = null;
+      
+      // 상태 업데이트
+      statusEl.textContent = '연결 상태: 연결되지 않음';
+      
+      // 사용자 목록 및 메시지 목록 초기화
+      userListEl.innerHTML = '';
+      messageListEl.innerHTML = '<div class="message system">왼쪽의 사용자 목록에서 채팅할 상대를 선택하세요.</div>';
+    });
+    
+    // 메시지 전송 버튼 클릭
+    sendBtn.addEventListener('click', () => {
+      sendMessage();
+    });
+    
+    // 엔터키로 메시지 전송
+    messageInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+    
+    // 메시지 전송 함수
+    function sendMessage() {
+      if (!chatClient || !selectedUser) return;
+      
+      const content = messageInput.value.trim();
+      if (!content) return;
+      
+      const success = chatClient.sendMessage(selectedUser, content);
+      
+      if (success) {
+        // 메시지 전송 성공 시 입력 필드 초기화
+        messageInput.value = '';
+      } else {
+        // P2P 연결 중인 상태
+        appendMessage({
+          type: 'system',
+          content: `${selectedUser}에게 P2P 연결 중입니다. 잠시 후 다시 시도하세요.`,
+          timestamp: new Date()
+        });
+      }
+    }
+    
+    // 연결 상태 업데이트
+    function updateConnectionStatus(status, data) {
+      switch (status) {
+        case 'connected':
+          statusEl.textContent = '연결 상태: 서버에 연결됨';
+          break;
+          
+        case 'disconnected':
+          statusEl.textContent = '연결 상태: 연결 끊김';
+          break;
+          
+        case 'error':
+          statusEl.textContent = '연결 상태: 오류 발생';
+          break;
+          
+        case 'dataChannelOpen':
+          if (data && data.peer) {
+            statusEl.textContent = `연결 상태: ${data.peer}와 P2P 연결됨`;
+            updateUserStatus(data.peer, 'p2p-connected');
+            
+            // 메시지 입력 활성화
+            if (selectedUser === data.peer) {
+              messageInput.disabled = false;
+              sendBtn.disabled = false;
+            }
+            
+            appendMessage({
+              type: 'system',
+              content: `${data.peer}와 P2P 연결이 설정되었습니다. 이제 메시지가 서버를 거치지 않고 직접 전송됩니다.`,
+              timestamp: new Date()
+            });
+          }
+          break;
+          
+        case 'dataChannelClose':
+          if (data && data.peer) {
+            updateUserStatus(data.peer, 'online');
+            
+            appendMessage({
+              type: 'system',
+              content: `${data.peer}와의 P2P 연결이 종료되었습니다.`,
+              timestamp: new Date()
+            });
+          }
+          break;
+          
+        case 'activeConnections':
+          if (data && data.activePeers) {
+            // 활성 P2P 연결 정보 업데이트
+            data.activePeers.forEach(peerId => {
+              updateUserStatus(peerId, 'p2p-connected');
+            });
+          }
+          break;
+      }
+    }
+    
+    // 사용자 상태 업데이트
+    function updateUserStatus(userId, status) {
+      const userEl = document.querySelector(`.user-item[data-id="${userId}"]`);
+      
+      if (!userEl) {
+        // 새 사용자 추가
+        const newUserEl = document.createElement('div');
+        newUserEl.className = `user-item ${status}`;
+        newUserEl.setAttribute('data-id', userId);
+        newUserEl.textContent = userId;
+        
+        newUserEl.addEventListener('click', () => {
+          selectUser(userId);
+        });
+        
+        userListEl.appendChild(newUserEl);
+      } else {
+        // 기존 사용자 상태 업데이트
+        userEl.className = `user-item ${status}`;
+        
+        // 선택된 사용자의 P2P 연결 상태가 변경되면 UI 업데이트
+        if (selectedUser === userId) {
+          messageInput.disabled = status !== 'p2p-connected';
+          sendBtn.disabled = status !== 'p2p-connected';
+        }
+      }
+    }
+    
+    // 사용자 선택
+    function selectUser(userId) {
+      if (userId === chatClient.userId) return; // 자기 자신은 선택 불가
+      
+      // 이전 선택 해제
+      const prevSelectedEl = document.querySelector('.user-item.selected');
+      if (prevSelectedEl) {
+        prevSelectedEl.classList.remove('selected');
+      }
+      
+      // 새 사용자 선택
+      const userEl = document.querySelector(`.user-item[data-id="${userId}"]`);
+      if (userEl) {
+        userEl.classList.add('selected');
+        selectedUser = userId;
+        
+        // 메시지 입력 활성화 여부 결정
+        const isP2PConnected = userEl.classList.contains('p2p-connected');
+        messageInput.disabled = !isP2PConnected;
+        sendBtn.disabled = !isP2PConnected;
+        
+        // 이전 메시지 로드
+        loadMessages(userId);
+        
+        // P2P 연결 시작
+        if (chatClient && !isP2PConnected) {
+          chatClient._initiatePeerConnection(userId);
+        }
+      }
+    }
+    
+    // 사용자와의 이전 메시지 로드
+    function loadMessages(userId) {
+      messageListEl.innerHTML = '';
+      
+      const messages = messageCache[userId] || [];
+      if (messages.length === 0) {
+        appendMessage({
+          type: 'system',
+          content: `${userId}와의 대화를 시작합니다.`,
+          timestamp: new Date()
+        });
+      } else {
+        messages.forEach(msg => {
+          appendMessage(msg);
+        });
+      }
+    }
+    
+    // 수신 메시지 처리
+    function handleIncomingMessage(message) {
+      // 시스템 메시지는 항상 표시
+      if (message.type === 'system_info' || message.type === 'signal_status') {
+        appendMessage({
+          type: 'system',
+          content: message.content,
+          timestamp: message.timestamp || new Date()
+        });
+        return;
+      }
+      
+      // 연결된 사용자 목록 업데이트
+      if (message.type === 'connected_users' && message.users) {
+        message.users.forEach(user => {
+          if (user.id !== chatClient.userId) {
+            updateUserStatus(user.id, user.online ? 'online' : 'offline');
+          }
+        });
+        return;
+      }
+      
+      // 채팅 메시지 처리
+      if (message.type === 'chat') {
+        const isFromSelectedUser = message.from === selectedUser;
+        const isToSelectedUser = message.to === selectedUser;
+        
+        // 메시지 캐시에 저장
+        const userId = message.from === chatClient.userId ? message.to : message.from;
+        if (!messageCache[userId]) {
+          messageCache[userId] = [];
+        }
+        messageCache[userId].push(message);
+        
+        // 현재 선택된 사용자와 관련된 메시지만 표시
+        if (isFromSelectedUser || isToSelectedUser) {
+          appendMessage(message);
+        }
+      }
+    }
+    
+    // 메시지 목록에 메시지 추가
+    function appendMessage(message) {
+      const messageEl = document.createElement('div');
+      
+      if (message.type === 'system') {
+        messageEl.className = 'message system';
+        messageEl.textContent = message.content;
+      } else {
+        const isSent = message.from === chatClient.userId;
+        messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
+        
+        const senderEl = document.createElement('div');
+        senderEl.className = 'sender';
+        senderEl.textContent = isSent ? '나' : message.from;
+        
+        const contentEl = document.createElement('div');
+        contentEl.textContent = message.content;
+        
+        const timestampEl = document.createElement('div');
+        timestampEl.className = 'timestamp';
+        if (message.timestamp) {
+          // ISO 문자열이나 Date 객체를 날짜로 변환
+          const date = new Date(message.timestamp);
+          timestampEl.textContent = `${date.toLocaleTimeString()}`;
+        } else {
+          timestampEl.textContent = new Date().toLocaleTimeString();
+        }
+        
+        messageEl.appendChild(senderEl);
+        messageEl.appendChild(contentEl);
+        messageEl.appendChild(timestampEl);
+      }
+      
+      messageListEl.appendChild(messageEl);
+      messageListEl.scrollTop = messageListEl.scrollHeight;
+    }
+    
+    // 자신을 사용자 목록에 추가
+    function addSelfToUserList() {
+      if (!chatClient) return;
+      
+      const selfEl = document.createElement('div');
+      selfEl.className = 'user-item self';
+      selfEl.textContent = chatClient.userId + ' (나)';
+      userListEl.appendChild(selfEl);
+    }
+    
+    // 테스트용 더미 사용자 추가
+    function addDummyUsers() {
+      const dummyUsers = ['user2', 'user3', 'user4'];
+      
+      dummyUsers.forEach(userId => {
+        if (userId !== userIdInput.value.trim()) {
+          updateUserStatus(userId, 'online');
+        }
+      });
+    }
+  </script>
+</body>
+</html> 

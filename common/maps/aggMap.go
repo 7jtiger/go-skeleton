@@ -1,10 +1,11 @@
-﻿package maps
+package maps
 
 import (
 	"fmt"
 	"sync"
 
-	com "go-skeleton/common"
+	// com "banker/common"
+	utils "ms-gateway/common/utils"
 )
 
 type GenMap struct {
@@ -62,8 +63,8 @@ func (m *GenMap) Insert(bkData string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	sName := com.GetJsonValue(bkData, "blockSymbol")
-	sNum := com.GetJsonValue(bkData, "blockNumber")
+	sName := utils.GetJsonValue(bkData, "blockSymbol")
+	sNum := utils.GetJsonValue(bkData, "blockNumber")
 	if len(sName) <= 0 || len(sNum) <= 0 {
 		return
 	}
@@ -78,7 +79,7 @@ func (m *GenMap) TxInsert(bkData string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	sHash := com.GetJsonValue(bkData, "hash")
+	sHash := utils.GetJsonValue(bkData, "hash")
 	if len(sHash) <= 0 {
 		return
 	}

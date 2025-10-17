@@ -2,9 +2,9 @@ package scheduler
 
 import (
 	"fmt"
-	logs "go-skeleton/common/logger"
-	"go-skeleton/conf"
-	"go-skeleton/models"
+	logs "ms-gateway/common/logger"
+	"ms-gateway/conf"
+	"ms-gateway/models"
 	"strings"
 	"time"
 )
@@ -29,6 +29,8 @@ type Schedule struct {
 	// rep  *models.Repositories
 	Desc string
 	Item map[string]*item
+	adb  *models.AccountDB
+	// kcn  *models.ConnectNetwork
 }
 
 func getDuration(start int) time.Duration {
@@ -60,13 +62,18 @@ func NewScheduler(cfg *conf.Config, rep *models.Repositories) (*Schedule, error)
 		return nil, fmt.Errorf("config is nil")
 	}
 
-	SchHandler = &Schedule{
+	// SchHandler = &Schedule{
+	r := &Schedule{
 		cfg:  cfg,
 		Desc: "test",
 		Item: make(map[string]*item),
 	}
 
-	//init
+	// if err := rep.Get(&r.pdb, &r.kcn); err != nil {
+	if err := rep.Get(&r.adb); err != nil {
+		return nil, fmt.Errorf("db connect error: %v", err)
+	}
+
 	cr := make(map[string]*item)
 	for _, ejob := range cfg.Works {
 		ex := strings.ToLower(ejob.Execute)
@@ -80,8 +87,8 @@ func NewScheduler(cfg *conf.Config, rep *models.Repositories) (*Schedule, error)
 				ticker: *time.NewTicker(tick),
 				quit:   make(chan int),
 			}
-			SchHandler.Scheduler(it)
-			SchHandler.Item[ejob.Name] = it
+			r.Scheduler(it)
+			r.Item[ejob.Name] = it
 		} else if ex == "cron" {
 			cr[ejob.Name] = &item{
 				name: ejob.Name,
@@ -91,7 +98,9 @@ func NewScheduler(cfg *conf.Config, rep *models.Repositories) (*Schedule, error)
 		}
 	}
 
-	return SchHandler, nil
+	// r.initCron(cr)
+
+	return r, nil
 }
 
 func (s *Schedule) Scheduler(it *item) {

@@ -1,0 +1,144 @@
+package utils
+
+import (
+	"bytes"
+	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"net/http"
+	"os"
+	"path/filepath"
+
+	"github.com/disintegration/imaging"
+	"github.com/gin-gonic/gin"
+	tf "github.com/tensorflow/tensorflow/tensorflow/go"
+)
+
+type NSFWDetector struct {
+	model     *tf.SavedModel
+	labels    []string
+	threshold float32
+}
+
+type NSFWResult struct {
+	IsNSFW        bool    `json:"is_nsfw"`
+	NudityScore   float32 `json:"nudity_score"`
+	ExposureScore float32 `json:"exposure_score"`
+}
+
+func NewNSFWDetector(modelPath string) (*NSFWDetector, error) {
+	model, err := tf.LoadSavedModel(modelPath, []string{"serve"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("모델 로드 실패: %v", err)
+	}
+
+	detector := &NSFWDetector{
+		model:     model,
+		threshold: 0.6, // 임계값 설정 (0.0 ~ 1.0)
+		labels:    []string{"safe", "nude", "exposed"},
+	}
+
+	return detector, nil
+}
+
+func (d *NSFWDetector) CheckImage(imgPath string) (*NSFWResult, error) {
+	// 이미지 로드
+	img, err := imaging.Open(imgPath)
+	if err != nil {
+		return nil, fmt.Errorf("이미지 로드 실패: %v", err)
+	}
+
+	// 이미지 전처리
+	img = imaging.Resize(img, 224, 224, imaging.Lanczos)
+	tensor, err := imageToTensor(img)
+	if err != nil {
+		return nil, err
+	}
+
+	// 모델 실행
+	output, err := d.model.Session.Run(
+		map[tf.Output]*tf.Tensor{
+			d.model.Graph.Operation("input_1").Output(0): tensor,
+		},
+		[]tf.Output{
+			d.model.Graph.Operation("dense_2/Sigmoid").Output(0),
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("모델 실행 실패: %v", err)
+	}
+
+	// 결과 분석
+	probabilities := output[0].Value().([][]float32)[0]
+
+	result := &NSFWResult{
+		NudityScore:   probabilities[1],
+		ExposureScore: probabilities[2],
+		IsNSFW:        probabilities[1] > d.threshold || probabilities[2] > d.threshold,
+	}
+
+	return result, nil
+}
+
+func imageToTensor(img image.Image) (*tf.Tensor, error) {
+	var buf bytes.Buffer
+
+	// 이미지를 RGB 형식의 float32 배열로 변환
+	bounds := img.Bounds()
+	width, height := bounds.Max.X, bounds.Max.Y
+
+	pixels := make([][][3]float32, 1)
+	pixels[0] = make([][3]float32, height)
+	for y := 0; y < height; y++ {
+		pixels[0][y] = make([]float32, width*3)
+		for x := 0; x < width; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			pixels[0][y][x*3] = float32(r) / 65535.0
+			pixels[0][y][x*3+1] = float32(g) / 65535.0
+			pixels[0][y][x*3+2] = float32(b) / 65535.0
+		}
+	}
+
+	return tf.NewTensor(pixels)
+}
+
+func (d *NSFWDetector) Close() {
+	d.model.Session.Close()
+}
+
+// go get github.com/tensorflow/tensorflow/tensorflow/go
+// go get github.com/disintegration/imaging
+
+func (p *Router) handleImageCheck(c *gin.Context) {
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "이미지 업로드 실패"})
+		return
+	}
+
+	// 임시 파일 저장
+	tempPath := filepath.Join(os.TempDir(), file.Filename)
+	if err := c.SaveUploadedFile(file, tempPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "파일 저장 실패"})
+		return
+	}
+	defer os.Remove(tempPath)
+
+	// NSFW 검사
+	detector, err := NewNSFWDetector("path/to/model")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "NSFW 검사기 초기화 실패"})
+		return
+	}
+	defer detector.Close()
+
+	result, err := detector.CheckImage(tempPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "이미지 검사 실패"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}

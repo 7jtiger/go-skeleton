@@ -4,9 +4,9 @@
         "contact": {}
     },
     "paths": {
-        "/health/check": {
+        "/acc/v01/check/:id": {
             "get": {
-                "description": "서버 살아있는지 확인",
+                "description": "When /acc/v01/check/:id is called, it returns \"ok\" on success and a message on failure.\nid : user id",
                 "consumes": [
                     "application/json"
                 ],
@@ -14,12 +14,296 @@
                     "application/json"
                 ],
                 "tags": [
-                    "health"
+                    "user"
                 ],
-                "summary": "Check",
+                "summary": "check user id",
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/fnid": {
+            "post": {
+                "description": "Find user ID by name and birth date",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Find user ID",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {name : xxx, birth 1990-01-01}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/fnpw": {
+            "post": {
+                "description": "Find user password by id and birth date",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Find user PW",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {id : xxx, email : xxx, birth 1990-01-01}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/info/{id}": {
+            "get": {
+                "description": "Get user information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Get user information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User information",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.UserInfoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/leave": {
+            "post": {
+                "description": "Performs user leave. Returns \"success\" message on success.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Leave a user",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {id : xxx}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/login": {
+            "post": {
+                "description": "Calls /acc/v01/login to login a user. Returns \"success\" message on success.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Login a user",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {id : xxx, pw : hash}",
+                        "name": "info",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/logout": {
+            "post": {
+                "description": "Performs logout. Returns \"success\" message on success.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Logout a user",
+                "parameters": [
+                    {
+                        "description": "ID of the user to logout",
+                        "name": "id",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/regist": {
+            "post": {
+                "description": "Calls /acc/v01/regist to register a new user. Returns \"success\" message on success.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Register a new user",
+                "parameters": [
+                    {
+                        "description": "Encrypted data {id : xxx, pw : hash, name : xxx, gender : xxx, age : xxx, birth : 1990-01-01, area : xxx, email : xxx}",
+                        "name": "info",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -29,6 +313,20 @@
         }
     },
     "definitions": {
+        "protocol.OkResp": {
+            "type": "object",
+            "properties": {
+                "desc": {
+                    "type": "string"
+                },
+                "result": {
+                    "$ref": "#/definitions/protocol.ResultCode"
+                },
+                "resultString": {
+                    "type": "string"
+                }
+            }
+        },
         "protocol.RespHeader": {
             "type": "object",
             "properties": {
@@ -51,6 +349,38 @@
             "x-enum-varnames": [
                 "Success"
             ]
+        },
+        "protocol.UserInfoResp": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "atJoin": {
+                    "type": "string"
+                },
+                "birth": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                }
+            }
         }
     }
 }

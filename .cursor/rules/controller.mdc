@@ -1,0 +1,12 @@
+---
+description: Controller-related business logic configuration and reference file for controller work, .cursor/mds/controller.md
+1. Reference file for Account and User information management: .cursor/mds/account.md
+2. Reference file for Content and Chat Room related information: .cursor/mds/content.md
+3. Reference file for History and History DB related information: .cursor/mds/history.md
+4. common folder related information: .cursor/mds/common.md
+5. Reference file for client communication protocol: .cursor/mds/protocol.md
+6. Reference file for high availability processing and server status checking: .cursor/mds/hachecker.md
+#description: When referring to the account and user information below, and if the code is modified, the referenced md files must also be updated.
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,131 @@
+# History DB Function Feature Summary
+
+## Database Connection and Management Functions
+- `NewHistoryDB()`: Constructor function that establishes MySQL history database connection and initializes HistoryDB instance
+- `Start()`: Function to start history database service (currently no implementation)
+- `Terminate()`: Function to safely terminate history database connection and clean up resources
+- `Close()`: Function to close history database connection
+- `Ping()`: Function to check history database connection status
+- `heartbeat()`: Background function that periodically checks history database connection status
+
+
+CREATE TABLE `buy_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `pay_amt` double DEFAULT NULL,
+  `tot_point` double DEFAULT NULL,
+  `balance` double DEFAULT NULL,
+  `at_buy` date DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+
+CREATE TABLE `by_flw` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `tot_count` int DEFAULT NULL,
+  `by_flow` json DEFAULT NULL,
+  `upd_cnt` int DEFAULT NULL,
+  `at_upd` date DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `call_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `tid` varchar(45) DEFAULT NULL,
+  `tnick` varchar(45) DEFAULT NULL,
+  `tage` int DEFAULT NULL,
+  `st_call` tinyint(1) DEFAULT NULL,
+  `st_cnt` tinyint(1) DEFAULT NULL,
+  `st_view` tinyint(1) DEFAULT NULL,
+  `at_call` date DEFAULT NULL,
+  `sec_duration` int DEFAULT NULL,
+  `paid_point` double DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`),
+  UNIQUE KEY `tid_UNIQUE` (`tid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `chat_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `tid` varchar(45) DEFAULT NULL,
+  `tnick` varchar(45) DEFAULT NULL,
+  `tage` int DEFAULT NULL,
+  `st_chat` tinyint(1) DEFAULT NULL,
+  `st_cnt` tinyint(1) DEFAULT NULL,
+  `at_chat` date DEFAULT NULL,
+  `st_view` tinyint(1) DEFAULT NULL,
+  `chat_cnt` int DEFAULT NULL COMMENT 'chat count',
+  `paid_point` double DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`),
+  UNIQUE KEY `tid_UNIQUE` (`tid`),
+  UNIQUE KEY `tnick_UNIQUE` (`tnick`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `declare_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `ty_declare` tinyint(1) DEFAULT NULL,
+  `dc_detail` varchar(1000) DEFAULT NULL,
+  `at_declare` date DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `flw_list` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `tot_count` int DEFAULT NULL,
+  `flw_list` json DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `pay_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` varchar(45) DEFAULT NULL,
+  `ty_pay` tinyint(1) DEFAULT NULL,
+  `charge_fee` double DEFAULT NULL,
+  `amount` double DEFAULT NULL,
+  `ex_point` double DEFAULT NULL,
+  `tot_point` double DEFAULT NULL,
+  `at_paid` date DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+---
+
+## Structure Information
+- **HistoryDB**: Database access layer structure that manages history-related data
+
+---
+
+## Key Features
+- **Connection Management**: MySQL database connection pooling setup (maximum 300 connections, 30 idle connections)
+- **Health Check**: Database connection status monitoring every 2 minutes
+- **Resource Management**: Channel-based resource cleanup for safe termination
+- **Logging**: Log recording during connection setup and termination
+
+---
+
+## Database Configuration
+- **Connection Setup**: MySQL database connection using `hdb` configuration
+- **Connection Options**: Time parsing enabled with `parseTime=true` option
+- **Pooling Settings**: 
+  - Maximum idle connections: 30
+  - Maximum open connections: 300
+  - Connection maximum lifetime: 3 minutes
+

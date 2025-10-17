@@ -1,0 +1,82 @@
+[server] ##nomal type
+name = "gateway"
+mode = "dev"
+port = ":8080"
+# port = ""
+hcheck = "http://localhost:8081"
+hcport = ":8081"
+basekey = "testtesttesttesttesttesttesttest"
+
+[haChecker]
+checker = true
+serverPort = "7000"
+peerIP = "127.0.0.1"
+peerPort = "7010"
+setStatus = "active"
+
+# [network]
+# rpc = "http://dusdx.gurufin.io:8545"
+
+[db] #data access object
+[db.adb] #이중 map type map[string]map[string]interface{}
+host = "192.168.48.196:3306"
+user = "root"
+pass = "qwer"
+name = "adb"
+
+[db.hdb]
+host = "192.168.48.196:3306"
+user = "root"
+pass = "qwer"
+name = "hdb"
+
+[db.idb]
+host = "192.168.48.196:3306"
+user = "root"
+pass = "qwer"
+name = "idb"
+
+[db.rdb]
+host = "192.168.48.196:6379"
+user = "root"
+pass = "qwer"
+name = "rdb"
+
+
+#worker pool job object
+# start 0 : 00:00:00 start
+# start 1 : *:*:00 start
+# start 5 : *:*:5 start, 5min start
+# duration : seconds
+[[works]] #배열구조, jobs []job
+name = "depositCheck"
+desc = "first deposit check status 1 -> 2, 1h"
+execute = "x"
+start = 0
+duration = 3600
+args = "resv"
+
+[[works]]
+name = "bankChecker"
+desc = "at 10:00 AM, cron banker deposit check status 2 -> 4, 24h"
+execute = "x"
+start = 10
+duration = 24
+args = "0 10 * * *"
+
+[[works]]
+name = "waitChecker"
+desc = "at 10:10 AM, cron banker waitpool -> deposit, 24h"
+execute = "x"
+start = 10
+duration = 24
+args = "10 10 * * *"
+
+[loginfo]
+fpath = "./logs/gateway"
+maxAgeHour = 1440
+rotateHour = 24
+
+[whitelist]
+ips = ["localhost", "127.0.0.1", "192.168.48.187", "192.168.48.162"]
+

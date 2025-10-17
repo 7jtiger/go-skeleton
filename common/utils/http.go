@@ -1,9 +1,12 @@
-package utils
+﻿package utils
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"flag"
 	"io"
+	"math/big"
+	"net"
 	"os"
 
 	"encoding/hex"
@@ -24,7 +27,7 @@ func PostForm(host, relativePath string, reqform url.Values, resp interface{}) e
 	//if request, err := http.NewRequest("POST", u.String(), strings.NewReader(reqform.Encode())); err != nil {
 	request, err := http.PostForm(u.String(), reqform)
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("http.NewRequest %v", err))
+		return fmt.Errorf("http.NewRequest error: %v", err)
 	}
 
 	defer request.Body.Close()
@@ -34,7 +37,7 @@ func PostForm(host, relativePath string, reqform url.Values, resp interface{}) e
 		fmt.Println(str)
 	} else if err := json.Unmarshal(respBody, resp); err != nil {
 		log.Printf("response: %v %v %q", host, relativePath, respBody)
-		return fmt.Errorf(fmt.Sprintf("json.Unmarshal %v", err))
+		return fmt.Errorf("json.Unmarshal error: %v", err)
 	} else {
 		return nil
 	}
@@ -46,9 +49,9 @@ func Post(host, relativePath string, req interface{}, resp interface{}) error {
 	u := url.URL{Scheme: "http", Host: host, Path: relativePath}
 
 	if requestBody, err := json.Marshal(req); err != nil {
-		return fmt.Errorf(fmt.Sprintf("json.Marshal %v", err))
+		return fmt.Errorf("json.Marshal error: %v", err)
 	} else if request, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(requestBody)); err != nil {
-		return fmt.Errorf(fmt.Sprintf("http.NewRequest %v", err))
+		return fmt.Errorf("http.NewRequest error: %v", err)
 	} else {
 		request.Header.Set("Content-type", "application/json")
 		request.Header.Set("Authorization", "Bearer ") //access token을 넣는다.
@@ -58,15 +61,15 @@ func Post(host, relativePath string, req interface{}, resp interface{}) error {
 		}
 
 		if response, err := client.Do(request); err != nil {
-			return fmt.Errorf(fmt.Sprintf("client.Do %v", err))
+			return fmt.Errorf("client.Do error: %v", err)
 		} else {
 			defer response.Body.Close()
 
 			if body, err := io.ReadAll(response.Body); err != nil {
-				return fmt.Errorf(fmt.Sprintf("ioutil.ReadAll %v", err))
+				return fmt.Errorf("ioutil.ReadAll error: %v", err)
 			} else if err := json.Unmarshal(body, resp); err != nil {
 				log.Printf("response: %v %v %q", host, relativePath, body)
-				return fmt.Errorf(fmt.Sprintf("json.Unmarshal %v", err))
+				return fmt.Errorf("json.Unmarshal error: %v", err)
 			} else {
 				return nil
 			}
@@ -76,27 +79,27 @@ func Post(host, relativePath string, req interface{}, resp interface{}) error {
 
 func PostWithHeader(url string, req interface{}, headerKeys []string, headerValues []string) (map[string]interface{}, error) {
 	if requestBody, err := json.Marshal(req); err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("json.Marshal %v", err))
+		return nil, fmt.Errorf("json.Marshal error: %v", err)
 	} else if request, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody)); err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("http.NewRequest %v", err))
+		return nil, fmt.Errorf("http.NewRequest error: %v", err)
 	} else {
 		for i, key := range headerKeys {
 			request.Header.Add(key, headerValues[i])
 		}
 
 		if response, err := http.DefaultClient.Do(request); err != nil {
-			return nil, fmt.Errorf(fmt.Sprintf("client.Do %v", err))
+			return nil, fmt.Errorf("client.Do error: %v", err)
 		} else {
 			defer response.Body.Close()
 
 			var resp map[string]interface{}
 
 			if body, err := io.ReadAll(response.Body); err != nil {
-				return nil, fmt.Errorf(fmt.Sprintf("ioutil.ReadAll %v", err))
+				return nil, fmt.Errorf("ioutil.ReadAll error: %v", err)
 			} else if err := json.Unmarshal(body, &resp); err != nil {
 
 				log.Printf("response: %v %q", url, body)
-				return nil, fmt.Errorf(fmt.Sprintf("json.Unmarshal %v", err))
+				return nil, fmt.Errorf("json.Unmarshal error: %v", err)
 			} else {
 				return resp, nil
 			}
@@ -111,25 +114,25 @@ func PostHeaderStr(url, req string, headerKeys []string, headerValues []string) 
 		return nil, fmt.Errorf(fmt.Sprintf("json.Marshal %v", err))
 	} else  */
 	if request, err := http.NewRequest("POST", url, bytes.NewReader([]byte(req))); err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("http.NewRequest %v", err))
+		return nil, fmt.Errorf("http.NewRequest error: %v", err)
 	} else {
 		for i, key := range headerKeys {
 			request.Header.Add(key, headerValues[i])
 		}
 
 		if response, err := http.DefaultClient.Do(request); err != nil {
-			return nil, fmt.Errorf(fmt.Sprintf("client.Do %v", err))
+			return nil, fmt.Errorf("client.Do error: %v", err)
 		} else {
 			defer response.Body.Close()
 
 			var resp map[string]interface{}
 
 			if body, err := io.ReadAll(response.Body); err != nil {
-				return nil, fmt.Errorf(fmt.Sprintf("ioutil.ReadAll %v", err))
+				return nil, fmt.Errorf("ioutil.ReadAll error: %v", err)
 			} else if err := json.Unmarshal(body, &resp); err != nil {
 
 				log.Printf("response: %v %q", url, body)
-				return nil, fmt.Errorf(fmt.Sprintf("json.Unmarshal %v", err))
+				return nil, fmt.Errorf("json.Unmarshal error: %v", err)
 			} else {
 				return resp, nil
 			}
@@ -260,15 +263,15 @@ func SendChatAlert(mod, body string) bool {
 	return true
 }
 
-func SendTelegramAlert(mod, body string) bool {
+func SendTelegramAlert(name, mod, body string) bool {
 	path, _ := os.Getwd()
 	var msg string
 	if mod == "prod" {
-		msg = "!!!From Prod-live stage!!! : \n" + body + "\nModule : " + path
+		msg = "[" + name + "_" + mod + "] " + "!!!From Prod-live stage!!! : \n" + body + "\nModule : " + path
 	} else if mod == "beta" {
-		msg = "From beta stage : \n" + body
+		msg = "[" + name + "_" + mod + "] " + "From beta stage : \n" + body + "\nModule : " + path
 	} else {
-		msg = "Test Message : \n" + body
+		msg = "[" + name + "_" + mod + "] " + " Message : \n" + body + "\nModule : " + path
 	}
 
 	pbytes, _ := json.Marshal(map[string]interface{}{"chat_id": -1002091099927, "text": msg})
@@ -284,4 +287,30 @@ func GenUuid() string {
 	uuid := uuid.New()
 	uuid4 := hex.EncodeToString(uuid[:])
 	return uuid4
+}
+
+func GenRandomUID() (uint64, error) {
+	// 64비트 (8바이트) 난수 생성
+	bytes := make([]byte, 8)
+	_, err := crand.Read(bytes)
+	if err != nil {
+		return 0, err
+	}
+
+	// 바이트를 big.Int로 변환
+	uid := new(big.Int).SetBytes(bytes)
+
+	// MySQL BIGINT UNSIGNED 범위 제한 (2^63-1)
+	maxBigInt := new(big.Int).SetUint64(1<<63 - 1) // 9223372036854775807
+	uid.Mod(uid, maxBigInt)
+
+	return uid.Uint64(), nil
+}
+
+func GetLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	return addrs[0].(*net.IPNet).IP.String()
 }
