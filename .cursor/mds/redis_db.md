@@ -79,16 +79,16 @@
 - `GetUnreadTotalCount()`: Function to retrieve user's total unread message count
 - `CleanupInactiveRooms()`: Function to clean up chat rooms inactive for certain period
 
-## WebRTC Management Functions
-- `GetWebRTCConfig()`: Function to return WebRTC configuration information with hardcoded default values
-- `GetWebRTCConfigFromConf()`: Function to create WebRTC configuration referencing config file (DEPRECATED - commented out)
-- `getTurnCredential()`: Internal function to generate TURN server credentials (currently empty implementation)
+## WebRTC Management Functions (STUN only)
+- `GetWebRTCConfig()`: Function to return WebRTC configuration with Google STUN servers only (no TURN)
 - `SetUserWebRTCSession()`: Function to save user WebRTC session information and update active user list
 - `GetUserWebRTCSession()`: Function to retrieve user WebRTC session information
 - `GetAvailableUsersForCall()`: Function to retrieve list of users available for calls (excluding self)
 - `UpdateUserCallStatus()`: Function to update user's call status
 - `CleanupInactiveSessions()`: Function to clean up WebRTC sessions inactive for more than 30 minutes
 - `GetWebRTCStats()`: Function to retrieve WebRTC-related statistics (session count, active users, ongoing calls)
+
+**Note**: TURN server credential functions removed to eliminate relay traffic overhead.
 
 ---
 
@@ -106,12 +106,12 @@
 - **User Connection Status Management**: 2 functions
 - **Utility**: 1 function
 - **Chat Room List Management**: 9 functions
-- **WebRTC Management**: 9 functions (1 deprecated)
+- **WebRTC Management**: 7 functions (TURN support removed)
 
 ### 🎯 Key Features
 - **Real-time Chat**: Complete support for chat rooms, messages, and participant management
 - **JWT Authentication**: Token-based user authentication and session management with ChaCha20 encryption
-- **WebRTC Communication**: WebRTC configuration and session management for video calls
+- **WebRTC Communication**: WebRTC configuration and session management for video calls (STUN only, no TURN)
 - **Cache Optimization**: Efficient data management with various TTL settings and hash-based operations
 - **Real-time Notifications**: Chat room priority and unread message management
 - **Data Security**: ChaCha20 encryption for sensitive user information storage
@@ -124,7 +124,8 @@
 
 ---
 *Created: 2025-09-15*
-*Updated: 2025-09-15*
+*Updated: 2025-11-07*
 *File Location: /home/jino/go/src/ms-gateway/models/redis_db.go*
-*Total Active Functions: 52 (10 deprecated/commented)*
-*Total Lines: ~1,500*
+*Total Active Functions: 50 (TURN functions removed)*
+*Total Lines: ~1,250*
+*Note: TURN server support removed on 2025-11-07 to avoid relay traffic overhead*

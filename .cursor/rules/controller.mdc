@@ -8,5 +8,5 @@ description: Controller-related business logic configuration and reference file 
 6. Reference file for high availability processing and server status checking: .cursor/mds/hachecker.md
 #description: When referring to the account and user information below, and if the code is modified, the referenced md files must also be updated.
 globs:
-alwaysApply: false
+alwaysApply: true
 ---

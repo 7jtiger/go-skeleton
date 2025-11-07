@@ -70,12 +70,10 @@ type AudioConfig struct {
 	MaxBitrate       int  `json:"maxBitrate"`
 }
 
-// ICEServer ICE 서버 설정
+// ICEServer ICE 서버 설정 (STUN only)
 type ICEServer struct {
-	URLs       []string `json:"urls"`
-	Username   string   `json:"username,omitempty"`
-	Credential string   `json:"credential,omitempty"`
-	Type       string   `json:"type"` // stun, turn
+	URLs []string `json:"urls"`
+	Type string   `json:"type"` // stun only
 }
 
 // MediaConfig 미디어 설정
@@ -84,11 +82,10 @@ type MediaConfig struct {
 	Audio AudioConfig `json:"audio"`
 }
 
-// WebRTCConfig WebRTC 설정 정보 구조체
+// WebRTCConfig WebRTC 설정 정보 구조체 (STUN only)
 type WebRTCConfig struct {
 	ICEServers      []ICEServer `json:"iceServers"`
 	SignalingServer string      `json:"signalingServer"`
-	TurnCredential  string      `json:"turnCredential,omitempty"`
 	StunServers     []string    `json:"stunServers"`
 	MediaSettings   MediaConfig `json:"mediaSettings"`
 }

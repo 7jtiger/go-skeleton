@@ -8,6 +8,17 @@
 - `Ping()`: Function to check history database connection status
 - `heartbeat()`: Background function that periodically checks history database connection status
 
+## Notification Management Functions
+- `GetNotiAllList()`: Function to retrieve all personal notifications for a user, ordered by index descending
+- `GetNotiCount()`: Function to count unread notifications (stat=0) for a specific user
+- `GetNotiDetail()`: Function to retrieve detailed information for a specific notification by index
+- `SetNotiRead()`: Function to mark a notification as read by setting stat to 1
+
+## Announcement Management Functions
+- `SaveAnnouncement()`: Function to save new public announcement with title, body, URL, and timestamp
+- `GetAnnouncementList()`: Function to retrieve latest 20 announcements with automatic 'new' badge (stat=1) for items within 7 days
+- `GetAnnouncementDetail()`: Function to retrieve specific announcement detail with automatic 'new' badge calculation based on 7-day window
+
 
 CREATE TABLE `buy_his` (
   `idx` int NOT NULL AUTO_INCREMENT,
@@ -106,6 +117,29 @@ CREATE TABLE `pay_his` (
   UNIQUE KEY `uid_UNIQUE` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
+CREATE TABLE `noti_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` bigint unsigned NOT NULL,
+  `nt_type` tinyint(4) unsigned zerofill NOT NULL,
+  `nt_title` varchar(20) NOT NULL,
+  `nt_msg` varchar(50) NOT NULL,
+  `at_noti` datetime NOT NULL,
+  `stat` tinyint(1) unsigned zerofill NOT NULL,
+  `frm_uid` bigint unsigned NOT NULL,
+  `frm_url` varchar(100) NOT NULL,
+  `frm_nick` varchar(15) NOT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='noti list'
+
+CREATE TABLE `anuc_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `an_title` varchar(45) NOT NULL,
+  `an_body` tinytext,
+  `an_url` varchar(150) DEFAULT NULL,
+  `at_msg` datetime NOT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 ---
 
 ## Structure Information
@@ -118,6 +152,14 @@ CREATE TABLE `pay_his` (
 - **Health Check**: Database connection status monitoring every 2 minutes
 - **Resource Management**: Channel-based resource cleanup for safe termination
 - **Logging**: Log recording during connection setup and termination
+- **Notification System**: Personal user notifications with read/unread status management
+- **Announcement System**: Public announcements with automatic 'new' badge calculation (7-day window)
+- **Auto-Status Calculation**: Automatic stat field calculation based on timestamp comparison
+
+---
+*Created: 2025-09-15*
+*Last Updated: 2025-11-05*
+*File Location: /home/jino/go/src/ms-gateway/models/history_db.go*
 
 ---
 

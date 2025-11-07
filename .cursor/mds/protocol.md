@@ -11,6 +11,39 @@
 
 ---
 
+## history.go - History and Notification Protocol Structures
+
+### Notification Structures
+- `Noti struct`: User notification structure containing index, notification type, title, message, timestamp, status, and sender information (uid, url, nickname)
+
+### Announcement Structures
+- `Announcement struct`: Public announcement structure containing index, title, body content, URL link, timestamp, and status
+
+### Database Schema Comments
+- `noti_his` table: Personal user notification history with 9 fields (idx, uid, nt_type, nt_title, nt_msg, at_noti, stat, frm_uid, frm_url, frm_nick)
+- `anuc_his` table: Public announcement history with 5 fields (idx, an_title, an_body, an_url, at_msg)
+
+---
+
+## home.go - Home Screen Protocol Structures
+
+### Request Structures
+- `HomeDataReq struct`: Home screen data request structure containing user ID
+
+### Video Chat Structures
+- `VideoChat struct`: Video chat user information containing ID, VCID, profile picture, intro, gender, nickname, area, and age
+
+### Voice Chat Structures
+- `VoiceChat struct`: Voice chat user information containing ID, VOID, profile picture, intro, gender, nickname, area, and age
+
+### Story Structures
+- `Story struct`: Story information containing user ID, story ID, and story picture URL
+
+### Response Structures
+- `HomeDataResp struct`: Comprehensive home screen response containing notification status, message count, check-in status, video chat list, voice chat list, story list, terms URL, and policy URL
+
+---
+
 ## types.go - Common Protocol Types and Functions
 
 ### Response Management Functions
@@ -89,6 +122,15 @@
 - **Request Structures**: Registration and login request formats (2 structures)
 - **Response Structures**: User information response format (1 structure)
 
+### history.go (2 structures)
+- **Notification Structures**: Personal user notifications (1 structure)
+- **Announcement Structures**: Public announcements (1 structure)
+
+### home.go (5 structures)
+- **Request Structures**: Home screen data request (1 structure)
+- **Response Structures**: Comprehensive home screen data (1 structure)
+- **Feature Structures**: Video chat, voice chat, story (3 structures)
+
 ### types.go (7 structures + 2 functions + 1 data map)
 - **Response Management**: Header creation functions (2 functions)
 - **Core Responses**: Standard response formats (3 structures)
@@ -114,6 +156,8 @@
 
 ## Protocol Categories
 - **User Management**: Registration, login, profile, account operations
+- **Notification System**: Personal notifications and public announcements
+- **Home Screen**: Video chat, voice chat, story data integration
 - **System Response**: Standardized success/error response handling
 - **Security**: Encrypted data transmission and token validation
 - **Pagination**: List response management with page controls
@@ -121,4 +165,5 @@
 
 ---
 *Created: 2025-09-15*
+*Last Updated: 2025-11-05*
 *File Location: /home/jino/go/src/ms-gateway/protocol/*

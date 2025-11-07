@@ -18,14 +18,171 @@
                 ],
                 "summary": "check user id",
                 "responses": {
+                    "14": {
+                        "description": "result: ID is duplicate",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
                     "200": {
-                        "description": "OK",
+                        "description": "result: ok",
                         "schema": {
                             "$ref": "#/definitions/protocol.OkResp"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "result: request failed",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/ckemail/:email": {
+            "get": {
+                "description": "When /acc/v01/ckemail/:email is called, it returns \"ok\" on success and a message on failure.\nemail : user email",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "check user email",
+                "responses": {
+                    "15": {
+                        "description": "result: email is duplicate",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "result: ok",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "result: request failed",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/cngpw": {
+            "post": {
+                "description": "Change the password of a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Change user password",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx, pw : hash, newpw : hash}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "109": {
+                        "description": "Failed to change pw",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/delete/{id}": {
+            "post": {
+                "description": "Delete user, but just update user status to 4",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Delete user",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 GCM mode {id : xxx}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "115": {
+                        "description": "Failed to delete user",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -48,20 +205,53 @@
                 "summary": "Find user ID",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {name : xxx, birth 1990-01-01}",
+                        "description": "Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01, gener : 1}",
                         "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "type": "object"
                         }
                     }
                 ],
                 "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "111": {
+                        "description": "Failed to find id",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
@@ -88,20 +278,56 @@
                 "summary": "Find user PW",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {id : xxx, email : xxx, birth 1990-01-01}",
+                        "description": "Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018, gender : 1}",
                         "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "type": "object"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "102": {
+                        "description": "All fields are required",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "104": {
+                        "description": "Failed Decrypt",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed Parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "112": {
+                        "description": "Failed to find pw",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "success with {msg : ok, email : xxx}",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
@@ -136,6 +362,12 @@
                     }
                 ],
                 "responses": {
+                    "114": {
+                        "description": "Failed to get user info",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
                     "200": {
                         "description": "User information",
                         "schema": {
@@ -166,24 +398,42 @@
                 "summary": "Leave a user",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {id : xxx}",
+                        "description": "Encrypted data by aes256 GCM mode {id : xxx}",
                         "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "type": "object"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "success",
+                    "102": {
+                        "description": "Parameter is missing",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "113": {
+                        "description": "Failed to leave user",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -193,7 +443,7 @@
         },
         "/acc/v01/login": {
             "post": {
-                "description": "Calls /acc/v01/login to login a user. Returns \"success\" message on success.",
+                "description": "Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success.",
                 "consumes": [
                     "application/json"
                 ],
@@ -206,24 +456,48 @@
                 "summary": "Login a user",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {id : xxx, pw : hash}",
-                        "name": "info",
+                        "description": "Login request data {id : xxx, pw : hash}",
+                        "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/protocol.LoginReq"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "success",
+                    "102": {
+                        "description": "Parameter is missing",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "104": {
+                        "description": "Failed to login user",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "Login success with token, uid, and webrtc config",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.LoginUserResp"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -271,6 +545,64 @@
                 }
             }
         },
+        "/acc/v01/modify": {
+            "post": {
+                "description": "Modify user information. The 'cate' field should be one of \"pw, area, nick, email\" indicating the target to be changed, and the 'value' field should contain the new value for the target.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Modify user information",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email : xxx, cate : xxx, value : xxx}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "104": {
+                        "description": "Failed to change pw",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/acc/v01/regist": {
             "post": {
                 "description": "Calls /acc/v01/regist to register a new user. Returns \"success\" message on success.",
@@ -286,16 +618,34 @@
                 "summary": "Register a new user",
                 "parameters": [
                     {
-                        "description": "Encrypted data {id : xxx, pw : hash, name : xxx, gender : xxx, age : xxx, birth : 1990-01-01, area : xxx, email : xxx}",
-                        "name": "info",
+                        "description": "register request data {id : xxx, pw : hash, name : xxx, gender : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/protocol.RegistReq"
                         }
                     }
                 ],
                 "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "104": {
+                        "description": "Failed Register User",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
                     "200": {
                         "description": "success",
                         "schema": {
@@ -303,7 +653,750 @@
                         }
                     },
                     "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/reqotp": {
+            "post": {
+                "description": "Generate and send OTP code to user's email for authentication",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Request OTP authentication code",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {email : xxx}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing or invalid",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "116": {
+                        "description": "Failed to set OTP",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/verifyotp": {
+            "post": {
+                "description": "Verify OTP code for authentication",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Verify OTP authentication code",
+                "parameters": [
+                    {
+                        "description": "Encrypted data by aes256 {email : xxx, otp : xxx}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "116": {
+                        "description": "Failed to verify OTP",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/event": {
+            "post": {
+                "description": "Move chatroom to top based on event type (message, mention, urgent, read)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Handle chatroom event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "{roomId: string, eventType: string, lastMessage: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/join": {
+            "post": {
+                "description": "Add a chatroom to user's list (when login or first access)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Join a chatroom",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "{roomId: string, roomName: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/leave/{roomId}": {
+            "delete": {
+                "description": "Remove chatroom from user's list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Leave a chatroom",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Room ID",
+                        "name": "roomId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/list": {
+            "get": {
+                "description": "Get user's chatroom list sorted by last activity and priority",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Get user's chatroom list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit for pagination",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.ChatRoomListItem"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/read": {
+            "post": {
+                "description": "Update unread count to 0 for specific chatroom",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Mark chatroom as read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "{roomId: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/chatroom/v01/stats": {
+            "get": {
+                "description": "Get total chatroom count and unread message count",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chatroom"
+                ],
+                "summary": "Get chatroom statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/content/v01/test": {
+            "get": {
+                "description": "Test endpoint for content controller",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "content"
+                ],
+                "summary": "Content test endpoint",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/available-users": {
+            "get": {
+                "description": "Get list of users available for video call",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Get available users for call",
+                "responses": {
+                    "200": {
+                        "description": "Available user IDs",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/call-status": {
+            "post": {
+                "description": "Update user's call status",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Update call status",
+                "parameters": [
+                    {
+                        "description": "Call status update {isInCall: bool, callWith: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Status updated",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/config": {
+            "get": {
+                "description": "Get WebRTC configuration for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Get WebRTC configuration",
+                "responses": {
+                    "200": {
+                        "description": "WebRTC configuration",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.WebRTCConfig"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/heartbeat": {
+            "post": {
+                "description": "Update WebRTC session heartbeat to keep session alive",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Update WebRTC session heartbeat",
+                "parameters": [
+                    {
+                        "description": "Session update {deviceInfo: string, networkInfo: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Heartbeat updated",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/stats": {
+            "get": {
+                "description": "Get WebRTC system statistics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Get WebRTC statistics",
+                "responses": {
+                    "200": {
+                        "description": "WebRTC statistics",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/test-stun": {
+            "get": {
+                "description": "Test STUN server connectivity and get public IP",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Test STUN server connectivity",
+                "responses": {
+                    "200": {
+                        "description": "STUN test results",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/test-stun-server": {
+            "post": {
+                "description": "Test connectivity to a specific STUN server",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webrtc"
+                ],
+                "summary": "Test specific STUN server",
+                "parameters": [
+                    {
+                        "description": "STUN server URL {stunUrl: string}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "STUN test result",
+                        "schema": {
+                            "$ref": "#/definitions/controller.STUNTestResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -313,12 +1406,201 @@
         }
     },
     "definitions": {
+        "controller.STUNTestResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "publicIp": {
+                    "type": "string"
+                },
+                "publicPort": {
+                    "type": "integer"
+                },
+                "responseTime": {
+                    "description": "ResponseTime time.Duration `json:\"responseTime\"`",
+                    "type": "integer"
+                },
+                "serverUrl": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.ChatRoomListItem": {
+            "type": "object",
+            "properties": {
+                "lastActivity": {
+                    "type": "string"
+                },
+                "lastMessage": {
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "0: 일반, 1: 중요, 2: 긴급",
+                    "type": "integer"
+                },
+                "roomId": {
+                    "type": "string"
+                },
+                "roomName": {
+                    "type": "string"
+                },
+                "unreadCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "protocol.AudioConfig": {
+            "type": "object",
+            "properties": {
+                "autoGainControl": {
+                    "type": "boolean"
+                },
+                "echoCancellation": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "maxBitrate": {
+                    "type": "integer"
+                },
+                "noiseSuppression": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "protocol.ICEServer": {
+            "type": "object",
+            "properties": {
+                "credential": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "stun, turn",
+                    "type": "string"
+                },
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.LoginReq": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "pw": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.LoginUserResp": {
+            "type": "object",
+            "properties": {
+                "acTok": {
+                    "type": "string"
+                },
+                "msg": {
+                    "type": "string"
+                },
+                "refTok": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "string"
+                },
+                "wrtc": {
+                    "$ref": "#/definitions/protocol.WebRTCConfig"
+                }
+            }
+        },
+        "protocol.MediaConfig": {
+            "type": "object",
+            "properties": {
+                "audio": {
+                    "$ref": "#/definitions/protocol.AudioConfig"
+                },
+                "video": {
+                    "$ref": "#/definitions/protocol.VideoConfig"
+                }
+            }
+        },
         "protocol.OkResp": {
             "type": "object",
             "properties": {
                 "desc": {
                     "type": "string"
                 },
+                "result": {
+                    "$ref": "#/definitions/protocol.ResultCode"
+                },
+                "resultString": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.RegistReq": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "birth": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "integer"
+                },
+                "id": {
+                    "description": "key, sid",
+                    "type": "string"
+                },
+                "main_pic": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "pw": {
+                    "type": "string"
+                },
+                "spIntro": {
+                    "description": "본인 인삿말",
+                    "type": "string"
+                },
+                "thmb_pic": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.RespDataHeader": {
+            "type": "object",
+            "properties": {
+                "data": {},
                 "result": {
                     "$ref": "#/definitions/protocol.ResultCode"
                 },
@@ -359,10 +1641,10 @@
                 "area": {
                     "type": "string"
                 },
-                "atJoin": {
+                "birthday": {
                     "type": "string"
                 },
-                "birth": {
+                "did": {
                     "type": "string"
                 },
                 "email": {
@@ -371,13 +1653,74 @@
                 "gender": {
                     "type": "string"
                 },
-                "id": {
+                "main_pic": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "nick": {
+                    "type": "string"
+                },
+                "sid": {
+                    "type": "string"
+                },
+                "sp_intro": {
+                    "type": "string"
+                },
+                "stat": {
+                    "type": "string"
+                },
+                "thmb_pic": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.VideoConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "frameRate": {
+                    "type": "integer"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "maxBitrate": {
+                    "type": "integer"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "protocol.WebRTCConfig": {
+            "type": "object",
+            "properties": {
+                "iceServers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.ICEServer"
+                    }
+                },
+                "mediaSettings": {
+                    "$ref": "#/definitions/protocol.MediaConfig"
+                },
+                "signalingServer": {
+                    "type": "string"
+                },
+                "stunServers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "turnCredential": {
                     "type": "string"
                 }
             }

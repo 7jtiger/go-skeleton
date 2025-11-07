@@ -8,12 +8,9 @@ hcport = ":8081"
 basekey = "JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87"
 jwtsecret = "439f7e12e87e327e1b439f4a5aa895627ef47280ce75b553d65f750bea447575"
 
-[webrtc] # WebRTC 설정
+[webrtc] # WebRTC 설정 (STUN only, TURN 제외)
 signalingServerUrl = "ws://localhost:8080/ws"
 stunServers = ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302", "stun:stun4.l.google.com:19302"]
-turnServer = "turn:localhost:3478"
-turnUsername = "turn"
-turnPassword = "turn"
 maxVideoWidth = 1080
 maxVideoHeight = 1920
 maxVideoFrameRate = 30
@@ -21,33 +18,6 @@ videoBitrate = 8000000
 audioBitrate = 128000
 sessionTimeout = 14400  # 4 hours in seconds
 heartbeatInterval = 30  # seconds
-
-# TURN 서버 전용 설정
-[turn]
-enabled = true
-listenAddr = "0.0.0.0:3478"
-realm = "ms-gateway-turn"
-# 개발 환경용 기본 인증 (프로덕션에서는 변경 필요)
-username = "turn"
-password = "turn"
-# 프로덕션용 long-term credentials 설정
-sharedSecret = "ms-gateway-turn-secret-2024"
-credentialTTL = 86400  # 24 hours in seconds
-# 릴레이 주소 생성 설정
-[turn.relay]
-minPort = 49152
-maxPort = 65535
-maxRetries = 100
-# 성능 최적화 설정
-[turn.performance]
-channelBindTimeout = 600  # 10 minutes in seconds
-inboundMTU = 1500
-allocationLifetime = 3600  # 1 hour in seconds
-# 보안 설정
-[turn.security]
-permissionLifetime = 300  # 5 minutes in seconds
-enableAuthentication = true
-requireCredentials = true
 
 [haChecker]
 checker = true

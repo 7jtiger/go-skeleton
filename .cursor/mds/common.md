@@ -176,17 +176,22 @@
 
 ### turn.go - TURN Server Management
 
+#### TURN Data Structures
+- `TurnCredentials struct`: TURN authentication information containing username, password, and TTL
+- `TurnServerStats struct`: TURN server statistics with active allocations, total allocations/bytes, active sessions, uptime, and performance metrics
+- `TurnPerformanceMetrics struct`: Performance metrics including packet rate, byte rate, average latency, and peak connections
+
 #### TURN Credential Management
-- `GenerateTurnCredentials()`: Generates time-windowed TURN credentials using HMAC-SHA1 and shared secret
-- `ValidateTurnCredentials()`: Validates TURN credentials by checking timestamp expiry and HMAC verification
+- `GenerateTurnCredentials()`: Generates RFC 5389 compliant time-windowed TURN credentials using HMAC-SHA1 and shared secret with timestamp-based username
+- `ValidateTurnCredentials()`: Validates TURN credentials by checking timestamp expiry and HMAC verification against shared secret
 
 #### TURN Server Operations
-- `CreateOptimizedTurnServer()`: Creates production-ready TURN server with performance and security optimizations
-- `MonitorTurnServer()`: Monitors TURN server statistics and calls callback function with metrics
-- `LogTurnServerStats()`: Logs TURN server statistics including allocations, uptime, and timestamps
-- `GetTurnServerHealth()`: Returns TURN server health status and allocation count as map
-- `OptimizeTurnServerForProduction()`: Applies production-optimized settings for timeouts, security, and rate limiting
-- `CreateTurnAuthHandler()`: Creates authentication handler for different auth types (long-term, static, default)
+- `CreateOptimizedTurnServer()`: Creates production-ready TURN server with performance and security optimizations including realm, port range, and timeouts
+- `MonitorTurnServer()`: Monitors TURN server statistics with periodic interval and calls callback function with collected metrics
+- `LogTurnServerStats()`: Logs TURN server statistics including allocations, uptime, timestamps, and performance metrics
+- `GetTurnServerHealth()`: Returns TURN server health status and allocation count as map with status code
+- `OptimizeTurnServerForProduction()`: Applies production-optimized settings for timeouts, security, rate limiting, and resource management
+- `CreateTurnAuthHandler()`: Creates authentication handler for different auth types (long-term with shared secret, static credentials, default deny)
 
 ### utils.go - General Utility Functions
 
@@ -212,19 +217,14 @@
 #### Name Generation
 - `GenDefNick()`: Generates random Korean nickname by combining adjectives and nouns from predefined arrays
 
-### webrtc.go - WebRTC Connectivity Functions
+### webrtc.go - WebRTC Connectivity Functions (Deprecated - Moved to controller/webrtc.go)
 
-#### STUN Server Testing
-- `TestStunServer()`: Tests connectivity to single STUN server and returns public IP/port mapping
-- `TestMultipleStunServers()`: Tests multiple STUN servers concurrently and returns connectivity report
-- `parseStunURL()`: Parses STUN URL format (stun:host:port) and extracts host and port components
-- `createStunBindingRequest()`: Creates STUN Binding Request packet with transaction ID and magic cookie
-- `parseStunResponse()`: Parses STUN response packet and extracts public IP/port from mapped address attributes
+**Note**: These functions have been moved to `controller/webrtc.go` for better organization and separation of concerns.
 
-#### WebRTC Configuration
-- `GetRecommendedStunServers()`: Returns list of recommended Google STUN servers for WebRTC
-- `ValidateWebRTCConfig()`: Validates WebRTC configuration format and ensures ICE servers are properly configured
-- `CreateStunTestReport()`: Creates comprehensive STUN connectivity test report with success rates and details
+#### STUN Server Testing (See controller/webrtc.go)
+- STUN server connectivity testing functions
+- WebRTC configuration validation
+- Comprehensive test reporting
 
 ---
 
@@ -256,4 +256,5 @@
 
 ---
 *Created: 2025-09-15*
+*Last Updated: 2025-11-05*
 *File Location: /home/jino/go/src/ms-gateway/common/*

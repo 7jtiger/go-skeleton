@@ -109,3 +109,8 @@ CREATE TABLE `acc_info` (
 - **Connection Management**: Database connection pooling and connection status monitoring through heartbeat
 - **Soft Delete**: Handles user deletion through status change rather than actual deletion
 
+---
+*Created: 2025-09-15*
+*Last Updated: 2025-11-05*
+*File Location: /home/jino/go/src/ms-gateway/models/account_db.go*
+

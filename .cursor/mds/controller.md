@@ -76,20 +76,60 @@
 
 ---
 
-## content.go - Content and Chat Room Management
+## webrtc.go - WebRTC Connectivity Testing
+
+### STUN Testing Data Structures
+- `STUNTestResult struct`: STUN server test result containing success flag, server URL, public IP/port, response time, and error message
+- `ICEConnectivityTest struct`: ICE connectivity test result with STUN server results array and summary statistics
+
+### STUN Server Testing Functions
+- `TestStunServer()`: Tests single STUN server connectivity with timeout, parses STUN URL, creates binding request, and returns public IP/port mapping
+- `TestMultipleStunServers()`: Tests multiple STUN servers concurrently using goroutines and channels, returns aggregate test results with success/failure counts
+
+### STUN Protocol Functions
+- `parseStunURL()`: Parses STUN URL format (stun:host:port) and extracts host and port components with default port 19302
+- `createStunBindingRequest()`: Creates STUN Binding Request packet with message type 0x0001, magic cookie, and random transaction ID
+- `parseStunResponse()`: Parses STUN response packet, validates transaction ID, extracts MAPPED-ADDRESS or XOR-MAPPED-ADDRESS attributes
+
+### WebRTC Configuration Functions
+- `GetRecommendedStunServers()`: Returns list of 5 recommended Google STUN servers for WebRTC connectivity testing
+- `ValidateWebRTCConfig()`: Validates WebRTC configuration format, checks ICE servers, URLs, and ensures proper stun:/turn: prefix format
+- `CreateStunTestReport()`: Creates comprehensive STUN connectivity test report with timestamp, summary statistics, success rate, and detailed results per server
+
+---
+
+## content.go - Content Management
 
 ### Content Controller
 - `NewContentController()`: Creates ContentController instance for content management operations
 - `GetTestContent()`: Simple test endpoint that returns success message for content controller validation
 
-### Chat Room List Controller
-- `NewChatRoomListController()`: Creates ChatRoomListController with Redis connection for real-time chat management
-- `GetChatRoomList()`: Retrieves user's chat room list with pagination, sorted by activity and priority
-- `JoinChatRoom()`: Adds user to chat room and updates user's chat room list
-- `LeaveChatRoom()`: Removes user from chat room and updates user's chat room list
-- `HandleChatRoomEvent()`: Processes chat room events (message, mention, urgent, read) and moves rooms to top
-- `MarkAsRead()`: Marks chat room as read by setting unread count to 0 and updating priority
-- `GetChatRoomStats()`: Retrieves chat room statistics including total rooms and unread message counts
+---
+
+## home.go - Home Screen Controller
+
+### Home Controller
+- `NewHomeController()`: Creates HomeController instance with database connections for home screen data management
+- `GetHomeMenInfo()`: Retrieves home screen information including notifications, messages, check-in status, video chat list, voice chat list, stories, and terms/policy links
+
+---
+
+## noti.go - Notification and Announcement Management
+
+### Notification Controller
+- `NewNotiController()`: Creates NotiController instance with database connections for notification management
+
+### Notification Functions
+- `GetNotiList()`: Retrieves user's notification list with parameter validation
+- `GetNoti()`: Fetches all notifications for a specific user ID from database
+- `GetNotiNewCount()`: Returns count of unread notifications for a user
+- `GetNotiDetail()`: Retrieves notification detail by index and marks it as read automatically
+- `SetNoti()`: Placeholder for setting notification (implementation pending)
+
+### Announcement Functions
+- `GetAnnouncement()`: Retrieves public announcement list (new badge for items within one week)
+- `SetAnnouncement()`: Saves new announcement with admin permission validation (title, body, URL required)
+- `GetAnnouncementDetail()`: Retrieves specific announcement details by index with not found error handling
 
 ---
 
@@ -158,14 +198,24 @@
 
 ## Overall Structure Summary
 
-### Main Controllers (8 controllers)
+### Main Controllers (10+ controllers)
 - **Controller**: Core controller management (9 functions)
 - **AccountController**: User account operations (18 functions)
 - **ContentController**: Content management (1 function)
-- **ChatRoomListController**: Chat room operations (6 functions)
+- **HomeController**: Home screen data management (2 functions)
+- **NotiController**: Notification and announcement management (9 functions)
 - **ProfileController**: Profile management (1 function)
 - **ItemController**: Item management (1 function)
 - **HistoryController**: History tracking (1 function)
+- **CheckInController**: Check-in functionality (placeholder)
+- **CsCenterController**: Customer service center (placeholder)
+- **InboxController**: Inbox management (placeholder)
+- **MarriageController**: Marriage feature (placeholder)
+- **SettingController**: User settings (placeholder)
+- **ShopController**: Shop functionality (placeholder)
+- **StoryListController**: Story list management (placeholder)
+- **VideoChatController**: Video chat features (placeholder)
+- **VoiceChatController**: Voice chat features (placeholder)
 
 ### Support Modules
 - **types.go**: Utility functions and constants (3 functions + constants)
@@ -177,6 +227,8 @@
 - **User Management**: Registration, profile updates, account operations
 - **Real-time Communication**: WebRTC configuration, chat rooms, call status
 - **Content Moderation**: NSFW detection, image processing
+- **Notification System**: User notifications, announcements, read status management
+- **Home Screen**: Integrated data delivery for video chat, voice chat, stories
 - **Testing**: Comprehensive API testing, file uploads, endpoint validation
 - **Security**: Encrypted data handling, token validation, STUN server testing
 
@@ -191,5 +243,37 @@
 - **Monitoring**: WebRTC statistics and health check endpoints
 
 ---
+
+## signaling.go - WebRTC Signaling Controller
+
+### Signaling Controller
+- `NewSignalingController()`: Creates SignalingController instance for WebRTC P2P signaling
+
+### WebSocket Connection Management
+- `HandleWebSocket()`: Handles WebSocket connection requests and upgrades to WebSocket protocol
+- `registerClient()`: Registers new client to active connections map
+- `unregisterClient()`: Removes client from active connections and cleanup resources
+
+### Message Processing Functions
+- `readPump()`: Reads messages from WebSocket connection (goroutine)
+- `writePump()`: Writes messages to WebSocket connection (goroutine)
+- `handleMessage()`: Processes received signaling messages by type
+- `relayMessage()`: Relays signaling messages to target user
+- `sendToClient()`: Sends message to specific client
+
+### User List Management
+- `broadcastUserList()`: Broadcasts connected user list to all clients
+- `GetConnectedUsers()`: HTTP API endpoint to retrieve list of connected users
+
+### Key Features
+- **WebSocket-based Signaling**: Real-time P2P signaling server using WebSocket
+- **Concurrent Connection Management**: Thread-safe multi-client connection handling
+- **Message Relay**: Offer/Answer/ICE Candidate relay between peers
+- **User List Synchronization**: Real-time user list updates on connect/disconnect
+- **Ping/Pong Mechanism**: 54s interval ping, 60s timeout for connection health check
+- **Goroutine-based**: Separate read/write goroutines per client
+
+---
 *Created: 2025-09-15*
+*Last Updated: 2025-11-05*
 *File Location: /home/jino/go/src/ms-gateway/controller/*

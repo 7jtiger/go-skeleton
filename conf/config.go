@@ -45,9 +45,6 @@ type Config struct {
 	WebRTC struct {
 		SignalingServerUrl string
 		StunServers        []string
-		TurnServer         string
-		TurnUsername       string
-		TurnPassword       string
 		MaxVideoWidth      int
 		MaxVideoHeight     int
 		MaxVideoFrameRate  int
@@ -55,35 +52,6 @@ type Config struct {
 		AudioBitrate       int
 		SessionTimeout     int // seconds
 		HeartbeatInterval  int // seconds
-	}
-
-	// TURN 서버 전용 설정
-	Turn struct {
-		Enabled       bool
-		ListenAddr    string
-		Realm         string
-		Username      string
-		Password      string
-		SharedSecret  string
-		CredentialTTL int // seconds
-
-		Relay struct {
-			MinPort    int
-			MaxPort    int
-			MaxRetries int
-		}
-
-		Performance struct {
-			ChannelBindTimeout int // seconds
-			InboundMTU         int
-			AllocationLifetime int // seconds
-		}
-
-		Security struct {
-			PermissionLifetime   int // seconds
-			EnableAuthentication bool
-			RequireCredentials   bool
-		}
 	}
 
 	HAChecker struct {

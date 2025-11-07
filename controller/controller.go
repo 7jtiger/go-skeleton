@@ -6,6 +6,7 @@ import (
 
 	"encoding/json"
 	"fmt"
+	"ms-gateway/hachecker"
 	"ms-gateway/models"
 	ptl "ms-gateway/protocol"
 	"net/http"
@@ -21,22 +22,22 @@ import (
 
 // Controller
 type Controller struct {
-	cfg *conf.Config
-	// hchecker *hachecker.HAChecker
-	AccCtl  *AccountController
-	PfCtl   *ProfileController
-	HomeCtl *HomeController
-	NotiCtl *NotiController
+	cfg       *conf.Config
+	hchecker  *hachecker.HAChecker
+	AccCtl    *AccountController
+	PfCtl     *ProfileController
+	HomeCtl   *HomeController
+	NotiCtl   *NotiController
+	FCMPusher *FCMPusher
+	Signaling *SignalingController
 	// ChatCtl   *ChatController
-	// Signaling *SignalingController
 	Rdb *models.RedisDB
 }
 
-// func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories) (*Controller, error) {
-func NewCTL(cf *conf.Config, rep *models.Repositories) (*Controller, error) {
+func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories) (*Controller, error) {
 	r := &Controller{
-		cfg: cf,
-		// hchecker: hch,
+		cfg:      cf,
+		hchecker: hch,
 	}
 
 	var err error
@@ -60,20 +61,15 @@ func NewCTL(cf *conf.Config, rep *models.Repositories) (*Controller, error) {
 		return nil, err
 	}
 
-	/*
-		// 채팅 컨트롤러 생성
-		if r.ChatCtl, err = NewChatController(r, rep); err != nil {
-			log.Warn("Failed to initialize chat controller: ", err)
-			// 채팅 컨트롤러 실패는 전체 서버 시작을 막지 않음
-		}
+	if r.FCMPusher, err = NewFCMPusher(r, hch, rep); err != nil {
+		return nil, err
+	}
 
-		// Signaling 컨트롤러 생성 및 초기화 (예시)
-		// 실제 SignalingController 생성자에 맞게 수정 필요
-		if r.Signaling, err = NewSignalingController(r, rep); err != nil {
-			log.Warn("Failed to initialize signaling controller: ", err)
-			// 필요에 따라 에러 처리
-		}
-	*/
+	// Signaling 컨트롤러 생성
+	if r.Signaling, err = NewSignalingController(r, rep); err != nil {
+		return nil, err
+	}
+
 	return r, nil
 }
 
@@ -166,6 +162,10 @@ func (p *Controller) GetController(target interface{}) error {
 
 func (p *Controller) GetRedis() *models.RedisDB {
 	return p.Rdb
+}
+
+func (p *Controller) GetHAChecker() *hachecker.HAChecker {
+	return p.hchecker
 }
 
 /*

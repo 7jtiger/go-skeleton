@@ -29,6 +29,7 @@ type Router struct {
 	pf  *ctl.ProfileController
 	hm  *ctl.HomeController
 	nt  *ctl.NotiController
+	sig *ctl.SignalingController
 	// chat *ctl.ChatController
 	rdb *models.RedisDB
 	// hHealth *ctl.Health
@@ -43,6 +44,7 @@ func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
 		pf:  ct.PfCtl,
 		hm:  ct.HomeCtl,
 		nt:  ct.NotiCtl,
+		sig: ct.Signaling,
 		// chat: ct.ChatCtl,
 		rdb: ct.GetRedis(),
 		// hHealth: ct.GetHealthHandler(),
@@ -281,7 +283,8 @@ func (p *Router) Idx() *gin.Engine {
 	}
 
 	// WebRTC 관련 엔드포인트 추가
-	webrtc := e.Group("webrtc/v01", p.SecurityHeaders(), p.JwtAuth())
+	// webrtc := e.Group("webrtc/v01", p.SecurityHeaders(), p.JwtAuth())
+	webrtc := e.Group("vdchat/v01")
 	{
 		// WebRTC 설정 정보 조회
 		webrtc.GET("/config", p.acc.GetWebRTCConfig)
@@ -303,6 +306,15 @@ func (p *Router) Idx() *gin.Engine {
 
 		// 특정 STUN 서버 테스트
 		webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
+
+		// WebSocket 시그널링 엔드포인트 (인증 없음 - 개발용)
+		webrtc.GET("/ws", p.sig.HandleWebSocket)
+
+		// 연결된 사용자 목록 조회
+		webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
+
+		// 시그널링 서버 통계 조회 (최적화 기능 추가)
+		// webrtc.GET("/signaling-stats", p.sig.GetStats)
 	}
 
 	/*

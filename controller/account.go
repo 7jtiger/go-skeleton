@@ -71,7 +71,7 @@ func (p *AccountController) GetVersion(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} protocol.OkResp "result: ok"
 // @Failure 400 {object} protocol.RespHeader "result: request failed"
-// @Failure 14 {object} protocol.IDDuplicate "result: ID is duplicate"
+// @Failure 14 {object} protocol.RespHeader "result: ID is duplicate"
 // @Router /acc/v01/check/:id [get]
 func (p *AccountController) CheckID(c *gin.Context) {
 	id := c.Param("id")
@@ -102,7 +102,7 @@ func (p *AccountController) CheckID(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} protocol.OkResp "result: ok"
 // @Failure 400 {object} protocol.RespHeader "result: request failed"
-// @Failure 15 {object} protocol.EmailDuplicate "result: email is duplicate"
+// @Failure 15 {object} protocol.RespHeader "result: email is duplicate"
 // @Router /acc/v01/ckemail/:email [get]
 func (p *AccountController) CheckEmail(c *gin.Context) {
 	email := c.Param("email")
@@ -127,13 +127,12 @@ func (p *AccountController) CheckEmail(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 GCM mode {id : xxx, pw : hash, name : xxx, gender : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}"
-// @Param request body protocol.RegistReq true "register request data"
+// @Param request body protocol.RegistReq true "register request data {id : xxx, pw : hash, name : xxx, gender : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}"
 // @Success 200 {string} string "success"
 // @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 104 {object} protocol.UserRegistFailed "Failed Register User"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 104 {object} protocol.RespHeader "Failed Register User"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Router /acc/v01/regist [post]
 func (p *AccountController) RegistUserInfo(c *gin.Context) {
 	var req ptl.RegistReq
@@ -193,9 +192,9 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 // @Param data body protocol.LoginReq true "Login request data {id : xxx, pw : hash}"
 // @Success 200 {object} protocol.LoginUserResp "Login success with token, uid, and webrtc config"
 // @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 104 {object} protocol.UserLoginFailed "Failed to login user"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 104 {object} protocol.RespHeader "Failed to login user"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
 // @Router /acc/v01/login [post]
 func (p *AccountController) LoginUser(c *gin.Context) {
@@ -391,12 +390,12 @@ func (p *AccountController) LogoutUser(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 GCM mode {id : xxx}"
+// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 113 {object} protocol.UserLeaveFailed "Failed to leave user"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 113 {object} protocol.RespHeader "Failed to leave user"
 // @Router /acc/v01/leave [post]
 func (p *AccountController) LeaveUser(c *gin.Context) {
 	var req struct {
@@ -435,12 +434,12 @@ func (p *AccountController) LeaveUser(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01, gener : 1}"
+// @Param data body object true "Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01, gener : 1}"
 // @Success 200 {object} protocol.RespDataHeader{data=[]string}
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 111 {object} protocol.UserFindIDFailed "Failed to find id"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 111 {object} protocol.RespHeader "Failed to find id"
 // @Router /acc/v01/fnid [post]
 func (p *AccountController) FindID(c *gin.Context) {
 	var req struct {
@@ -475,14 +474,14 @@ func (p *AccountController) FindID(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018, gender : 1}"
+// @Param data body object true "Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018, gender : 1}"
 // @Success 200 {object} protocol.OkResp
 // @Success 200 {object} protocol.RespDataHeader{data=object} "success with {msg : ok, email : xxx}"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 104 {object} protocol.UserRegistFailed "Failed Decrypt"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed Parse JSON"
-// @Failure 102 {object} protocol.InvalidParam "All fields are required"
-// @Failure 112 {object} protocol.UserFindPWFailed "Failed to find pw"
+// @Failure 104 {object} protocol.RespHeader "Failed Decrypt"
+// @Failure 106 {object} protocol.RespHeader "Failed Parse JSON"
+// @Failure 102 {object} protocol.RespHeader "All fields are required"
+// @Failure 112 {object} protocol.RespHeader "Failed to find pw"
 // @Router /acc/v01/fnpw [post]
 func (p *AccountController) FindPW(c *gin.Context) {
 	// Email string `json:"email" binding:"required"`
@@ -561,12 +560,12 @@ func (p *AccountController) sendEmailOtpCode(email, nick, otp string) bool {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 {email : xxx}"
+// @Param data body object true "Encrypted data by aes256 {email : xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing or invalid"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 116 {object} protocol.UserAuthOTPFailed "Failed to set OTP"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing or invalid"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 116 {object} protocol.RespHeader "Failed to set OTP"
 // @Router /acc/v01/reqotp [post]
 func (p *AccountController) ReqAuthOTP(c *gin.Context) {
 	var req struct {
@@ -613,12 +612,12 @@ func (p *AccountController) ReqAuthOTP(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 {email : xxx, otp : xxx}"
+// @Param data body object true "Encrypted data by aes256 {email : xxx, otp : xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 116 {object} protocol.UserAuthOTPFailed "Failed to verify OTP"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 116 {object} protocol.RespHeader "Failed to verify OTP"
 // @Router /acc/v01/verifyotp [post]
 func (p *AccountController) VerifyOTP(c *gin.Context) {
 	var req struct {
@@ -658,12 +657,12 @@ func (p *AccountController) VerifyOTP(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx, pw : hash, newpw : hash}"
+// @Param data body object true "Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx, pw : hash, newpw : hash}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 109 {object} protocol.UserChangePWFailed "Failed to change pw"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 109 {object} protocol.RespHeader "Failed to change pw"
 // @Router /acc/v01/cngpw [post]
 func (p *AccountController) ChangePW(c *gin.Context) {
 	var req struct {
@@ -701,12 +700,12 @@ func (p *AccountController) ChangePW(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email : xxx, cate : xxx, value : xxx}"
+// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email : xxx, cate : xxx, value : xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 104 {object} protocol.UserChangePWFailed "Failed to change pw"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 104 {object} protocol.RespHeader "Failed to change pw"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Router /acc/v01/modify [post]
 func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 	var req struct {
@@ -747,7 +746,7 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 // @Param id path string true "User ID"
 // @Success 200 {object} protocol.UserInfoResp "User information"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 114 {object} protocol.UserInfoFailed "Failed to get user info"
+// @Failure 114 {object} protocol.RespHeader "Failed to get user info"
 // @Router /acc/v01/info/{id} [get]
 func (p *AccountController) GetUserInfo(c *gin.Context) {
 	id := c.Param("id")
@@ -771,12 +770,12 @@ func (p *AccountController) GetUserInfo(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string true "Encrypted data by aes256 GCM mode {id : xxx}"
+// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 115 {object} protocol.UserDeleteFailed "Failed to delete user"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 115 {object} protocol.RespHeader "Failed to delete user"
 // @Router /acc/v01/delete/{id} [post]
 func (p *AccountController) DeleteUser(c *gin.Context) {
 	var req struct {
@@ -808,12 +807,12 @@ func (p *AccountController) DeleteUser(c *gin.Context) {
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param data body string
+// @Param data body object true "User ID {uid: xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
 // @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.InvalidParam "Parameter is missing"
-// @Failure 106 {object} protocol.JsonParseFailed "Failed to parse JSON"
-// @Failure 115 {object} protocol.UserDeleteFailed "Failed to delete user"
+// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
+// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 115 {object} protocol.RespHeader "Failed to delete user"
 func (p *AccountController) ModifyMainPic(c *gin.Context) {
 	var req struct {
 		UID string `json:"uid" binding:"required"`
@@ -883,7 +882,7 @@ func (p *AccountController) ModifyMainPic(c *gin.Context) {
 // @Tags webrtc
 // @Accept json
 // @Produce json
-// @Success 200 {object} models.WebRTCConfig "WebRTC configuration"
+// @Success 200 {object} protocol.WebRTCConfig "WebRTC configuration"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
 // @Failure 401 {object} protocol.RespHeader "Unauthorized"
 // @Router /webrtc/v01/config [get]
@@ -1048,10 +1047,10 @@ func (p *AccountController) GetWebRTCStats(c *gin.Context) {
 // @Router /webrtc/v01/test-stun [get]
 func (p *AccountController) TestStunServers(c *gin.Context) {
 	// 기본 STUN 서버들 가져오기
-	stunServers := utils.GetRecommendedStunServers()
+	stunServers := GetRecommendedStunServers()
 
 	// 테스트 보고서 생성
-	report, err := utils.CreateStunTestReport(c.Request.Context(), stunServers)
+	report, err := CreateStunTestReport(c.Request.Context(), stunServers)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to test STUN servers"), http.StatusInternalServerError, err)
 		return
@@ -1066,7 +1065,7 @@ func (p *AccountController) TestStunServers(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param data body object true "STUN server URL {stunUrl: string}"
-// @Success 200 {object} utils.STUNTestResult "STUN test result"
+// @Success 200 {object} controller.STUNTestResult "STUN test result"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
 // @Router /webrtc/v01/test-stun-server [post]
@@ -1081,7 +1080,7 @@ func (p *AccountController) TestSpecificStunServer(c *gin.Context) {
 	}
 
 	// STUN 서버 테스트
-	result := utils.TestStunServer(req.StunURL, 5*time.Second)
+	result := TestStunServer(req.StunURL, 5*time.Second)
 
 	p.ctl.SendResponse(c, http.StatusOK, result)
 }

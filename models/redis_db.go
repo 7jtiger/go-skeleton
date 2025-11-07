@@ -106,7 +106,8 @@ func NewRedisDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 		}
 	} else {
 		redisOption = redis.Options{
-			Addr: cf.DB["rdb"]["host"].(string),
+			Addr:     cf.DB["rdb"]["host"].(string),
+			Password: "qwer", // no password set
 			// DB:   0, // use default DB
 		}
 		redisOption.TLSConfig = nil
@@ -1248,106 +1249,9 @@ func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
 		},
 	}
 
-	// TURN 서버가 필요한 경우 추가 설정
-	// 프로덕션 환경에서는 TURN 서버 크리덴셜을 안전하게 관리해야 함
-	if turnCredential := r.getTurnCredential(userID); turnCredential != "" {
-		turnServer := ptl.ICEServer{
-			URLs:       []string{"turn:your-turn-server.com:3478"},
-			Username:   userID,
-			Credential: turnCredential,
-			Type:       "turn",
-		}
-		config.ICEServers = append(config.ICEServers, turnServer)
-		config.TurnCredential = turnCredential
-	}
-
 	return config, nil
 }
 
-/*
-// GetWebRTCConfigFromConf 설정 파일을 참조하여 WebRTC 설정 생성
-func (r *RedisDB) GetWebRTCConfigFromConf(userID string, cfg *conf.Config) (*WebRTCConfig, error) {
-	// 설정 파일에서 STUN 서버 목록 가져오기
-	stunServers := cfg.WebRTC.StunServers
-	if len(stunServers) == 0 {
-		// 기본 Google STUN 서버들로 폴백
-		stunServers = []string{
-			"stun:stun.l.google.com:19302",
-			"stun:stun1.l.google.com:19302",
-			"stun:stun2.l.google.com:19302",
-		}
-	}
-
-	// ICE 서버 구성
-	iceServers := make([]ICEServer, 0, len(stunServers)+1)
-
-	// STUN 서버들 추가
-	for _, stunUrl := range stunServers {
-		iceServers = append(iceServers, ICEServer{
-			URLs: []string{stunUrl},
-			Type: "stun",
-		})
-	}
-
-	// TURN 서버 설정이 있으면 추가
-	if cfg.WebRTC.TurnServer != "" {
-		turnServer := ICEServer{
-			URLs:       []string{cfg.WebRTC.TurnServer},
-			Username:   cfg.WebRTC.TurnUsername,
-			Credential: cfg.WebRTC.TurnPassword,
-			Type:       "turn",
-		}
-		iceServers = append(iceServers, turnServer)
-	}
-
-	// 시그널링 서버 URL 결정 (환경별 동적 설정)
-	signalingUrl := cfg.WebRTC.SignalingServerUrl
-	if signalingUrl == "" {
-		// 기본값 설정
-		if cfg.Server.Mode == "prod" {
-			signalingUrl = "wss://your-domain.com/ws" // HTTPS 환경에서는 WSS 사용
-		} else {
-			signalingUrl = "ws://localhost:8080/ws"
-		}
-	}
-
-	config := &WebRTCConfig{
-		ICEServers:      iceServers,
-		SignalingServer: signalingUrl,
-		StunServers:     stunServers,
-		MediaSettings: MediaConfig{
-			Video: VideoConfig{
-				Enabled:    true,
-				Width:      cfg.WebRTC.MaxVideoWidth,
-				Height:     cfg.WebRTC.MaxVideoHeight,
-				FrameRate:  cfg.WebRTC.MaxVideoFrameRate,
-				MaxBitrate: cfg.WebRTC.VideoBitrate,
-			},
-			Audio: AudioConfig{
-				Enabled:          true,
-				EchoCancellation: true,
-				NoiseSuppression: true,
-				AutoGainControl:  true,
-				MaxBitrate:       cfg.WebRTC.AudioBitrate,
-			},
-		},
-	}
-
-	// TURN 크리덴셜 설정
-	if cfg.WebRTC.TurnServer != "" {
-		config.TurnCredential = cfg.WebRTC.TurnPassword
-	}
-
-	return config, nil
-}
-*/
-// getTurnCredential TURN 서버 크리덴셜 생성 (임시 토큰 방식)
-func (r *RedisDB) getTurnCredential(userID string) string {
-	// 실제 구현에서는 TURN 서버의 REST API를 통해 임시 크리덴셜을 생성
-	// 여기서는 예시로 간단한 토큰 생성
-	// HMAC 기반으로 시간 제한이 있는 크리덴셜 생성 권장
-	return "" // 현재는 TURN 서버 없음
-}
 
 // SetUserWebRTCSession 사용자 WebRTC 세션 정보 저장
 func (r *RedisDB) SetUserWebRTCSession(session UserWebRTCSession) error {

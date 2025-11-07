@@ -1,8 +1,133 @@
 definitions:
+  controller.STUNTestResult:
+    properties:
+      error:
+        type: string
+      publicIp:
+        type: string
+      publicPort:
+        type: integer
+      responseTime:
+        description: ResponseTime time.Duration `json:"responseTime"`
+        type: integer
+      serverUrl:
+        type: string
+      success:
+        type: boolean
+    type: object
+  models.ChatRoomListItem:
+    properties:
+      lastActivity:
+        type: string
+      lastMessage:
+        type: string
+      priority:
+        description: '0: 일반, 1: 중요, 2: 긴급'
+        type: integer
+      roomId:
+        type: string
+      roomName:
+        type: string
+      unreadCount:
+        type: integer
+    type: object
+  protocol.AudioConfig:
+    properties:
+      autoGainControl:
+        type: boolean
+      echoCancellation:
+        type: boolean
+      enabled:
+        type: boolean
+      maxBitrate:
+        type: integer
+      noiseSuppression:
+        type: boolean
+    type: object
+  protocol.ICEServer:
+    properties:
+      credential:
+        type: string
+      type:
+        description: stun, turn
+        type: string
+      urls:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  protocol.LoginReq:
+    properties:
+      id:
+        type: string
+      pw:
+        type: string
+    type: object
+  protocol.LoginUserResp:
+    properties:
+      acTok:
+        type: string
+      msg:
+        type: string
+      refTok:
+        type: string
+      uid:
+        type: string
+      wrtc:
+        $ref: '#/definitions/protocol.WebRTCConfig'
+    type: object
+  protocol.MediaConfig:
+    properties:
+      audio:
+        $ref: '#/definitions/protocol.AudioConfig'
+      video:
+        $ref: '#/definitions/protocol.VideoConfig'
+    type: object
   protocol.OkResp:
     properties:
       desc:
         type: string
+      result:
+        $ref: '#/definitions/protocol.ResultCode'
+      resultString:
+        type: string
+    type: object
+  protocol.RegistReq:
+    properties:
+      age:
+        type: string
+      area:
+        type: string
+      birth:
+        type: string
+      email:
+        type: string
+      gender:
+        type: integer
+      id:
+        description: key, sid
+        type: string
+      main_pic:
+        type: string
+      name:
+        type: string
+      nick:
+        type: string
+      pw:
+        type: string
+      spIntro:
+        description: 본인 인삿말
+        type: string
+      thmb_pic:
+        type: string
+      uid:
+        type: string
+    type: object
+  protocol.RespDataHeader:
+    properties:
+      data: {}
       result:
         $ref: '#/definitions/protocol.ResultCode'
       resultString:
@@ -29,19 +154,59 @@ definitions:
         type: string
       area:
         type: string
-      atJoin:
+      birthday:
         type: string
-      birth:
+      did:
         type: string
       email:
         type: string
       gender:
         type: string
-      id:
+      main_pic:
         type: string
       name:
         type: string
       nick:
+        type: string
+      sid:
+        type: string
+      sp_intro:
+        type: string
+      stat:
+        type: string
+      thmb_pic:
+        type: string
+      uid:
+        type: string
+    type: object
+  protocol.VideoConfig:
+    properties:
+      enabled:
+        type: boolean
+      frameRate:
+        type: integer
+      height:
+        type: integer
+      maxBitrate:
+        type: integer
+      width:
+        type: integer
+    type: object
+  protocol.WebRTCConfig:
+    properties:
+      iceServers:
+        items:
+          $ref: '#/definitions/protocol.ICEServer'
+        type: array
+      mediaSettings:
+        $ref: '#/definitions/protocol.MediaConfig'
+      signalingServer:
+        type: string
+      stunServers:
+        items:
+          type: string
+        type: array
+      turnCredential:
         type: string
     type: object
 info:
@@ -57,15 +222,121 @@ paths:
       produces:
       - application/json
       responses:
+        "14":
+          description: 'result: ID is duplicate'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
         "200":
-          description: OK
+          description: 'result: ok'
           schema:
             $ref: '#/definitions/protocol.OkResp'
         "400":
-          description: Bad Request
+          description: 'result: request failed'
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: check user id
+      tags:
+      - user
+  /acc/v01/ckemail/:email:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        When /acc/v01/ckemail/:email is called, it returns "ok" on success and a message on failure.
+        email : user email
+      produces:
+      - application/json
+      responses:
+        "15":
+          description: 'result: email is duplicate'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'result: ok'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'result: request failed'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: check user email
+      tags:
+      - user
+  /acc/v01/cngpw:
+    post:
+      consumes:
+      - application/json
+      description: Change the password of a user
+      parameters:
+      - description: 'Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx,
+          pw : hash, newpw : hash}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "109":
+          description: Failed to change pw
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Change user password
+      tags:
+      - user
+  /acc/v01/delete/{id}:
+    post:
+      consumes:
+      - application/json
+      description: Delete user, but just update user status to 4
+      parameters:
+      - description: 'Encrypted data by aes256 GCM mode {id : xxx}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "115":
+          description: Failed to delete user
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Delete user
       tags:
       - user
   /acc/v01/fnid:
@@ -74,19 +345,39 @@ paths:
       - application/json
       description: Find user ID by name and birth date
       parameters:
-      - description: 'Encrypted data by aes256 {name : xxx, birth 1990-01-01}'
+      - description: 'Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01,
+          gener : 1}'
         in: body
         name: data
         required: true
         schema:
-          type: string
+          type: object
       produces:
       - application/json
       responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "111":
+          description: Failed to find id
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/protocol.OkResp'
+            allOf:
+            - $ref: '#/definitions/protocol.RespDataHeader'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
         "400":
           description: Invalid request
           schema:
@@ -100,19 +391,41 @@ paths:
       - application/json
       description: Find user password by id and birth date
       parameters:
-      - description: 'Encrypted data by aes256 {id : xxx, email : xxx, birth 1990-01-01}'
+      - description: 'Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018,
+          gender : 1}'
         in: body
         name: data
         required: true
         schema:
-          type: string
+          type: object
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "102":
+          description: All fields are required
           schema:
-            $ref: '#/definitions/protocol.OkResp'
+            $ref: '#/definitions/protocol.RespHeader'
+        "104":
+          description: Failed Decrypt
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed Parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "112":
+          description: Failed to find pw
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'success with {msg : ok, email : xxx}'
+          schema:
+            allOf:
+            - $ref: '#/definitions/protocol.RespDataHeader'
+            - properties:
+                data:
+                  type: object
+              type: object
         "400":
           description: Invalid request
           schema:
@@ -134,6 +447,10 @@ paths:
       produces:
       - application/json
       responses:
+        "114":
+          description: Failed to get user info
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
         "200":
           description: User information
           schema:
@@ -151,21 +468,33 @@ paths:
       - application/json
       description: Performs user leave. Returns "success" message on success.
       parameters:
-      - description: 'Encrypted data by aes256 {id : xxx}'
+      - description: 'Encrypted data by aes256 GCM mode {id : xxx}'
         in: body
         name: data
         required: true
         schema:
-          type: string
+          type: object
       produces:
       - application/json
       responses:
-        "200":
-          description: success
+        "102":
+          description: Parameter is missing
           schema:
-            type: string
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "113":
+          description: Failed to leave user
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Leave a user
@@ -175,24 +504,40 @@ paths:
     post:
       consumes:
       - application/json
-      description: Calls /acc/v01/login to login a user. Returns "success" message
-        on success.
+      description: Calls /acc/v01/login to login a user. Returns JWT token, user ID,
+        and WebRTC config on success.
       parameters:
-      - description: 'Encrypted data by aes256 {id : xxx, pw : hash}'
+      - description: 'Login request data {id : xxx, pw : hash}'
         in: body
-        name: info
+        name: data
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/protocol.LoginReq'
       produces:
       - application/json
       responses:
-        "200":
-          description: success
+        "102":
+          description: Parameter is missing
           schema:
-            type: string
+            $ref: '#/definitions/protocol.RespHeader'
+        "104":
+          description: Failed to login user
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: Login success with token, uid, and webrtc config
+          schema:
+            $ref: '#/definitions/protocol.LoginUserResp'
         "400":
-          description: Bad Request
+          description: Bad request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Login a user
@@ -224,6 +569,47 @@ paths:
       summary: Logout a user
       tags:
       - user
+  /acc/v01/modify:
+    post:
+      consumes:
+      - application/json
+      description: Modify user information. The 'cate' field should be one of "pw,
+        area, nick, email" indicating the target to be changed, and the 'value' field
+        should contain the new value for the target.
+      parameters:
+      - description: 'Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email
+          : xxx, cate : xxx, value : xxx}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "104":
+          description: Failed to change pw
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Modify user information
+      tags:
+      - user
   /acc/v01/regist:
     post:
       consumes:
@@ -231,25 +617,522 @@ paths:
       description: Calls /acc/v01/regist to register a new user. Returns "success"
         message on success.
       parameters:
-      - description: 'Encrypted data {id : xxx, pw : hash, name : xxx, gender : xxx,
-          age : xxx, birth : 1990-01-01, area : xxx, email : xxx}'
+      - description: 'register request data {id : xxx, pw : hash, name : xxx, gender
+          : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}'
         in: body
-        name: info
+        name: request
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/protocol.RegistReq'
       produces:
       - application/json
       responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "104":
+          description: Failed Register User
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
         "200":
           description: success
           schema:
             type: string
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Register a new user
       tags:
       - user
+  /acc/v01/reqotp:
+    post:
+      consumes:
+      - application/json
+      description: Generate and send OTP code to user's email for authentication
+      parameters:
+      - description: 'Encrypted data by aes256 {email : xxx}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing or invalid
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "116":
+          description: Failed to set OTP
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Request OTP authentication code
+      tags:
+      - user
+  /acc/v01/verifyotp:
+    post:
+      consumes:
+      - application/json
+      description: Verify OTP code for authentication
+      parameters:
+      - description: 'Encrypted data by aes256 {email : xxx, otp : xxx}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "116":
+          description: Failed to verify OTP
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Verify OTP authentication code
+      tags:
+      - user
+  /chatroom/v01/event:
+    post:
+      consumes:
+      - application/json
+      description: Move chatroom to top based on event type (message, mention, urgent,
+        read)
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '{roomId: string, eventType: string, lastMessage: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Handle chatroom event
+      tags:
+      - chatroom
+  /chatroom/v01/join:
+    post:
+      consumes:
+      - application/json
+      description: Add a chatroom to user's list (when login or first access)
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '{roomId: string, roomName: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Join a chatroom
+      tags:
+      - chatroom
+  /chatroom/v01/leave/{roomId}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove chatroom from user's list
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Room ID
+        in: path
+        name: roomId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Leave a chatroom
+      tags:
+      - chatroom
+  /chatroom/v01/list:
+    get:
+      consumes:
+      - application/json
+      description: Get user's chatroom list sorted by last activity and priority
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Limit for pagination
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/protocol.RespDataHeader'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.ChatRoomListItem'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get user's chatroom list
+      tags:
+      - chatroom
+  /chatroom/v01/read:
+    post:
+      consumes:
+      - application/json
+      description: Update unread count to 0 for specific chatroom
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '{roomId: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Mark chatroom as read
+      tags:
+      - chatroom
+  /chatroom/v01/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get total chatroom count and unread message count
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/protocol.RespDataHeader'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get chatroom statistics
+      tags:
+      - chatroom
+  /content/v01/test:
+    get:
+      consumes:
+      - application/json
+      description: Test endpoint for content controller
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+      summary: Content test endpoint
+      tags:
+      - content
+  /webrtc/v01/available-users:
+    get:
+      consumes:
+      - application/json
+      description: Get list of users available for video call
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Available user IDs
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get available users for call
+      tags:
+      - webrtc
+  /webrtc/v01/call-status:
+    post:
+      consumes:
+      - application/json
+      description: Update user's call status
+      parameters:
+      - description: 'Call status update {isInCall: bool, callWith: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status updated
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Update call status
+      tags:
+      - webrtc
+  /webrtc/v01/config:
+    get:
+      consumes:
+      - application/json
+      description: Get WebRTC configuration for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: WebRTC configuration
+          schema:
+            $ref: '#/definitions/protocol.WebRTCConfig'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get WebRTC configuration
+      tags:
+      - webrtc
+  /webrtc/v01/heartbeat:
+    post:
+      consumes:
+      - application/json
+      description: Update WebRTC session heartbeat to keep session alive
+      parameters:
+      - description: 'Session update {deviceInfo: string, networkInfo: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Heartbeat updated
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Update WebRTC session heartbeat
+      tags:
+      - webrtc
+  /webrtc/v01/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get WebRTC system statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: WebRTC statistics
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get WebRTC statistics
+      tags:
+      - webrtc
+  /webrtc/v01/test-stun:
+    get:
+      consumes:
+      - application/json
+      description: Test STUN server connectivity and get public IP
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: STUN test results
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Test STUN server connectivity
+      tags:
+      - webrtc
+  /webrtc/v01/test-stun-server:
+    post:
+      consumes:
+      - application/json
+      description: Test connectivity to a specific STUN server
+      parameters:
+      - description: 'STUN server URL {stunUrl: string}'
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: STUN test result
+          schema:
+            $ref: '#/definitions/controller.STUNTestResult'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Test specific STUN server
+      tags:
+      - webrtc
 swagger: "2.0"

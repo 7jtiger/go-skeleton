@@ -1,0 +1,31 @@
+# 빌드된 바이너리
+video-chat-client
+video-chat-client.exe
+video-chat-client-*
+video-chat-av
+video-chat-av.exe
+video-chat-av-*
+
+# Go 모듈 캐시
+go.sum
+
+# 테스트 미디어 파일
+test_media/
+*.ivf
+*.ogg
+*.webm
+*.mp4
+*.wav
+
+# 로그 파일
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 임시 파일
+*.tmp
+*.swp
+*~
+

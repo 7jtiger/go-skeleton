@@ -1,17 +1,6 @@
 ﻿package main
 
 import (
-	"ms-gateway/common/logger"
-	"ms-gateway/conf"
-	ctl "ms-gateway/controller"
-	"ms-gateway/models"
-	rt "ms-gateway/router"
-	schd "ms-gateway/scheduler"
-	"net"
-	"strings"
-
-	"github.com/pion/turn/v2"
-
 	"context"
 	"flag"
 	"fmt"
@@ -21,290 +10,216 @@ import (
 	"syscall"
 	"time"
 
+	"ms-gateway/common/logger"
+	"ms-gateway/conf"
+	ctl "ms-gateway/controller"
+	"ms-gateway/hachecker"
+	"ms-gateway/models"
+	rt "ms-gateway/router"
+	schd "ms-gateway/scheduler"
+
 	"golang.org/x/sync/errgroup"
 )
 
-var (
-	g errgroup.Group
+const (
+	// 서버 타임아웃 설정
+	serverReadTimeout    = 30 * time.Second
+	serverWriteTimeout   = 30 * time.Second
+	serverIdleTimeout    = 120 * time.Second
+	serverMaxHeaderBytes = 1 << 20 // 1MB
+
+	// Graceful shutdown 타임아웃
+	shutdownTimeout = 15 * time.Second
 )
-var configFlag = flag.String("config", "./conf/config.toml", "toml file to use for configuration")
 
-func startTurnServer(cf *conf.Config) *turn.Server {
-	var turnServer *turn.Server
-
-	// TURN 서버 설정 (config.toml 설정에 따라 활성화)
-	if cf.Turn.Enabled {
-		logger.Info("Initializing TURN server...")
-
-		// TURN 서버 리스너 생성
-		listenAddr := cf.Turn.ListenAddr
-		if listenAddr == "" {
-			listenAddr = "0.0.0.0:3478" // 기본값
-		}
-
-		udpListener, err := net.ListenPacket("udp4", listenAddr)
-		if err != nil {
-			panic(fmt.Errorf("failed to create UDP listener on %s: %v", listenAddr, err))
-		}
-
-		// RelayAddressGenerator 설정 (환경별 최적화)
-		var relayGenerator turn.RelayAddressGenerator
-		if cf.Server.Mode == "prod" {
-			// 프로덕션: 포트 범위 제한으로 보안 강화
-			minPort := cf.Turn.Relay.MinPort
-			maxPort := cf.Turn.Relay.MaxPort
-			maxRetries := cf.Turn.Relay.MaxRetries
-
-			if minPort == 0 {
-				minPort = 49152 // 기본값
-			}
-			if maxPort == 0 {
-				maxPort = 65535 // 기본값
-			}
-			if maxRetries == 0 {
-				maxRetries = 100 // 기본값
-			}
-
-			relayGenerator = &turn.RelayAddressGeneratorPortRange{
-				RelayAddress: net.ParseIP("0.0.0.0"),
-				Address:      "0.0.0.0",
-				MinPort:      uint16(minPort),
-				MaxPort:      uint16(maxPort),
-				MaxRetries:   maxRetries,
-			}
-			logger.Info("TURN server using port range relay generator", "minPort", minPort, "maxPort", maxPort)
-		} else {
-			// 개발/테스트: 동적 포트 할당
-			relayGenerator = &turn.RelayAddressGeneratorNone{
-				Address: "0.0.0.0",
-			}
-			logger.Info("TURN server using dynamic port allocation")
-		}
-
-		// AuthHandler 설정 (long-term credentials 지원)
-		authHandler := turn.AuthHandler(func(username, realm string, srcAddr net.Addr) ([]byte, bool) {
-			logger.Debug("TURN auth request", "username", username, "realm", realm, "srcAddr", srcAddr)
-
-			// Long-term credentials 지원 (프로덕션 권장)
-			if cf.Turn.SharedSecret != "" && cf.Server.Mode == "prod" {
-				// RFC 5389 Long-term credential 검증
-				// 실제 구현에서는 timestamp 기반 validation 필요
-				if strings.Contains(username, ":") {
-					return turn.GenerateAuthKey(username, realm, cf.Turn.SharedSecret), true
-				}
-			}
-
-			// 기본 사용자 인증
-			if cf.Turn.Username != "" && cf.Turn.Password != "" {
-				if username == cf.Turn.Username {
-					return turn.GenerateAuthKey(username, realm, cf.Turn.Password), true
-				}
-			}
-
-			// WebRTC 설정의 TURN 인증 정보 지원 (하위 호환성)
-			if cf.WebRTC.TurnUsername != "" && cf.WebRTC.TurnPassword != "" {
-				if username == cf.WebRTC.TurnUsername {
-					return turn.GenerateAuthKey(username, realm, cf.WebRTC.TurnPassword), true
-				}
-			}
-
-			logger.Warn("TURN authentication failed", "username", username)
-			return nil, false
-		})
-
-		// 성능 최적화 설정
-		channelBindTimeout := time.Duration(cf.Turn.Performance.ChannelBindTimeout) * time.Second
-		if channelBindTimeout == 0 {
-			channelBindTimeout = 10 * time.Minute // 기본값
-		}
-
-		inboundMTU := cf.Turn.Performance.InboundMTU
-		if inboundMTU == 0 {
-			inboundMTU = 1500 // 기본값
-		}
-
-		// TURN 서버 구성
-		realm := cf.Turn.Realm
-		if realm == "" {
-			realm = "ms-gateway-turn" // 기본값
-		}
-
-		turnServer, err = turn.NewServer(turn.ServerConfig{
-			Realm:       realm,
-			AuthHandler: authHandler,
-			PacketConnConfigs: []turn.PacketConnConfig{
-				{
-					PacketConn:            udpListener,
-					RelayAddressGenerator: relayGenerator,
-					PermissionHandler: func(clientAddr net.Addr, peerIP net.IP) bool {
-						// 보안 설정에 따른 권한 제어
-						if cf.Turn.Security.EnableAuthentication {
-							logger.Debug("Permission check", "client", clientAddr, "peer", peerIP)
-							// 여기서 추가적인 보안 로직 구현 가능
-							return true // 현재는 모든 연결 허용
-						}
-						return true
-					},
-				},
-			},
-			ChannelBindTimeout: channelBindTimeout,
-			InboundMTU:         inboundMTU,
-		})
-		if err != nil {
-			panic(fmt.Errorf("failed to create TURN server: %v", err))
-		}
-
-		logger.Info("TURN server configured successfully",
-			"listenAddr", listenAddr,
-			"realm", realm,
-			"channelBindTimeout", channelBindTimeout,
-			"inboundMTU", inboundMTU,
-			"mode", cf.Server.Mode)
-	} else {
-		logger.Info("TURN server is disabled")
-		return nil
-	}
-
-	return turnServer
-}
-
-// startTurnMonitoring TURN 서버 모니터링을 별도 함수로 분리
-func startTurnMonitoring(ctx context.Context, turnServer *turn.Server) error {
-	if turnServer == nil {
-		return nil
-	}
-
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	logger.Info("TURN server monitoring started")
-
-	for {
-		select {
-		case <-ticker.C:
-			allocCount := turnServer.AllocationCount()
-			logger.Debug("TURN server stats", " activeAllocations : ", allocCount)
-
-			// 통계를 Redis에 저장하거나 모니터링 시스템에 전송 가능
-			// mod.GetRedisDB().SetCache("turn:stats:allocations", strconv.Itoa(allocCount))
-
-		case <-ctx.Done():
-			logger.Info("TURN server monitoring stopped")
-			return nil
-		}
-	}
-}
+var (
+	configFlag = flag.String("config", "./conf/config.toml", "toml file to use for configuration")
+)
 
 func main() {
+	// 설정 파일 로드
 	flag.Parse()
-	cf := conf.NewConfig(*configFlag)
-
-	if err := logger.InitLogger(cf.Server.Name, cf.Server.Mode, cf.LogInfo.MaxAgeHour, cf.LogInfo.RotateHour); err != nil {
-		fmt.Printf("init logger failed, err:%v\n", err)
-		return
+	cf, err := loadConfig(*configFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	logger.Debug("ready server....")
+	// 로거 초기화
+	if err := initLogger(cf); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
 
-	/* 	hch := hachecker.NewHAChecker(cf)
-	   	if hch == nil {
-	   		fmt.Printf("hachecker.NewHAChecker failed")
-	   		return
-	   	}
-	*/
-	//model 모듈 선언
-	if mod, err := models.NewModel(cf); err != nil {
-		panic(err)
-		// } else if controller, err := ctl.NewCTL(cf, hch, mod); err != nil {
-	} else if controller, err := ctl.NewCTL(cf, mod); err != nil {
-		panic(fmt.Errorf("controller.New > %v", err))
-	} else if _, err := schd.NewScheduler(cf, mod); err != nil { // 스케쥴러 초기화 추가
-		panic(fmt.Errorf("scheduler.New > %v", err))
-	} else if rt, err := rt.NewRouter(cf, controller); err != nil {
-		panic(fmt.Errorf("router.NewRouter > %v", err))
-	} else {
-		// Context 생성 (graceful shutdown을 위해)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	logger.Info("Starting ms-gateway server...", "mode", cf.Server.Mode, "port", cf.Server.Port)
 
-		// TURN 서버 시작
-		turnServer := startTurnServer(cf)
+	// 서버 실행
+	if err := runServer(cf); err != nil {
+		logger.Error("Server failed to start:", err)
+		os.Exit(1)
+	}
 
-		// TURN 서버 모니터링 고루틴 (활성화된 경우에만)
-		if turnServer != nil {
-			g.Go(func() error {
-				return startTurnMonitoring(ctx, turnServer)
-			})
+	logger.Info("Server shutdown completed")
+}
+
+// loadConfig 설정 파일을 로드하고 검증합니다
+func loadConfig(configPath string) (*conf.Config, error) {
+	if configPath == "" {
+		return nil, fmt.Errorf("config path is empty")
+	}
+
+	// 설정 파일 존재 확인
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config file not found: %s", configPath)
+	}
+
+	// 설정 로드 (panic 방지를 위해 recover 사용)
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("panic while loading config: %v", r)
+			panic(err)
 		}
+	}()
 
-		// HTTP 서버 설정
-		mapi := &http.Server{
-			Addr:           cf.Server.Port,
-			Handler:        rt.Idx(),
-			ReadTimeout:    30 * time.Second,
-			WriteTimeout:   30 * time.Second,
-			IdleTimeout:    120 * time.Second,
-			MaxHeaderBytes: 1 << 20,
+	cf := conf.NewConfig(configPath)
+	if cf == nil {
+		return nil, fmt.Errorf("failed to load config from %s", configPath)
+	}
+
+	// 필수 설정 검증
+	if cf.Server.Port == "" {
+		return nil, fmt.Errorf("server port is not configured")
+	}
+
+	return cf, nil
+}
+
+// initializeLogger 로거를 초기화합니다
+func initLogger(cf *conf.Config) error {
+	if cf.Server.Name == "" {
+		return fmt.Errorf("server name is not configured")
+	}
+
+	if err := logger.InitLogger(
+		cf.Server.Name,
+		cf.Server.Mode,
+		cf.LogInfo.MaxAgeHour,
+		cf.LogInfo.RotateHour,
+	); err != nil {
+		return fmt.Errorf("logger initialization failed: %w", err)
+	}
+
+	return nil
+}
+
+// runServer 서버를 초기화하고 실행합니다
+func runServer(cf *conf.Config) error {
+
+	hch := hachecker.NewHAChecker(cf)
+	if hch == nil {
+		fmt.Printf("hachecker.NewHAChecker failed")
+		os.Exit(1)
+	}
+
+	// 모델 초기화
+	mod, err := models.NewModel(cf)
+	if err != nil {
+		return fmt.Errorf("failed to initialize models: %w", err)
+	}
+	logger.Info("Models initialized successfully")
+
+	// 컨트롤러 초기화
+	controller, err := ctl.NewCTL(cf, hch, mod)
+	if err != nil {
+		return fmt.Errorf("failed to initialize controller: %w", err)
+	}
+	logger.Info("Controller initialized successfully")
+
+	// 스케줄러 초기화
+	scheduler, err := schd.NewScheduler(cf, mod)
+	if err != nil {
+		return fmt.Errorf("failed to initialize scheduler: %w", err)
+	}
+	logger.Info("Scheduler initialized successfully", "jobs", len(cf.Works))
+
+	// 라우터 초기화
+	router, err := rt.NewRouter(cf, controller)
+	if err != nil {
+		return fmt.Errorf("failed to initialize router: %w", err)
+	}
+	logger.Info("Router initialized successfully")
+
+	// Context 생성 (graceful shutdown용)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// HTTP 서버 설정
+	server := &http.Server{
+		Addr:           cf.Server.Port,
+		Handler:        router.Idx(),
+		ReadTimeout:    serverReadTimeout,
+		WriteTimeout:   serverWriteTimeout,
+		IdleTimeout:    serverIdleTimeout,
+		MaxHeaderBytes: serverMaxHeaderBytes,
+	}
+
+	// errgroup으로 고루틴 관리
+	g, gctx := errgroup.WithContext(ctx)
+
+	// HTTP 서버 고루틴
+	g.Go(func() error {
+		logger.Info("HTTP server starting", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("HTTP server error: %w", err)
 		}
+		return nil
+	})
 
-		// HTTP 서버 고루틴
-		g.Go(func() error {
-			logger.Info("HTTP server listening on", cf.Server.Port)
-			if err := mapi.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				return err
-			}
-			return nil
-		})
-
-		// 종료 시그널 대기
+	// 종료 시그널 대기 고루틴
+	g.Go(func() error {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
-		logger.Warn("Shutdown signal received, starting graceful shutdown...")
-
-		// Graceful shutdown 시작
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer shutdownCancel()
-
-		// 1. 모니터링 및 백그라운드 고루틴 종료
-		logger.Info("Stopping background services...")
-		cancel() // 모든 context를 사용하는 고루틴들에게 종료 신호
-
-		// 2. TURN 서버 종료 (활성화된 경우에만)
-		if turnServer != nil {
-			logger.Info("Shutting down TURN server...")
-			if err := turnServer.Close(); err != nil {
-				logger.Error("TURN Server shutdown error:", err)
-			} else {
-				logger.Info("TURN Server shutdown successfully")
-			}
-		}
-
-		// 3. HTTP 서버 종료
-		logger.Info("Shutting down HTTP server...")
-		if err := mapi.Shutdown(shutdownCtx); err != nil {
-			logger.Error("HTTP Server shutdown error:", err)
-		} else {
-			logger.Info("HTTP Server shutdown successfully")
-		}
-
-		// 4. 모든 고루틴 종료 대기 (타임아웃 포함)
-		done := make(chan error, 1)
-		go func() {
-			done <- g.Wait()
-		}()
 
 		select {
-		case err := <-done:
-			if err != nil {
-				logger.Error("Some goroutines failed to shutdown cleanly:", err)
-			} else {
-				logger.Info("All services shutdown successfully")
-			}
-		case <-shutdownCtx.Done():
-			logger.Warn("Shutdown timeout reached, forcing exit")
+		case sig := <-quit:
+			logger.Warn("Shutdown signal received", "signal", sig.String())
+			return fmt.Errorf("received signal: %v", sig)
+		case <-gctx.Done():
+			return gctx.Err()
 		}
+	})
 
-		logger.Info("Server exiting")
+	// 에러 발생 시 graceful shutdown 시작
+	if err := g.Wait(); err != nil {
+		logger.Warn("Initiating graceful shutdown...", "reason", err.Error())
 	}
+
+	// Graceful shutdown 수행
+	return gracefulShutdown(server, scheduler, cancel)
+}
+
+// gracefulShutdown 서버를 안전하게 종료합니다
+func gracefulShutdown(server *http.Server, scheduler interface{}, cancel context.CancelFunc) error {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// 1. 백그라운드 서비스 종료
+	logger.Info("Stopping background services...")
+	cancel()
+
+	// 2. 스케줄러 종료 (인터페이스 확인)
+	if s, ok := scheduler.(interface{ Stop() }); ok {
+		logger.Info("Stopping scheduler...")
+		s.Stop()
+	}
+
+	// 3. HTTP 서버 종료
+	logger.Info("Shutting down HTTP server...")
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("HTTP server shutdown error:", err)
+		return fmt.Errorf("server shutdown failed: %w", err)
+	}
+
+	logger.Info("HTTP server shutdown successfully")
+	return nil
 }
