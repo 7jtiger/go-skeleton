@@ -178,12 +178,12 @@ func runServer(cf *conf.Config) error {
 	// 종료 시그널 대기 고루틴
 	g.Go(func() error {
 		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 		select {
 		case sig := <-quit:
 			logger.Warn("Shutdown signal received", "signal", sig.String())
-			return fmt.Errorf("received signal: %v", sig)
+			return fmt.Errorf("received signal: %v %v", sig, gracefulShutdown(server, scheduler, cancel))
 		case <-gctx.Done():
 			return gctx.Err()
 		}

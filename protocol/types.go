@@ -69,3 +69,36 @@ func NewRespDataHeader(resultCode ResultCode, data interface{}) *RespDataHeader 
 		Data:         data,
 	}
 }
+
+type NotiItem struct {
+	Idx   string
+	Title string
+	Msg   string
+	Cate  int
+}
+
+// ChatMessage 텍스트 채팅 메시지 구조체
+type ChatMessage struct {
+	Type      string `json:"type"`      // text-message, typing, read-receipt
+	From      string `json:"from"`      // 발신자 ID
+	To        string `json:"to"`        // 수신자 ID
+	RoomID    string `json:"roomId"`    // 채팅방 ID
+	Content   string `json:"content"`   // 메시지 내용
+	Timestamp int64  `json:"timestamp"` // 타임스탬프
+}
+
+// CallRequest 통화 요청 구조체
+type CallRequest struct {
+	From     string `json:"from"`     // 발신자 ID
+	To       string `json:"to"`       // 수신자 ID
+	CallType string `json:"callType"` // video, audio, text
+	RoomID   string `json:"roomId"`   // 채팅방 ID (생성된 경우)
+}
+
+// CallResponse 통화 응답 구조체
+type CallResponse struct {
+	From     string `json:"from"`     // 응답자 ID
+	To       string `json:"to"`       // 요청자 ID
+	RoomID   string `json:"roomId"`   // 채팅방 ID
+	Accepted bool   `json:"accepted"` // 수락 여부
+}

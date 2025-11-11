@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
 	"ms-gateway/models"
+	ptl "ms-gateway/protocol"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -170,6 +172,35 @@ func (r *SignalingController) brcWorker() {
 }
 
 func (r *SignalingController) roomCleaner() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-ticker.C:
+			r.cleanEmptyRooms()
+		}
+	}
+}
+
+func (r *SignalingController) cleanEmptyRooms() {
+	r.roomsMu.Lock()
+	defer r.roomsMu.Unlock()
+
+	for name, room := range r.rooms {
+		room.mu.RLock()
+		isEmpty := len(room.UserIDs) == 0
+		inactive := time.Since(room.lastActivity) > 5*time.Minute
+		room.mu.RUnlock()
+
+		if isEmpty && inactive {
+			delete(r.rooms, name)
+			atomic.AddInt64(&r.totalConn, -1)
+			log.Info("Cleaned up inactive room: %s", name)
+		}
+	}
 }
 
 // HandleWebSocket WebSocket 연결 핸들러
@@ -232,7 +263,7 @@ func (p *SignalingController) unregisterClient(client *Client) {
 	if _, exists := p.rooms[strconv.FormatInt(client.room.ID, 10)]; exists {
 		delete(p.rooms, strconv.FormatInt(client.room.ID, 10))
 		close(client.send)
-		log.Info(fmt.Sprintf("Client disconnected: %s", client.room.ID))
+		log.Info(fmt.Sprintf("Client disconnected: %d", client.room.ID))
 	}
 
 	// 사용자 목록 브로드캐스트
@@ -435,5 +466,99 @@ func (p *SignalingController) GetConnectedUsers(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{
 		"users": userList,
 		"count": len(userList),
+	})
+}
+
+// CallRequest 통화 요청 처리
+func (p *SignalingController) CallRequest(c *gin.Context) {
+	var req ptl.CallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Invalid request", err)
+		return
+	}
+
+	// 채팅방 ID가 없으면 생성
+	if req.RoomID == "" {
+		req.RoomID = fmt.Sprintf("call_%s_%s_%d", req.From, req.To, time.Now().Unix())
+	}
+
+	// ChatController를 통해 통화 요청 알림 전송
+	if p.ctl.ChatCtl != nil {
+		chatMsg := ptl.ChatMessage{
+			Type:      "call-request",
+			From:      req.From,
+			To:        req.To,
+			RoomID:    req.RoomID,
+			Content:   fmt.Sprintf(`{"callType":"%s"}`, req.CallType),
+			Timestamp: time.Now().Unix(),
+		}
+		p.ctl.ChatCtl.SendCallNotification(&chatMsg)
+	}
+
+	// Redis에 통화 요청 상태 저장 (선택적)
+	// p.rdb.SetCallRequest(req.RoomID, req.From, req.To, req.CallType)
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"roomId":   req.RoomID,
+		"callType": req.CallType,
+		"status":   "requested",
+	})
+}
+
+// CallAccept 통화 수락 처리
+func (p *SignalingController) CallAccept(c *gin.Context) {
+	var req ptl.CallResponse
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Invalid request", err)
+		return
+	}
+
+	req.Accepted = true
+
+	// ChatController를 통해 통화 수락 알림 전송
+	if p.ctl.ChatCtl != nil {
+		chatMsg := ptl.ChatMessage{
+			Type:      "call-accept",
+			From:      req.From,
+			To:        req.To,
+			RoomID:    req.RoomID,
+			Content:   "accepted",
+			Timestamp: time.Now().Unix(),
+		}
+		p.ctl.ChatCtl.SendCallNotification(&chatMsg)
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"roomId": req.RoomID,
+		"status": "accepted",
+	})
+}
+
+// CallReject 통화 거절 처리
+func (p *SignalingController) CallReject(c *gin.Context) {
+	var req ptl.CallResponse
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Invalid request", err)
+		return
+	}
+
+	req.Accepted = false
+
+	// ChatController를 통해 통화 거절 알림 전송
+	if p.ctl.ChatCtl != nil {
+		chatMsg := ptl.ChatMessage{
+			Type:      "call-reject",
+			From:      req.From,
+			To:        req.To,
+			RoomID:    req.RoomID,
+			Content:   "rejected",
+			Timestamp: time.Now().Unix(),
+		}
+		p.ctl.ChatCtl.SendCallNotification(&chatMsg)
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"roomId": req.RoomID,
+		"status": "rejected",
 	})
 }

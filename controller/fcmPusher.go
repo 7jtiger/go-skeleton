@@ -2,14 +2,12 @@ package controller
 
 import (
 	"context"
-	"database/sql"
 	log "ms-gateway/common/logger"
-	"ms-gateway/common/utils"
 	"ms-gateway/conf"
 	"ms-gateway/hachecker"
 	"ms-gateway/models"
+	ptc "ms-gateway/protocol"
 	"strconv"
-	"strings"
 	"time"
 
 	firebase "firebase.google.com/go"
@@ -46,7 +44,7 @@ func NewFCMPusher(root *Controller, hch *hachecker.HAChecker, rep *models.Reposi
 	ctx := context.Background()
 
 	// Firebase Admin SDK 초기화
-	opt := option.WithCredentialsFile(root.cfg.ApiInfo.FcmKeyPath)
+	opt := option.WithCredentialsFile(root.cfg.Server.FcmKeyPath)
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return nil, err
@@ -213,7 +211,7 @@ func (p *FCMPusher) sendFCM(notiTitle, notiBody, cate, did string) {
 }
 
 // 여러 did 를 묶어서 처리
-func (p *FCMPusher) SendFCMs(item *models.NotiItem, cate int, tokens []string) error {
+func (p *FCMPusher) SendFCMs(item *ptc.NotiItem, cate int, tokens []string) error {
 	ctx := context.Background()
 
 	message := &messaging.MulticastMessage{
@@ -274,89 +272,92 @@ func (p *FCMPusher) SendFCMs(item *models.NotiItem, cate int, tokens []string) e
 // cate 1 : txs
 // cate <= 2 : contract
 func (p *FCMPusher) getTgtItem() {
-	// log.Info("getTgtItem start")
-	items := p.pushDB.GetPushItem()
-	if items == nil {
-		log.Error("Failed to get push items")
-		return
-	}
+	/*
+		 	// log.Info("getTgtItem start")
+			items := p.pushDB.GetPushItem()
+			if items == nil {
+				log.Error("Failed to get push items")
+				return
+			}
 
-	for _, item := range *items {
-		if item.Cate >= 2 {
-			continue
-		}
+			for _, item := range *items {
+				if item.Cate >= 2 {
+					continue
+				}
 
-		sendOnOff, err := p.accountDB.GetFromDidSendOnOff(item.Did)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				log.Error("No rows found ", " did ", item.Did, " error ", err)
+				sendOnOff, err := p.accountDB.GetFromDidSendOnOff(item.Did)
+				if err != nil {
+					if err == sql.ErrNoRows {
+						log.Error("No rows found ", " did ", item.Did, " error ", err)
+						if _, err := p.pushDB.SendUpdateItem(PRIV_ITEM, item.Idx); err != nil {
+							log.Error("Failed to update push item", "error", err)
+							continue
+						}
+						break
+					}
+					log.Error("Failed to get send on off", "error", err)
+					continue
+				} else if !sendOnOff {
+					if _, err := p.pushDB.SendUpdateItem(PRIV_ITEM, item.Idx); err != nil {
+						log.Error("Failed to update push item", "error", err)
+						continue
+					}
+					break
+				}
+
+				title, body, cateStr := p.getMsgTitle(item.Cate, item.Chain, item.Amount.String())
+				p.WriteSender(title, body, cateStr, item.Did)
+
 				if _, err := p.pushDB.SendUpdateItem(PRIV_ITEM, item.Idx); err != nil {
 					log.Error("Failed to update push item", "error", err)
 					continue
 				}
-				break
+
+				if err := p.historyDB.SaveTxsHistory(&item, cateStr); err != nil {
+					log.Error("Failed to save transaction history", "error", err)
+				}
 			}
-			log.Error("Failed to get send on off", "error", err)
-			continue
-		} else if !sendOnOff {
-			if _, err := p.pushDB.SendUpdateItem(PRIV_ITEM, item.Idx); err != nil {
-				log.Error("Failed to update push item", "error", err)
-				continue
-			}
-			break
-		}
-
-		title, body, cateStr := p.getMsgTitle(item.Cate, item.Chain, item.Amount.String())
-		p.WriteSender(title, body, cateStr, item.Did)
-
-		if _, err := p.pushDB.SendUpdateItem(PRIV_ITEM, item.Idx); err != nil {
-			log.Error("Failed to update push item", "error", err)
-			continue
-		}
-
-		if err := p.historyDB.SaveTxsHistory(&item, cateStr); err != nil {
-			log.Error("Failed to save transaction history", "error", err)
-		}
-	}
+	*/
 }
 
 func (p *FCMPusher) getMsgTitle(cate int, chain, amount string) (string, string, string) {
-	if strings.Contains(chain, p.cfg.Server.GuruChainID) {
-		chain = "GXN"
-	} else if strings.Contains(chain, p.cfg.Server.UsdxChainID) {
-		chain = "USGX"
-	}
-	/* if strings.Contains(chain, "3110") || strings.Contains(chain, "3111") {
-		chain = "Guru"
-	} else if strings.Contains(chain, "5110") || strings.Contains(chain, "5111") {
-		chain = "USDX"
-	} */
+	/* 	if strings.Contains(chain, p.cfg.Server.GuruChainID) {
+	   		chain = "GXN"
+	   	} else if strings.Contains(chain, p.cfg.Server.UsdxChainID) {
+	   		chain = "USGX"
+	   	}
+	   	/* if strings.Contains(chain, "3110") || strings.Contains(chain, "3111") {
+	   		chain = "Guru"
+	   	} else if strings.Contains(chain, "5110") || strings.Contains(chain, "5111") {
+	   		chain = "USDX"
+	   	} */
+	/*
+		amtEth := utils.ToEther(amount)
+		amtEth = amtEth.RoundFloor(6)
 
-	amtEth := utils.ToEther(amount)
-	amtEth = amtEth.RoundFloor(6)
+		var title, body, cateStr string
+		switch cate {
+		case 0:
+			title = "Send " + chain
+			body = "Send " + amtEth.String() + " " + chain
+			cateStr = "SEND"
+		case 1:
+			title = "Receive " + chain
+			body = "Receive " + amtEth.String() + " " + chain
+			cateStr = "RECV"
+		case 2: // NFT
+			title = "NFT Transfer" + chain
+			body = "NFT " + amtEth.String() + " " + chain
+			cateStr = "NFT"
+		}
+		// case 3: // lock
+		// 	title = "NFT Transfer" + chain
+		// 	body = "" + amtEth.String() + " " + chain
+		// 	cateStr = "NFT"
+		//2 : UNLOCK
 
-	var title, body, cateStr string
-	switch cate {
-	case 0:
-		title = "Send " + chain
-		body = "Send " + amtEth.String() + " " + chain
-		cateStr = "SEND"
-	case 1:
-		title = "Receive " + chain
-		body = "Receive " + amtEth.String() + " " + chain
-		cateStr = "RECV"
-	case 2: // NFT
-		title = "NFT Transfer" + chain
-		body = "NFT " + amtEth.String() + " " + chain
-		cateStr = "NFT"
-	}
-	// case 3: // lock
-	// 	title = "NFT Transfer" + chain
-	// 	body = "" + amtEth.String() + " " + chain
-	// 	cateStr = "NFT"
-	//2 : UNLOCK
-
-	return title, body, cateStr
+		return title, body, cateStr */
+	return "", "", ""
 }
 
 // ///////////////////////////////////////////////////////////
@@ -389,47 +390,49 @@ func (p *FCMPusher) getNotiItem() {
 	// 3. get cate 3 : event send, set 14, 10, 6, 2 from accoutdb.user_pref
 	// get accountdb.user_pref did
 
-	categories := []int{MSG, NOTI, EVNT}
+	/*
+		 	categories := []int{MSG, NOTI, EVNT}
 
-	for _, cate := range categories {
-		item := p.pushDB.GetNotiItem(cate)
-		if item != nil {
-			if err := p.CollectNotiSend(item, cate); err != nil {
-				log.Error("fcmpool", "getNotiItem", err.Error())
+			for _, cate := range categories {
+				item := p.pushDB.GetNotiItem(cate)
+				if item != nil {
+					if err := p.CollectNotiSend(item, cate); err != nil {
+						log.Error("fcmpool", "getNotiItem", err.Error())
+					}
+
+					idx, _ := strconv.Atoi(item.Idx)
+					p.pushDB.SendUpdateItem(NOTI_ITEM, idx)
+				}
 			}
-
-			idx, _ := strconv.Atoi(item.Idx)
-			p.pushDB.SendUpdateItem(NOTI_ITEM, idx)
-		}
-	}
+	*/
 }
 
-func (p *FCMPusher) CollectNotiSend(item *models.NotiItem, cate int) error {
-	dids, err := p.accountDB.GetTargetDids(cate)
-	if err != nil {
-		return err
-	}
+func (p *FCMPusher) CollectNotiSend(item *ptc.NotiItem, cate int) error {
+	/* 	dids, err := p.accountDB.GetTargetDids(cate)
+	   	if err != nil {
+	   		return err
+	   	}
 
-	// 배치 처리 (Firebase 권장 최대 500개)
-	const batchSize = 500
-	ntot := len(*dids)
+	   	// 배치 처리 (Firebase 권장 최대 500개)
+	   	const batchSize = 500
+	   	ntot := len(*dids)
 
-	for i := 0; i < ntot; i += batchSize {
-		end := i + batchSize
-		if end > ntot {
-			end = ntot
-		}
-		batch := (*dids)[i:end]
+	   	for i := 0; i < ntot; i += batchSize {
+	   		end := i + batchSize
+	   		if end > ntot {
+	   			end = ntot
+	   		}
+	   		batch := (*dids)[i:end]
 
-		if err := p.SendFCMs(item, cate, batch); err != nil {
-			log.Info("CollectNotiSend", "error", err.Error())
-			continue
-		}
+	   		if err := p.SendFCMs(item, cate, batch); err != nil {
+	   			log.Info("CollectNotiSend", "error", err.Error())
+	   			continue
+	   		}
 
-		// API 속도 제한 방지를 위한 대기
-		time.Sleep(1 * time.Second)
-	}
-	//TODO : db 업데이트 처리
-
+	   		// API 속도 제한 방지를 위한 대기
+	   		time.Sleep(1 * time.Second)
+	   	}
+	   	//TODO : db 업데이트 처리
+	*/
 	return nil
 }

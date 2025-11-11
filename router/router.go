@@ -22,31 +22,31 @@ import (
 )
 
 type Router struct {
-	cfg *conf.Config
-	wl  map[string]string
-	ctl *ctl.Controller
-	acc *ctl.AccountController
-	pf  *ctl.ProfileController
-	hm  *ctl.HomeController
-	nt  *ctl.NotiController
-	sig *ctl.SignalingController
-	// chat *ctl.ChatController
-	rdb *models.RedisDB
+	cfg  *conf.Config
+	wl   map[string]string
+	ctl  *ctl.Controller
+	acc  *ctl.AccountController
+	pf   *ctl.ProfileController
+	hm   *ctl.HomeController
+	nt   *ctl.NotiController
+	sig  *ctl.SignalingController
+	chat *ctl.ChatController
+	rdb  *models.RedisDB
 	// hHealth *ctl.Health
 }
 
 func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
 	r := &Router{
-		cfg: cf,
-		wl:  convertWhiteList(cf.WhiteList.Ips),
-		ctl: ct,
-		acc: ct.AccCtl,
-		pf:  ct.PfCtl,
-		hm:  ct.HomeCtl,
-		nt:  ct.NotiCtl,
-		sig: ct.Signaling,
-		// chat: ct.ChatCtl,
-		rdb: ct.GetRedis(),
+		cfg:  cf,
+		wl:   convertWhiteList(cf.WhiteList.Ips),
+		ctl:  ct,
+		acc:  ct.AccCtl,
+		pf:   ct.PfCtl,
+		hm:   ct.HomeCtl,
+		nt:   ct.NotiCtl,
+		sig:  ct.Signaling,
+		chat: ct.ChatCtl,
+		rdb:  ct.GetRedis(),
 		// hHealth: ct.GetHealthHandler(),
 	}
 
@@ -236,15 +236,6 @@ func (p *Router) Idx() *gin.Engine {
 		noti.GET("/anc/detail/:idx", p.nt.GetAnnouncementDetail)
 	}
 
-	chat := e.Group("chat/v01", p.SecurityHeaders())
-	{
-		chat.GET("/mlistvd")
-		home.GET("/wlistvd")
-
-		chat.GET("/mlistvo")
-		home.GET("/wlistvo")
-	}
-
 	inbox := e.Group("inbox/v01", p.SecurityHeaders())
 	{
 		inbox.GET("/list")
@@ -282,9 +273,8 @@ func (p *Router) Idx() *gin.Engine {
 		setting.GET("/alert")
 	}
 
-	// WebRTC 관련 엔드포인트 추가
-	// webrtc := e.Group("webrtc/v01", p.SecurityHeaders(), p.JwtAuth())
-	webrtc := e.Group("vdchat/v01")
+	// WebRTC 시그널링 인터페이스 (화상 + 음성 공통)
+	webrtc := e.Group("webrtc/v01", p.SecurityHeaders())
 	{
 		// WebRTC 설정 정보 조회
 		webrtc.GET("/config", p.acc.GetWebRTCConfig)
@@ -313,8 +303,53 @@ func (p *Router) Idx() *gin.Engine {
 		// 연결된 사용자 목록 조회
 		webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
 
-		// 시그널링 서버 통계 조회 (최적화 기능 추가)
-		// webrtc.GET("/signaling-stats", p.sig.GetStats)
+		// 통화 요청
+		webrtc.POST("/call-request", p.sig.CallRequest)
+
+		// 통화 수락
+		webrtc.POST("/call-accept", p.sig.CallAccept)
+
+		// 통화 거절
+		webrtc.POST("/call-reject", p.sig.CallReject)
+	}
+
+	// 텍스트 채팅 인터페이스
+	chat := e.Group("chat/v01", p.SecurityHeaders())
+	{
+		// WebSocket 메시징 엔드포인트
+		chat.GET("/ws", p.chat.HandleWebSocket)
+
+		// 채팅방 생성
+		chat.POST("/room", p.chat.CreateChatRoom)
+
+		// 사용자의 채팅방 목록 조회
+		chat.GET("/rooms", p.chat.GetChatRooms)
+
+		// 채팅 기록 조회
+		chat.GET("/history/:roomId", p.chat.GetChatHistory)
+
+		// 메시지 전송 (REST API)
+		chat.POST("/message", p.chat.SendMessage)
+
+		// 기존 엔드포인트 (화상/음성 채팅 리스트)
+		chat.GET("/mlistvd")
+		chat.GET("/wlistvd")
+		chat.GET("/mlistvo")
+		chat.GET("/wlistvo")
+	}
+
+	// 기존 vdchat 엔드포인트 (하위 호환성 유지)
+	vdchat := e.Group("vdchat/v01")
+	{
+		vdchat.GET("/config", p.acc.GetWebRTCConfig)
+		vdchat.GET("/available-users", p.acc.GetAvailableUsers)
+		vdchat.POST("/call-status", p.acc.UpdateCallStatus)
+		vdchat.POST("/heartbeat", p.acc.UpdateWebRTCHeartbeat)
+		vdchat.GET("/stats", p.acc.GetWebRTCStats)
+		vdchat.GET("/test-stun", p.acc.TestStunServers)
+		vdchat.POST("/test-stun-server", p.acc.TestSpecificStunServer)
+		vdchat.GET("/ws", p.sig.HandleWebSocket)
+		vdchat.GET("/connected-users", p.sig.GetConnectedUsers)
 	}
 
 	/*

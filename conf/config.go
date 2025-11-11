@@ -20,26 +20,28 @@ type Networks struct {
 }
 
 // ServerConf is for server config parameters
-type ServerConf struct {
-	Name      string
-	Mode      string
-	Port      string
-	HCheck    string
-	HCPort    string
-	BaseKey   string
-	JWTSecret string // JWT 토큰을 위한 비밀키
+/* type ServerConf struct {
+	Name       string
+	Mode       string
+	Port       string
+	HCheck     string
+	HCPort     string
+	BaseKey    string
+	FcmKeyPath string
+	JWTSecret  string // JWT 토큰을 위한 비밀키
 	// Logger    *log.Logger
 }
-
+*/
 type Config struct {
 	Server struct {
-		Name      string
-		Mode      string
-		Port      string
-		HCheck    string
-		HCPort    string
-		BaseKey   string
-		JWTSecret string
+		Name       string
+		Mode       string
+		Port       string
+		HCheck     string
+		HCPort     string
+		BaseKey    string
+		FcmKeyPath string
+		JWTSecret  string
 	}
 
 	WebRTC struct {

@@ -140,6 +140,27 @@ CREATE TABLE `anuc_his` (
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
+CREATE TABLE `app_push` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `msg` varchar(256) NOT NULL,
+  `type` int NOT NULL DEFAULT '0' COMMENT 'type=0: nomal push\ntype=1: noti push',
+  `did` varchar(145) NOT NULL,
+  `stat` int NOT NULL DEFAULT '0' COMMENT 'stat=0 : before send\nstat=1 : sand',
+  `at_reg` date DEFAULT NULL,
+  `at_sent` date DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `inmsg_push` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `msg` varchar(256) NOT NULL,
+  `type` int NOT NULL DEFAULT '0' COMMENT 'type=0 : video call noti\ntype=1 : audio call noti\ntype=2: text chat noti',
+  `did` varchar(145) NOT NULL,
+  `stat` int NOT NULL DEFAULT '0' COMMENT 'stat=0: before recv\nstat=1: sand\nstat=2: accepted\nstat=3: disagree',
+  `at_send` date DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 ---
 
 ## Structure Information
