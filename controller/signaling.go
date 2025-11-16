@@ -166,9 +166,45 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 }
 
 func (r *SignalingController) msgWorker() {
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case item := <-r.wrkQueue:
+			r.processMessage(item.client, item.message)
+		}
+	}
+}
+
+func (r *SignalingController) processMessage(client *Client, message []byte) {
+	var msg SignalingMessage
+	if err := json.Unmarshal(message, &msg); err != nil {
+		log.Error("Message parse error:", err)
+		return
+	}
+
+	msg.From = client.userName
+
+	r.handleMessage(client, &msg)
 }
 
 func (r *SignalingController) brcWorker() {
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case item := <-r.brcQueue:
+			r.broadcastMessage(item)
+		}
+	}
+}
+
+func (r *SignalingController) broadcastMessage(item *BroadcastJob) {
+	item.room.Broadcast <- &BroadcastMessage{
+		message: item.message,
+		sender:  item.sender,
+		all:     item.all,
+	}
 }
 
 func (r *SignalingController) roomCleaner() {
