@@ -56,6 +56,7 @@ type Client struct {
 	send     chan []byte // 송신 버퍼
 	room     *Room
 	userName string
+	userID   string // 사용자 ID
 	mu       sync.Mutex
 	lastSeen time.Time
 }
@@ -73,16 +74,42 @@ type Message struct {
 	Data map[string]interface{} `json:"data,omitempty"`
 }
 
+// todo : joindata = userlist
 // JoinData join 이벤트 데이터
 type JoinData struct {
-	Name string `json:"name"`
-	Room string `json:"room"`
+	Name   string `json:"name"`
+	Room   string `json:"room"`
+	UserID string `json:"user_id,omitempty"` // 사용자 ID
+}
+
+// CallRequestData 연결 요청 데이터
+type CallRequestData struct {
+	From   string `json:"from"`    // 요청자 ID
+	To     string `json:"to"`      // 대상자 ID
+	RoomID string `json:"room_id"` // 생성될 방 ID
+}
+
+// CallResponseData 연결 응답 데이터
+type CallResponseData struct {
+	From   string `json:"from"`    // 응답자 ID
+	To     string `json:"to"`      // 요청자 ID
+	RoomID string `json:"room_id"` // 방 ID
+	Accept bool   `json:"accept"`  // 수락 여부
+}
+
+// WaitingRoom 대기방 구조체
+type WaitingRoom struct {
+	Clients      map[string]*Client // userId -> Client
+	mu           sync.RWMutex
+	createdAt    time.Time
+	lastActivity time.Time
 }
 
 // Server 메인 서버 구조체
 type Server struct {
 	rooms            map[string]*Room
 	roomsMu          sync.RWMutex
+	waitingRoom      *WaitingRoom // 대기방
 	upgrader         websocket.Upgrader
 	messagePool      sync.Pool // 메시지 재사용을 위한 풀
 	totalConnections int64     // 전체 연결 수 (atomic)
@@ -130,6 +157,11 @@ func NewServer() *Server {
 
 	s := &Server{
 		rooms: make(map[string]*Room),
+		waitingRoom: &WaitingRoom{
+			Clients:      make(map[string]*Client),
+			createdAt:    time.Now(),
+			lastActivity: time.Now(),
+		},
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -340,12 +372,13 @@ func (s *Server) processMessage(client *Client, data []byte) {
 		return
 	}
 
-	room := client.room
-	if room == nil {
-		log.Printf("Client not in a room")
+	// 대기방에 있는 클라이언트의 메시지 처리
+	if client.room == nil {
+		s.handleWaitingRoomMessage(client, &msg)
 		return
 	}
 
+	room := client.room
 	switch msg.Type {
 	case "offer", "answer", "ice_candidate":
 		// WebRTC 시그널링 메시지는 발신자 제외하고 브로드캐스트
@@ -378,11 +411,335 @@ func (s *Server) processMessage(client *Client, data []byte) {
 	}
 }
 
+// handleWaitingRoomMessage 대기방 메시지 처리
+func (s *Server) handleWaitingRoomMessage(client *Client, msg *Message) {
+	switch msg.Type {
+	case "join-waiting":
+		// 대기방 입장 (이미 처리됨)
+		s.sendUserList(client)
+
+	case "call-request":
+		// 연결 요청
+		s.handleCallRequest(client, msg)
+
+	case "call-response":
+		// 연결 응답 (수락/거절)
+		s.handleCallResponse(client, msg)
+	}
+}
+
+// sendUserList 사용자 목록 전송
+func (s *Server) sendUserList(client *Client) {
+	s.waitingRoom.mu.RLock()
+	userList := make([]string, 0, len(s.waitingRoom.Clients))
+	for userID := range s.waitingRoom.Clients {
+		if userID != client.userID {
+			userList = append(userList, userID)
+		}
+	}
+	s.waitingRoom.mu.RUnlock()
+
+	userListMsg := Message{
+		Type: "user-list",
+		Data: map[string]interface{}{
+			"users": userList,
+		},
+	}
+
+	data, _ := json.Marshal(userListMsg)
+	select {
+	case client.send <- data:
+	default:
+		log.Printf("Failed to send user list: buffer full")
+	}
+}
+
+// handleCallRequest 연결 요청 처리
+func (s *Server) handleCallRequest(client *Client, msg *Message) {
+	// 요청 데이터 파싱
+	dataBytes, _ := json.Marshal(msg.Data)
+	var reqData CallRequestData
+	if err := json.Unmarshal(dataBytes, &reqData); err != nil {
+		log.Printf("Error parsing call request: %v", err)
+		return
+	}
+
+	// 대상자 찾기
+	s.waitingRoom.mu.RLock()
+	targetClient, exists := s.waitingRoom.Clients[reqData.To]
+	s.waitingRoom.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Target user %s not found in waiting room", reqData.To)
+		// 요청자에게 오류 메시지 전송
+		errorMsg := Message{
+			Type: "call-error",
+			Data: map[string]interface{}{
+				"message": "대상 사용자를 찾을 수 없습니다.",
+			},
+		}
+		data, _ := json.Marshal(errorMsg)
+		select {
+		case client.send <- data:
+		default:
+		}
+		return
+	}
+
+	// 대상자에게 연결 요청 전송
+	requestMsg := Message{
+		Type: "call-request",
+		Data: map[string]interface{}{
+			"from":    reqData.From,
+			"to":      reqData.To,
+			"room_id": reqData.RoomID,
+		},
+	}
+
+	data, _ := json.Marshal(requestMsg)
+	select {
+	case targetClient.send <- data:
+		log.Printf("Call request sent from %s to %s", reqData.From, reqData.To)
+	default:
+		log.Printf("Failed to send call request: buffer full")
+	}
+}
+
+// handleCallResponse 연결 응답 처리
+func (s *Server) handleCallResponse(client *Client, msg *Message) {
+	// 응답 데이터 파싱
+	dataBytes, _ := json.Marshal(msg.Data)
+	var respData CallResponseData
+	if err := json.Unmarshal(dataBytes, &respData); err != nil {
+		log.Printf("Error parsing call response: %v", err)
+		return
+	}
+
+	// 요청자 찾기
+	s.waitingRoom.mu.RLock()
+	requesterClient, exists := s.waitingRoom.Clients[respData.To]
+	s.waitingRoom.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Requester %s not found in waiting room", respData.To)
+		return
+	}
+
+	// 요청자에게 응답 전송
+	responseType := "call-reject"
+	if respData.Accept {
+		responseType = "call-accept"
+	}
+
+	responseMsg := Message{
+		Type: responseType,
+		Data: map[string]interface{}{
+			"from":    respData.From,
+			"to":      respData.To,
+			"room_id": respData.RoomID,
+			"accept":  respData.Accept,
+		},
+	}
+
+	data, _ := json.Marshal(responseMsg)
+	select {
+	case requesterClient.send <- data:
+		log.Printf("Call response sent from %s to %s (accept: %v)", respData.From, respData.To, respData.Accept)
+	default:
+		log.Printf("Failed to send call response: buffer full")
+	}
+
+	// 수락한 경우 두 사용자를 방으로 이동
+	if respData.Accept {
+		go s.moveToRoom(respData.RoomID, client, requesterClient)
+	}
+}
+
+// moveToRoom 사용자들을 방으로 이동
+func (s *Server) moveToRoom(roomID string, client1, client2 *Client) {
+	// 방 가져오기 또는 생성
+	room, err := s.getRoom(roomID)
+	if err != nil {
+		log.Printf("Error getting room: %v", err)
+		return
+	}
+
+	// 대기방에서 제거
+	s.waitingRoom.mu.Lock()
+	delete(s.waitingRoom.Clients, client1.userID)
+	delete(s.waitingRoom.Clients, client2.userID)
+	s.waitingRoom.mu.Unlock()
+
+	// 방에 추가
+	room.mu.Lock()
+	room.Clients[client1] = true
+	room.Clients[client2] = true
+	room.UserNames[client1] = client1.userName
+	room.UserNames[client2] = client2.userName
+	room.lastActivity = time.Now()
+	room.mu.Unlock()
+
+	// 클라이언트의 room 설정
+	client1.room = room
+	client2.room = room
+
+	// 두 클라이언트에게 방 입장 완료 메시지 전송
+	joinMsg := Message{
+		Type: "room-joined",
+		Data: map[string]interface{}{
+			"room_id": roomID,
+		},
+	}
+
+	data, _ := json.Marshal(joinMsg)
+
+	// client1에게 room-joined 전송
+	select {
+	case client1.send <- data:
+		log.Printf("room-joined sent to %s", client1.userID)
+	default:
+		log.Printf("Failed to send room-joined to %s: buffer full", client1.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client1.send <- data:
+				log.Printf("room-joined sent to %s (retry)", client1.userID)
+			default:
+				log.Printf("Failed to send room-joined to %s after retry", client1.userID)
+			}
+		}()
+	}
+
+	// client2에게 room-joined 전송
+	select {
+	case client2.send <- data:
+		log.Printf("room-joined sent to %s", client2.userID)
+	default:
+		log.Printf("Failed to send room-joined to %s: buffer full", client2.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client2.send <- data:
+				log.Printf("room-joined sent to %s (retry)", client2.userID)
+			default:
+				log.Printf("Failed to send room-joined to %s after retry", client2.userID)
+			}
+		}()
+	}
+
+	// 약간의 지연 후 start 시그널 전송 (화상채팅 시작)
+	// room-joined가 먼저 처리되도록 약간의 지연 추가
+	time.Sleep(50 * time.Millisecond)
+
+	startMsg, _ := json.Marshal(Message{Type: "start"})
+	select {
+	case client1.send <- startMsg:
+		atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+		log.Printf("start signal sent to %s", client1.userID)
+	default:
+		log.Printf("Failed to send start signal to %s: buffer full", client1.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client1.send <- startMsg:
+				atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+				log.Printf("start signal sent to %s (retry)", client1.userID)
+			default:
+				log.Printf("Failed to send start signal to %s after retry", client1.userID)
+			}
+		}()
+	}
+
+	select {
+	case client2.send <- startMsg:
+		atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+		log.Printf("start signal sent to %s", client2.userID)
+	default:
+		log.Printf("Failed to send start signal to %s: buffer full", client2.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client2.send <- startMsg:
+				atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+				log.Printf("start signal sent to %s (retry)", client2.userID)
+			default:
+				log.Printf("Failed to send start signal to %s after retry", client2.userID)
+			}
+		}()
+	}
+
+	log.Printf("Users %s and %s moved to room %s", client1.userID, client2.userID, roomID)
+}
+
+// broadcastUserJoined 새 사용자 입장 알림
+func (s *Server) broadcastUserJoined(newClient *Client) {
+	s.waitingRoom.mu.RLock()
+	userList := make([]string, 0, len(s.waitingRoom.Clients))
+	for userID := range s.waitingRoom.Clients {
+		if userID != newClient.userID {
+			userList = append(userList, userID)
+		}
+	}
+	s.waitingRoom.mu.RUnlock()
+
+	// 다른 사용자들에게 새 사용자 알림
+	joinMsg := Message{
+		Type: "user-joined",
+		Data: map[string]interface{}{
+			"user_id": newClient.userID,
+			"name":    newClient.userName,
+		},
+	}
+
+	data, _ := json.Marshal(joinMsg)
+	s.waitingRoom.mu.RLock()
+	for userID, client := range s.waitingRoom.Clients {
+		if userID != newClient.userID {
+			select {
+			case client.send <- data:
+			default:
+			}
+		}
+	}
+	s.waitingRoom.mu.RUnlock()
+}
+
+// broadcastUserLeft 사용자 나감 알림
+func (s *Server) broadcastUserLeft(leftClient *Client) {
+	leftMsg := Message{
+		Type: "user-left",
+		Data: map[string]interface{}{
+			"user_id": leftClient.userID,
+		},
+	}
+
+	data, _ := json.Marshal(leftMsg)
+	s.waitingRoom.mu.RLock()
+	for _, client := range s.waitingRoom.Clients {
+		select {
+		case client.send <- data:
+		default:
+		}
+	}
+	s.waitingRoom.mu.RUnlock()
+}
+
 // readPump 클라이언트로부터 메시지 읽기
 func (c *Client) readPump(s *Server) {
 	defer func() {
 		if c.room != nil {
 			c.room.Unregister <- c
+		} else if c.userID != "" {
+			// 대기방에서 제거
+			s.waitingRoom.mu.Lock()
+			delete(s.waitingRoom.Clients, c.userID)
+			s.waitingRoom.mu.Unlock()
+			// 다른 사용자들에게 사용자 나감 알림
+			s.broadcastUserLeft(c)
 		}
 		c.conn.Close()
 		atomic.AddInt64(&s.totalConnections, -1)
@@ -487,11 +844,11 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 		lastSeen: time.Now(),
 	}
 
-	// join 메시지를 기다림
+	// join-waiting 메시지를 기다림
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	_, message, err := conn.ReadMessage()
 	if err != nil {
-		log.Printf("Error reading join message: %v", err)
+		log.Printf("Error reading join-waiting message: %v", err)
 		conn.Close()
 		atomic.AddInt64(&s.totalConnections, -1)
 		return
@@ -499,80 +856,121 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 
 	var msg Message
 	if err := json.Unmarshal(message, &msg); err != nil {
-		log.Printf("Error unmarshaling join message: %v", err)
+		log.Printf("Error unmarshaling join-waiting message: %v", err)
 		conn.Close()
 		atomic.AddInt64(&s.totalConnections, -1)
 		return
 	}
 
-	if msg.Type != "join" {
-		log.Printf("First message must be 'join'")
-		conn.Close()
-		atomic.AddInt64(&s.totalConnections, -1)
-		return
-	}
+	// join-waiting 또는 join 메시지 처리
+	if msg.Type == "join-waiting" {
+		// 대기방 입장
+		var joinData JoinData
+		dataBytes, _ := json.Marshal(msg.Data)
+		if err := json.Unmarshal(dataBytes, &joinData); err != nil {
+			log.Printf("Error parsing join-waiting data: %v", err)
+			conn.Close()
+			atomic.AddInt64(&s.totalConnections, -1)
+			return
+		}
 
-	// join 데이터 파싱
-	var joinData JoinData
-	dataBytes, _ := json.Marshal(msg.Data)
-	if err := json.Unmarshal(dataBytes, &joinData); err != nil {
-		log.Printf("Error parsing join data: %v", err)
-		conn.Close()
-		atomic.AddInt64(&s.totalConnections, -1)
-		return
-	}
+		if joinData.UserID == "" {
+			log.Printf("UserID is required for waiting room")
+			conn.Close()
+			atomic.AddInt64(&s.totalConnections, -1)
+			return
+		}
 
-	// 방 가져오기 또는 생성
-	room, err := s.getRoom(joinData.Room)
-	if err != nil {
-		log.Printf("Error getting room: %v", err)
-		conn.Close()
-		atomic.AddInt64(&s.totalConnections, -1)
-		return
-	}
+		client.userID = joinData.UserID
+		client.userName = joinData.Name
 
-	// 방 인원 제한 확인
-	room.mu.RLock()
-	if len(room.Clients) >= maxConnectionsPerRoom {
-		room.mu.RUnlock()
-		log.Printf("Room %s is full", joinData.Room)
-		conn.Close()
-		atomic.AddInt64(&s.totalConnections, -1)
-		return
-	}
-	room.mu.RUnlock()
+		// 대기방에 추가
+		s.waitingRoom.mu.Lock()
+		// 이미 존재하는 사용자 ID인 경우 기존 연결 종료
+		if existingClient, exists := s.waitingRoom.Clients[joinData.UserID]; exists {
+			existingClient.conn.Close()
+			delete(s.waitingRoom.Clients, joinData.UserID)
+		}
+		s.waitingRoom.Clients[joinData.UserID] = client
+		s.waitingRoom.lastActivity = time.Now()
+		s.waitingRoom.mu.Unlock()
 
-	client.room = room
-	client.userName = joinData.Name
+		log.Printf("%s (ID: %s) joined waiting room", joinData.Name, joinData.UserID)
 
-	// 클라이언트를 먼저 방에 추가 (동기식으로)
-	room.mu.Lock()
-	room.Clients[client] = true
-	room.UserNames[client] = joinData.Name
-	userCount := len(room.Clients)
-	room.lastActivity = time.Now()
-	room.mu.Unlock()
+		// 사용자 목록 전송
+		s.sendUserList(client)
 
-	log.Printf("%s joined room %s (total users: %d)", joinData.Name, joinData.Room, userCount)
+		// 다른 사용자들에게 새 사용자 입장 알림
+		s.broadcastUserJoined(client)
 
-	// start 시그널 전송 (방에 2명이 된 경우)
-	if userCount == 2 {
+	} else if msg.Type == "join" {
+		// 기존 방식: 직접 방 입장 (하위 호환성)
+		var joinData JoinData
+		dataBytes, _ := json.Marshal(msg.Data)
+		if err := json.Unmarshal(dataBytes, &joinData); err != nil {
+			log.Printf("Error parsing join data: %v", err)
+			conn.Close()
+			atomic.AddInt64(&s.totalConnections, -1)
+			return
+		}
+
+		// 방 가져오기 또는 생성
+		room, err := s.getRoom(joinData.Room)
+		if err != nil {
+			log.Printf("Error getting room: %v", err)
+			conn.Close()
+			atomic.AddInt64(&s.totalConnections, -1)
+			return
+		}
+
+		// 방 인원 제한 확인
 		room.mu.RLock()
-		for otherClient := range room.Clients {
-			if otherClient != client {
-				startMsg, _ := json.Marshal(Message{Type: "start"})
-				select {
-				case otherClient.send <- startMsg:
-					log.Printf("Start signal sent to %s", room.UserNames[otherClient])
-					// start 시그널 송신 바이트 추적
-					atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
-				default:
-					log.Printf("Failed to send start signal: buffer full")
-				}
-				break
-			}
+		if len(room.Clients) >= maxConnectionsPerRoom {
+			room.mu.RUnlock()
+			log.Printf("Room %s is full", joinData.Room)
+			conn.Close()
+			atomic.AddInt64(&s.totalConnections, -1)
+			return
 		}
 		room.mu.RUnlock()
+
+		client.room = room
+		client.userName = joinData.Name
+
+		// 클라이언트를 먼저 방에 추가 (동기식으로)
+		room.mu.Lock()
+		room.Clients[client] = true
+		room.UserNames[client] = joinData.Name
+		userCount := len(room.Clients)
+		room.lastActivity = time.Now()
+		room.mu.Unlock()
+
+		log.Printf("%s joined room %s (total users: %d)", joinData.Name, joinData.Room, userCount)
+
+		// start 시그널 전송 (방에 2명이 된 경우)
+		if userCount == 2 {
+			room.mu.RLock()
+			for otherClient := range room.Clients {
+				if otherClient != client {
+					startMsg, _ := json.Marshal(Message{Type: "start"})
+					select {
+					case otherClient.send <- startMsg:
+						log.Printf("Start signal sent to %s", room.UserNames[otherClient])
+						// start 시그널 송신 바이트 추적
+						atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+					default:
+						log.Printf("Failed to send start signal: buffer full")
+					}
+					break
+				}
+			}
+			room.mu.RUnlock()
+		}
+	} else {
+		log.Printf("First message must be 'join-waiting' or 'join'")
+		conn.Close()
+		atomic.AddInt64(&s.totalConnections, -1)
+		return
 	}
 
 	// Read/Write 펌프 시작

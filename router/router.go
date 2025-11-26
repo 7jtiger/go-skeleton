@@ -298,19 +298,19 @@ func (p *Router) Idx() *gin.Engine {
 		webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
 
 		// WebSocket 시그널링 엔드포인트 (인증 없음 - 개발용)
-		webrtc.GET("/ws", p.sig.HandleWebSocket)
+		webrtc.GET("/ws", p.sig.HandleConnection)
+		/*
+			// 연결된 사용자 목록 조회
+			webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
 
-		// 연결된 사용자 목록 조회
-		webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
+			// 통화 요청
+			webrtc.POST("/call-request", p.sig.CallRequest)
 
-		// 통화 요청
-		webrtc.POST("/call-request", p.sig.CallRequest)
+			// 통화 수락
+			webrtc.POST("/call-accept", p.sig.CallAccept)
 
-		// 통화 수락
-		webrtc.POST("/call-accept", p.sig.CallAccept)
-
-		// 통화 거절
-		webrtc.POST("/call-reject", p.sig.CallReject)
+			// 통화 거절
+			webrtc.POST("/call-reject", p.sig.CallReject) */
 	}
 
 	// 텍스트 채팅 인터페이스
@@ -348,8 +348,8 @@ func (p *Router) Idx() *gin.Engine {
 		vdchat.GET("/stats", p.acc.GetWebRTCStats)
 		vdchat.GET("/test-stun", p.acc.TestStunServers)
 		vdchat.POST("/test-stun-server", p.acc.TestSpecificStunServer)
-		vdchat.GET("/ws", p.sig.HandleWebSocket)
-		vdchat.GET("/connected-users", p.sig.GetConnectedUsers)
+		// vdchat.GET("/ws", p.sig.HandleWebSocket)
+		// vdchat.GET("/connected-users", p.sig.GetConnectedUsers)
 	}
 
 	/*

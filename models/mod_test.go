@@ -4,6 +4,7 @@ import (
 	// "bytes"
 	"context"
 	"encoding/json"
+	"hash/fnv"
 	"math/rand"
 	"testing"
 
@@ -328,6 +329,32 @@ func Test_HDel(t *testing.T) {
 		fmt.Println("삭제할 sample_bicycle 키가 없습니다")
 	}
 
+}
+
+func Test_chaCha20(t *testing.T) {
+	email := "test@example.com"
+	key := "Cupitok-testuid-Gateway"
+	encEmail, err := utils.EncryptChaCha20(email, key)
+	if err != nil {
+		fmt.Println("EncryptChaCha20 실패:", err)
+	}
+	fmt.Println(encEmail)
+	decEmail, err := utils.DecryptChaCha20(encEmail, key)
+	if err != nil {
+		fmt.Println("DecryptChaCha20 실패:", err)
+	}
+	fmt.Println(decEmail)
+}
+
+func Test_2Hash(t *testing.T) {
+	// 64비트 정수 해시값 반환
+	input := "input@example.com"
+
+	h := fnv.New64a()
+	h.Write([]byte(input))
+	hash := h.Sum64()
+
+	fmt.Println(hash)
 }
 
 func Test_HSetChatRoomList(t *testing.T) {

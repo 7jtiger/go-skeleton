@@ -160,6 +160,98 @@
             color: #856404;
         }
 
+        /* 대기방 스타일 */
+        .waiting-room {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+
+        .waiting-room h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .user-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .user-item {
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+        }
+
+        .user-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .user-item .user-name {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .user-item .user-id {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        /* 알림 팝업 */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            min-width: 300px;
+            display: none;
+        }
+
+        .notification.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .notification-header {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .notification-message {
+            margin-bottom: 15px;
+        }
+
+        .notification-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .notification-buttons button {
+            flex: 1;
+            padding: 10px;
+        }
+
+        .notification-buttons button.accept {
+            background: #28a745;
+        }
+
+        .notification-buttons button.reject {
+            background: #dc3545;
+        }
+
         /* 채팅 섹션 스타일 */
         .chat-section {
             display: none;
@@ -300,9 +392,18 @@
         
         <div class="login-section" id="loginSection">
             <div class="input-group">
+                <input type="text" id="serverInput" placeholder="서버 주소 (예: localhost:3000)" value="localhost:3000" />
+                <input type="text" id="userIDInput" placeholder="사용자 ID를 입력하세요" />
                 <input type="text" id="nameInput" placeholder="이름을 입력하세요" />
-                <input type="text" id="roomInput" placeholder="방 이름을 입력하세요" />
-                <button id="joinBtn" onclick="joinRoom()">입장</button>
+                <button id="joinBtn" onclick="joinWaitingRoom()">대기방 접속</button>
+            </div>
+        </div>
+
+        <!-- 대기방 섹션 -->
+        <div class="waiting-room" id="waitingRoom" style="display: none;">
+            <h2>대기방</h2>
+            <div class="user-list" id="userList">
+                <p>대기 중인 사용자가 없습니다.</p>
             </div>
         </div>
 
@@ -312,7 +413,7 @@
                 <div class="video-label">내 화면</div>
             </div>
             <div class="video-container">
-                <video id="remoteVideo" autoplay playsinline></video>
+                <video id="remoteVideo" autoplay playsinline muted></video>
                 <div class="video-label">상대방 화면</div>
             </div>
         </div>
@@ -342,14 +443,26 @@
         <div class="status disconnected" id="status">서버에 연결되지 않음</div>
     </div>
 
+    <!-- 알림 팝업 -->
+    <div class="notification" id="notification">
+        <div class="notification-header" id="notificationTitle">알림</div>
+        <div class="notification-message" id="notificationMessage"></div>
+        <div class="notification-buttons" id="notificationButtons"></div>
+    </div>
+
     <script>
         let socket;
         let localStream;
         let peerConnection;
         let userName;
+        let userID;
         let roomName;
         let isAudioEnabled = true;
         let isVideoEnabled = true;
+        let waitingUsers = {}; // 대기 중인 사용자 목록
+        let pendingCallRequest = null; // 대기 중인 연결 요청
+        let isVideoChatReady = false; // 화상채팅 준비 상태
+        let pendingStartSignal = false; // 대기 중인 start 시그널
 
         // STUN 서버 설정 (구글의 공개 STUN 서버 사용)
         const configuration = {
@@ -366,18 +479,323 @@
             statusDiv.className = `status ${type}`;
         }
 
-        // 방 입장 함수
-        async function joinRoom() {
-            userName = document.getElementById('nameInput').value.trim();
-            roomName = document.getElementById('roomInput').value.trim();
+        // WebSocket URL 생성 함수
+        function buildWebSocketURL(serverAddress) {
+            // 입력된 주소 정리
+            let address = serverAddress.trim();
+            
+            // 프로토콜이 없으면 ws:// 추가
+            if (!address.startsWith('ws://') && !address.startsWith('wss://')) {
+                // localhost나 127.0.0.1이면 ws://, 그 외는 wss:// 사용
+                if (address.includes('localhost') || address.includes('127.0.0.1')) {
+                    address = 'ws://' + address;
+                } else {
+                    address = 'wss://' + address;
+                }
+            }
+            
+            // 포트가 없으면 기본 포트 추가
+            if (!address.match(/:\d+/) && !address.includes('/')) {
+                if (address.startsWith('ws://')) {
+                    address += ':3000';
+                } else if (address.startsWith('wss://')) {
+                    address += ':443';
+                }
+            }
+            
+            // 경로가 없으면 /ws 추가
+            if (!address.includes('/ws') && !address.endsWith('/')) {
+                address += '/ws';
+            }
+            
+            return address;
+        }
 
-            if (!userName || !roomName) {
-                alert('이름과 방 이름을 모두 입력해주세요.');
+        // 대기방 입장 함수
+        async function joinWaitingRoom() {
+            const serverAddress = document.getElementById('serverInput').value.trim();
+            userID = document.getElementById('userIDInput').value.trim();
+            userName = document.getElementById('nameInput').value.trim();
+
+            if (!serverAddress) {
+                alert('서버 주소를 입력해주세요.');
                 return;
             }
 
+            if (!userID || !userName) {
+                alert('사용자 ID와 이름을 모두 입력해주세요.');
+                return;
+            }
+
+            // WebSocket URL 생성
+            const wsURL = buildWebSocketURL(serverAddress);
+            console.log('Connecting to:', wsURL);
+            
+            // WebSocket 연결
+            socket = new WebSocket(wsURL);
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                updateStatus('서버에 연결됨', 'connected');
+                
+                // 대기방 입장 메시지 전송
+                socket.send(JSON.stringify({
+                    type: 'join-waiting',
+                    data: { 
+                        user_id: userID,
+                        name: userName
+                    }
+                }));
+
+                // UI 업데이트
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('waitingRoom').style.display = 'block';
+                updateStatus('대기방에 입장했습니다.', 'connected');
+            };
+
+            socket.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                console.log('Received message:', message.type, message);
+
+                switch (message.type) {
+                    case 'user-list':
+                        // 사용자 목록 업데이트
+                        updateUserList(message.data.users || []);
+                        break;
+                    
+                    case 'user-joined':
+                        // 새 사용자 입장
+                        addUserToList(message.data.user_id, message.data.name);
+                        break;
+                    
+                    case 'user-left':
+                        // 사용자 나감
+                        removeUserFromList(message.data.user_id);
+                        break;
+                    
+                    case 'call-request':
+                        // 연결 요청 수신
+                        handleCallRequest(message.data);
+                        break;
+                    
+                    case 'call-accept':
+                        // 연결 수락
+                        handleCallAccept(message.data);
+                        break;
+                    
+                    case 'call-reject':
+                        // 연결 거절
+                        handleCallReject(message.data);
+                        break;
+                    
+                    case 'call-error':
+                        // 연결 오류
+                        alert(message.data.message || '연결 오류가 발생했습니다.');
+                        break;
+                    
+                    case 'room-joined':
+                        // 방 입장 완료
+                        roomName = message.data.room_id;
+                        await startVideoChat();
+                        // start 시그널이 이미 도착했으면 처리
+                        if (pendingStartSignal) {
+                            pendingStartSignal = false;
+                            console.log('Start signal was pending, creating offer now...');
+                            await createOffer();
+                        }
+                        break;
+                    
+                    case 'start':
+                        // 화상채팅 시작
+                        console.log('Start signal received');
+                        if (isVideoChatReady) {
+                            console.log('Video chat is ready, creating offer...');
+                            await createOffer();
+                        } else {
+                            console.log('Video chat not ready yet, setting pending flag...');
+                            pendingStartSignal = true;
+                        }
+                        break;
+                    
+                    case 'offer':
+                        // offer 수신
+                        console.log('Offer received, creating answer...');
+                        await handleOffer(message.data);
+                        break;
+                    
+                    case 'answer':
+                        // answer 수신
+                        console.log('Answer received, setting remote description...');
+                        await handleAnswer(message.data);
+                        break;
+                    
+                    case 'ice_candidate':
+                        // ICE candidate 수신
+                        console.log('ICE candidate received');
+                        await handleIceCandidate(message.data);
+                        break;
+                    
+                    case 'chat':
+                        // 채팅 메시지 수신
+                        displayChatMessage(message.data.sender, message.data.message, false);
+                        break;
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateStatus('연결 오류 발생', 'disconnected');
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateStatus('서버 연결 끊김', 'disconnected');
+            };
+        }
+
+        // 사용자 목록 업데이트
+        function updateUserList(users) {
+            waitingUsers = {};
+            const userListDiv = document.getElementById('userList');
+            userListDiv.innerHTML = '';
+            
+            if (users.length === 0) {
+                userListDiv.innerHTML = '<p>대기 중인 사용자가 없습니다.</p>';
+                return;
+            }
+            
+            users.forEach(userID => {
+                addUserToList(userID, userID); // 이름은 ID로 표시
+            });
+        }
+
+        // 사용자 목록에 추가
+        function addUserToList(userID, userName) {
+            if (waitingUsers[userID]) return;
+            
+            waitingUsers[userID] = userName;
+            const userListDiv = document.getElementById('userList');
+            
+            if (userListDiv.querySelector('p')) {
+                userListDiv.innerHTML = '';
+            }
+            
+            const userItem = document.createElement('div');
+            userItem.className = 'user-item';
+            userItem.onclick = () => requestCall(userID);
+            userItem.innerHTML = `
+                <div class="user-name">${userName}</div>
+                <div class="user-id">ID: ${userID}</div>
+            `;
+            userListDiv.appendChild(userItem);
+        }
+
+        // 사용자 목록에서 제거
+        function removeUserFromList(userID) {
+            delete waitingUsers[userID];
+            const userListDiv = document.getElementById('userList');
+            const items = userListDiv.querySelectorAll('.user-item');
+            items.forEach(item => {
+                if (item.querySelector('.user-id').textContent.includes(userID)) {
+                    item.remove();
+                }
+            });
+            
+            if (userListDiv.children.length === 0) {
+                userListDiv.innerHTML = '<p>대기 중인 사용자가 없습니다.</p>';
+            }
+        }
+
+        // 연결 요청
+        function requestCall(targetUserID) {
+            if (!targetUserID) {
+                alert('사용자를 선택해주세요.');
+                return;
+            }
+            
+            // 방 ID 생성 (두 사용자 ID로 고유한 방 ID 생성)
+            const roomID = [userID, targetUserID].sort().join('_');
+            
+            socket.send(JSON.stringify({
+                type: 'call-request',
+                data: {
+                    from: userID,
+                    to: targetUserID,
+                    room_id: roomID
+                }
+            }));
+            
+            updateStatus(`${targetUserID}님에게 연결 요청을 보냈습니다.`, 'waiting');
+        }
+
+        // 연결 요청 수신 처리
+        function handleCallRequest(data) {
+            pendingCallRequest = data;
+            showNotification(
+                '화상채팅 요청',
+                `${data.from}님이 화상채팅을 요청했습니다.`,
+                [
+                    { text: '수락', class: 'accept', onclick: () => acceptCall(data) },
+                    { text: '거절', class: 'reject', onclick: () => rejectCall(data) }
+                ]
+            );
+        }
+
+        // 연결 수락
+        function acceptCall(data) {
+            socket.send(JSON.stringify({
+                type: 'call-response',
+                data: {
+                    from: userID,
+                    to: data.from,
+                    room_id: data.room_id,
+                    accept: true
+                }
+            }));
+            
+            roomName = data.room_id;
+            hideNotification();
+            updateStatus('연결 요청을 수락했습니다. 화상채팅을 시작합니다...', 'waiting');
+            // room-joined 메시지를 기다림 (서버에서 자동으로 보냄)
+        }
+
+        // 연결 거절
+        function rejectCall(data) {
+            socket.send(JSON.stringify({
+                type: 'call-response',
+                data: {
+                    from: userID,
+                    to: data.from,
+                    room_id: data.room_id,
+                    accept: false
+                }
+            }));
+            
+            hideNotification();
+            updateStatus('연결 요청을 거절했습니다.', 'waiting');
+        }
+
+        // 연결 수락 처리 (요청자 측)
+        function handleCallAccept(data) {
+            roomName = data.room_id;
+            hideNotification();
+            updateStatus('연결 요청이 수락되었습니다. 화상채팅을 시작합니다...', 'waiting');
+            // room-joined 메시지를 기다림 (서버에서 자동으로 보냄)
+        }
+
+        // 연결 거절 처리 (요청자 측)
+        function handleCallReject(data) {
+            hideNotification();
+            updateStatus(`${data.from}님이 연결 요청을 거절했습니다.`, 'waiting');
+        }
+
+        // 화상채팅 시작
+        async function startVideoChat() {
             try {
-                // 로컬 미디어 스트림 가져오기 (카메라와 마이크)
+                console.log('Starting video chat...');
+                isVideoChatReady = false;
+                
+                // 로컬 미디어 스트림 가져오기
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: true,
                     audio: true
@@ -386,104 +804,175 @@
                 // 로컬 비디오 요소에 스트림 연결
                 document.getElementById('localVideo').srcObject = localStream;
 
-                // WebSocket 연결 (서버 주소를 적절히 수정하세요)
-                socket = new WebSocket('ws://localhost:3000/ws');
-
-                socket.onopen = () => {
-                    console.log('WebSocket connected');
-                    updateStatus('서버에 연결됨', 'connected');
-                    
-                    // 방 입장 메시지 전송
-                    socket.send(JSON.stringify({
-                        type: 'join',
-                        data: { name: userName, room: roomName }
-                    }));
-
-                    // UI 업데이트
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('videoSection').classList.add('active');
-                    document.getElementById('controls').style.display = 'flex';
-                    document.getElementById('chatSection').classList.add('active');
-                    updateStatus(`방 "${roomName}"에 입장했습니다. 상대방을 기다리는 중...`, 'waiting');
-                };
-
-                socket.onmessage = async (event) => {
-                    const message = JSON.parse(event.data);
-                    console.log('Received message:', message.type, message);
-
-                    switch (message.type) {
-                        case 'start':
-                            // 두 번째 사용자가 들어왔을 때 offer 생성
-                            console.log('Start signal received, creating offer...');
-                            await createOffer();
-                            break;
-                        
-                        case 'offer':
-                            // offer를 받으면 answer 생성
-                            console.log('Offer received, creating answer...');
-                            await handleOffer(message.data);
-                            break;
-                        
-                        case 'answer':
-                            // answer를 받으면 연결 완료
-                            console.log('Answer received, setting remote description...');
-                            await handleAnswer(message.data);
-                            break;
-                        
-                        case 'ice_candidate':
-                            // ICE candidate 추가
-                            console.log('ICE candidate received');
-                            await handleIceCandidate(message.data);
-                            break;
-                        
-                        case 'chat':
-                            // 채팅 메시지 수신
-                            displayChatMessage(message.data.sender, message.data.message, false);
-                            break;
-                    }
-                };
-
-                socket.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    updateStatus('연결 오류 발생', 'disconnected');
-                };
-
-                socket.onclose = () => {
-                    console.log('WebSocket disconnected');
-                    updateStatus('서버 연결 끊김', 'disconnected');
-                };
-
+                // UI 업데이트
+                document.getElementById('waitingRoom').style.display = 'none';
+                document.getElementById('videoSection').classList.add('active');
+                document.getElementById('controls').style.display = 'flex';
+                document.getElementById('chatSection').classList.add('active');
+                
+                // 준비 완료
+                isVideoChatReady = true;
+                console.log('Video chat ready, waiting for start signal...');
+                updateStatus('화상채팅 방에 입장했습니다. 연결 중...', 'waiting');
             } catch (error) {
                 console.error('Error accessing media devices:', error);
                 alert('카메라나 마이크에 접근할 수 없습니다. 권한을 확인해주세요.');
+                isVideoChatReady = false;
             }
+        }
+
+        // 알림 표시
+        function showNotification(title, message, buttons) {
+            document.getElementById('notificationTitle').textContent = title;
+            document.getElementById('notificationMessage').textContent = message;
+            
+            const buttonsDiv = document.getElementById('notificationButtons');
+            buttonsDiv.innerHTML = '';
+            buttons.forEach(btn => {
+                const button = document.createElement('button');
+                button.textContent = btn.text;
+                button.className = btn.class;
+                button.onclick = btn.onclick;
+                buttonsDiv.appendChild(button);
+            });
+            
+            document.getElementById('notification').classList.add('show');
+        }
+
+        // 알림 숨기기
+        function hideNotification() {
+            document.getElementById('notification').classList.remove('show');
+            pendingCallRequest = null;
         }
 
         // PeerConnection 생성 함수
         function createPeerConnection() {
+            // 기존 연결이 있으면 정리
+            if (peerConnection) {
+                console.log('Closing existing peer connection');
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            console.log('Creating new RTCPeerConnection');
             peerConnection = new RTCPeerConnection(configuration);
 
             // 로컬 스트림의 모든 트랙을 피어 연결에 추가
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    console.log('Adding local track:', track.kind);
+                    peerConnection.addTrack(track, localStream);
+                });
+            }
 
             // 원격 스트림 수신 시 처리
             peerConnection.ontrack = (event) => {
-                console.log('Received remote track');
+                console.log('=== Received remote track ===');
+                console.log('Event streams:', event.streams);
+                console.log('Event track:', event.track);
+                console.log('Event track kind:', event.track.kind);
+                console.log('Event track id:', event.track.id);
+                console.log('Event track enabled:', event.track.enabled);
+                console.log('Event track readyState:', event.track.readyState);
+                
                 const remoteVideo = document.getElementById('remoteVideo');
-                remoteVideo.srcObject = event.streams[0];
-                updateStatus('연결 완료! 통화 중...', 'connected');
+                
+                // 모든 수신 중인 트랙 확인
+                const receivers = peerConnection.getReceivers();
+                console.log('Current receivers:', receivers.length);
+                receivers.forEach((receiver, index) => {
+                    console.log(`Receiver ${index}:`, receiver.track ? receiver.track.kind : 'no track');
+                });
+                
+                // 모든 스트림 확인
+                if (event.streams && event.streams.length > 0) {
+                    console.log('Setting remote video srcObject from streams[0]');
+                    const remoteStream = event.streams[0];
+                    console.log('Remote stream tracks:', remoteStream.getTracks().length);
+                    remoteStream.getTracks().forEach(track => {
+                        console.log('Remote stream track:', track.kind, track.id, track.enabled);
+                    });
+                    remoteVideo.srcObject = remoteStream;
+                    updateStatus('연결 완료! 통화 중...', 'connected');
+                } else if (event.track) {
+                    // 스트림이 없으면 트랙으로부터 스트림 생성
+                    console.log('Creating stream from track');
+                    const stream = new MediaStream([event.track]);
+                    remoteVideo.srcObject = stream;
+                    updateStatus('연결 완료! 통화 중...', 'connected');
+                }
+                
+                // 현재 srcObject 확인
+                console.log('Remote video srcObject:', remoteVideo.srcObject);
+                if (remoteVideo.srcObject) {
+                    const tracks = remoteVideo.srcObject.getTracks();
+                    console.log('Remote video srcObject tracks:', tracks.length);
+                    tracks.forEach(track => {
+                        console.log('Remote video track:', track.kind, track.id, track.enabled, track.readyState);
+                    });
+                }
+                
+                // 비디오 재생 확인
+                remoteVideo.onloadedmetadata = () => {
+                    console.log('Remote video metadata loaded');
+                    console.log('Remote video dimensions:', remoteVideo.videoWidth, 'x', remoteVideo.videoHeight);
+                    console.log('Remote video readyState:', remoteVideo.readyState);
+                    remoteVideo.play().then(() => {
+                        console.log('Remote video playing');
+                    }).catch(err => {
+                        console.error('Error playing remote video:', err);
+                    });
+                };
+                
+                // 스트림 변경 감지
+                remoteVideo.oncanplay = () => {
+                    console.log('Remote video can play');
+                };
+                
+                remoteVideo.onplay = () => {
+                    console.log('Remote video started playing');
+                };
+                
+                // 비디오 재생 강제 시도
+                setTimeout(() => {
+                    if (remoteVideo.srcObject) {
+                        const tracks = remoteVideo.srcObject.getTracks();
+                        console.log('Checking remote video after 1s - tracks:', tracks.length);
+                        if (remoteVideo.paused) {
+                            console.log('Remote video is paused, attempting to play');
+                            remoteVideo.play().catch(err => {
+                                console.error('Error playing remote video (retry):', err);
+                            });
+                        }
+                    } else {
+                        console.log('Remote video has no srcObject after 1s');
+                    }
+                }, 1000);
             };
 
             // ICE candidate 생성 시 서버로 전송
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    console.log('Sending ICE candidate');
+                    console.log('Sending ICE candidate:', event.candidate.candidate);
                     socket.send(JSON.stringify({
                         type: 'ice_candidate',
                         data: { candidate: event.candidate }
                     }));
+                } else {
+                    // ICE candidate가 null이면 수집 완료
+                    console.log('ICE candidate gathering completed');
+                }
+            };
+
+            // ICE 연결 상태 변경 모니터링
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peerConnection.iceConnectionState);
+                if (peerConnection.iceConnectionState === 'connected' || 
+                    peerConnection.iceConnectionState === 'completed') {
+                    updateStatus('연결 완료! 통화 중...', 'connected');
+                } else if (peerConnection.iceConnectionState === 'disconnected' ||
+                           peerConnection.iceConnectionState === 'failed') {
+                    updateStatus('연결이 끊어졌습니다', 'disconnected');
                 }
             };
 
@@ -492,15 +981,35 @@
                 console.log('Connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     updateStatus('연결 완료! 통화 중...', 'connected');
-                } else if (peerConnection.connectionState === 'disconnected') {
+                } else if (peerConnection.connectionState === 'disconnected' ||
+                          peerConnection.connectionState === 'failed') {
                     updateStatus('연결이 끊어졌습니다', 'disconnected');
                 }
+            };
+
+            // 시그널링 상태 변경 모니터링
+            peerConnection.onsignalingstatechange = () => {
+                console.log('Signaling state:', peerConnection.signalingState);
             };
         }
 
         // Offer 생성 및 전송
         async function createOffer() {
             try {
+                // localStream이 준비되어 있는지 확인
+                if (!localStream) {
+                    console.log('Local stream not ready, waiting...');
+                    // 잠시 대기 후 재시도
+                    setTimeout(() => {
+                        if (localStream) {
+                            createOffer();
+                        } else {
+                            console.error('Local stream still not ready');
+                        }
+                    }, 500);
+                    return;
+                }
+                
                 console.log('Creating offer...');
                 createPeerConnection();
                 console.log('PeerConnection created for offer');
@@ -509,6 +1018,7 @@
                 console.log('Offer created:', offer);
                 await peerConnection.setLocalDescription(offer);
                 console.log('Local description set (offer)');
+                console.log('Current signaling state:', peerConnection.signalingState);
 
                 socket.send(JSON.stringify({
                     type: 'offer',
@@ -523,17 +1033,33 @@
         // Offer 처리 및 Answer 생성
         async function handleOffer(data) {
             try {
+                // localStream이 준비되어 있는지 확인
+                if (!localStream) {
+                    console.log('Local stream not ready for answer, waiting...');
+                    // 잠시 대기 후 재시도
+                    setTimeout(() => {
+                        if (localStream) {
+                            handleOffer(data);
+                        } else {
+                            console.error('Local stream still not ready for answer');
+                        }
+                    }, 500);
+                    return;
+                }
+                
                 console.log('Handling offer...', data);
                 createPeerConnection();
                 console.log('PeerConnection created for answer');
 
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
                 console.log('Remote description set (offer)');
+                console.log('Current signaling state:', peerConnection.signalingState);
                 
                 const answer = await peerConnection.createAnswer();
                 console.log('Answer created:', answer);
                 await peerConnection.setLocalDescription(answer);
                 console.log('Local description set (answer)');
+                console.log('Current signaling state:', peerConnection.signalingState);
 
                 socket.send(JSON.stringify({
                     type: 'answer',
@@ -548,9 +1074,20 @@
         // Answer 처리
         async function handleAnswer(data) {
             try {
+                if (!peerConnection) {
+                    console.error('PeerConnection not exists when handling answer');
+                    return;
+                }
+                
                 console.log('Handling answer...', data);
+                if (!data.answer) {
+                    console.error('Answer data is missing');
+                    return;
+                }
+                
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                 console.log('Remote description set (answer)');
+                console.log('Current signaling state:', peerConnection.signalingState);
             } catch (error) {
                 console.error('Error handling answer:', error);
             }
@@ -564,13 +1101,17 @@
                     return;
                 }
                 
-                console.log('Adding ICE candidate');
-                if (data.candidate) {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    console.log('ICE candidate added successfully');
+                if (!data.candidate) {
+                    console.log('ICE candidate is null (gathering completed)');
+                    return;
                 }
+                
+                console.log('Adding ICE candidate:', data.candidate.candidate);
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                console.log('ICE candidate added successfully');
             } catch (error) {
                 console.error('Error adding ICE candidate:', error);
+                // 에러가 발생해도 계속 진행 (이미 추가된 candidate일 수 있음)
             }
         }
 
@@ -661,6 +1202,7 @@
 
             // UI 초기화
             document.getElementById('loginSection').style.display = 'flex';
+            document.getElementById('waitingRoom').style.display = 'none';
             document.getElementById('videoSection').classList.remove('active');
             document.getElementById('controls').style.display = 'none';
             document.getElementById('chatSection').classList.remove('active');
@@ -668,6 +1210,12 @@
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('chatMessages').innerHTML = '';
             document.getElementById('chatInput').value = '';
+            // 서버 주소는 유지, 사용자 ID와 이름만 초기화
+            document.getElementById('userIDInput').value = '';
+            document.getElementById('nameInput').value = '';
+            waitingUsers = {};
+            isVideoChatReady = false;
+            pendingStartSignal = false;
             updateStatus('서버에 연결되지 않음', 'disconnected');
         }
 

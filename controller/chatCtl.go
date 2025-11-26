@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -223,11 +222,11 @@ func (cc *ChatController) handleMessage(client *ChatClient, message []byte) {
 		// 통화 관련 메시지는 수신자에게 전달만 함
 		if msg.Type == "call-accept" {
 			// 채팅 수락 시 상대방을 채팅방에 추가
-			if msg.RoomID != "" {
+			/* if msg.RoomID != "" {
 				if err := cc.rdb.AddUserToChatRoom(msg.RoomID, msg.From); err != nil {
 					log.Error(fmt.Sprintf("Failed to add user %s to room %s: %v", msg.From, msg.RoomID, err))
 				}
-			}
+			} */
 		}
 		cc.sendToUser(msg.To, &msg)
 		log.Info(fmt.Sprintf("Call message relayed: %s from %s to %s", msg.Type, msg.From, msg.To))
@@ -239,10 +238,10 @@ func (cc *ChatController) handleMessage(client *ChatClient, message []byte) {
 // handleTextMessage 텍스트 메시지 처리
 func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptl.ChatMessage) {
 	// Redis에 메시지 저장
-	if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content); err != nil {
+	/* if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content); err != nil {
 		log.Error("Failed to save chat message:", err)
 		return
-	}
+	} */
 
 	// 수신자에게 메시지 전송
 	cc.sendToUser(msg.To, msg)
@@ -302,10 +301,10 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 	roomID := utils.GenUuid()
 
 	// Redis에 채팅방 저장
-	if err := cc.rdb.SetChatRoom(roomID, req.RoomName, req.UserID, req.IsPrivate); err != nil {
+	/* if err := cc.rdb.SetChatRoom(roomID, req.RoomName, req.UserID, req.IsPrivate); err != nil {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create chat room", err)
 		return
-	}
+	} */
 
 	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{
 		"roomId":   roomID,
@@ -321,25 +320,27 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 		return
 	}
 
-	// Redis에서 사용자의 채팅방 목록 조회
-	rooms, err := cc.rdb.GetChatRooms()
-	if err != nil {
-		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat rooms", err)
-		return
-	}
-
-	// 사용자가 참여한 채팅방만 필터링
-	userRooms := make([]models.ChatRoomData, 0)
-	for _, room := range rooms {
-		for _, participant := range room.Participants {
-			if participant == userID {
-				userRooms = append(userRooms, room)
-				break
+	/*
+		 	// Redis에서 사용자의 채팅방 목록 조회
+			rooms, err := cc.rdb.GetChatRooms()
+			if err != nil {
+				cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat rooms", err)
+				return
 			}
-		}
-	}
 
-	cc.ctl.SendDataResponse(c, http.StatusOK, userRooms)
+			// 사용자가 참여한 채팅방만 필터링
+			userRooms := make([]models.ChatRoomData, 0)
+			for _, room := range rooms {
+				for _, participant := range room.Participants {
+					if participant == userID {
+						userRooms = append(userRooms, room)
+						break
+					}
+				}
+			}
+
+			cc.ctl.SendDataResponse(c, http.StatusOK, userRooms)
+	*/
 }
 
 // GetChatHistory 채팅 기록 조회
@@ -349,31 +350,32 @@ func (cc *ChatController) GetChatHistory(c *gin.Context) {
 		cc.ctl.SimpleError(c, http.StatusBadRequest, "roomId required")
 		return
 	}
+	/*
+		// 페이지네이션 파라미터
+		page := c.DefaultQuery("page", "1")
+		limit := c.DefaultQuery("limit", "50")
 
-	// 페이지네이션 파라미터
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "50")
+		pageNum, err := strconv.Atoi(page)
+		if err != nil {
+			pageNum = 1
+		}
 
-	pageNum, err := strconv.Atoi(page)
-	if err != nil {
-		pageNum = 1
-	}
+		limitNum, err := strconv.Atoi(limit)
+		if err != nil {
+			limitNum = 50
+		}
 
-	limitNum, err := strconv.Atoi(limit)
-	if err != nil {
-		limitNum = 50
-	}
+		offset := (pageNum - 1) * limitNum
 
-	offset := (pageNum - 1) * limitNum
+		// Redis에서 메시지 조회
+		messages, err := cc.rdb.GetChatMessages(roomID, offset, limitNum)
+		if err != nil {
+			cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat history", err)
+			return
+		}
 
-	// Redis에서 메시지 조회
-	messages, err := cc.rdb.GetChatMessages(roomID, offset, limitNum)
-	if err != nil {
-		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat history", err)
-		return
-	}
-
-	cc.ctl.SendDataResponse(c, http.StatusOK, messages)
+		cc.ctl.SendDataResponse(c, http.StatusOK, messages)
+	*/
 }
 
 // SendMessage REST API를 통한 메시지 전송
@@ -389,13 +391,15 @@ func (cc *ChatController) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// Redis에 메시지 저장
-	if err := cc.rdb.SaveChatMessage(req.RoomID, req.UserID, req.Content); err != nil {
-		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to save message", err)
-		return
-	}
+	/*
+		 	// Redis에 메시지 저장
+			if err := cc.rdb.SaveChatMessage(req.RoomID, req.UserID, req.Content); err != nil {
+				cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to save message", err)
+				return
+			}
 
-	cc.ctl.SendResponse(c, http.StatusOK, "Message sent")
+			cc.ctl.SendResponse(c, http.StatusOK, "Message sent")
+	*/
 }
 
 // SendCallNotification 통화 알림 전송 (SignalingController에서 호출)

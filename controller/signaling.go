@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,7 +12,6 @@ import (
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
 	"ms-gateway/models"
-	ptl "ms-gateway/protocol"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -29,10 +27,10 @@ type Client struct {
 */
 
 const (
-	READ_BUFFER_SIZE            = 4096
-	WRITE_BUFFER_SIZE           = 4096
-	MAX_VIDEO_ROOMS             = 5000
-	MAX_TOTAL_VIDEO_CONNECTIONS = 25000
+	READ_BUFFER_SIZE  = 4096
+	WRITE_BUFFER_SIZE = 4096
+	MAX_VIDEO_ROOMS   = 5000
+	MAX_VDWS_CONNECT  = 25000
 
 	MAX_MESSAGE_SIZE = 512 * 1024
 
@@ -40,9 +38,15 @@ const (
 
 	NUM_BRC_WORKERS = 15
 
+	MAX_CONN_ROOM = 3
+	// MAX_CONNECTIONS_PER_ROOM = 2
 	NUM_WORKERS          = 50
 	WORKER_QUEUE_SIZE    = 1000
 	BROADCAST_QUEUE_SIZE = 10000
+
+	PONG_WAIT   = 60 * time.Second
+	PING_PERIOD = PONG_WAIT * 9 / 10
+	WRITE_WAIT  = 10 * time.Second
 )
 
 // SignalingMessage 시그널링 메시지 구조
@@ -55,23 +59,25 @@ type SignalingMessage struct {
 }
 
 // Room 구조체: 각 방의 사용자 정보를 관리
-type Room struct {
+type VDRoom struct {
+	Name         string
 	ID           int64
-	UserIDs      map[*Client]bool       // 클라이언트 맵
-	UserNames    map[*Client]string     // 클라이언트 -> 사용자 이름
+	Clients      map[*WSClient]bool     // 클라이언트 맵
+	UserNames    map[*WSClient]string   // 클라이언트 -> 사용자 이름
 	Broadcast    chan *BroadcastMessage // 브로드캐스트 채널
-	Unregister   chan *Client           // 클라이언트 해제 채널
+	Unregister   chan *WSClient         // 클라이언트 해제 채널
 	mu           sync.RWMutex
 	createdAt    time.Time
 	lastActivity time.Time
 }
 
 // Client 클라이언트 연결 정보
-type Client struct {
+type WSClient struct {
 	conn     *websocket.Conn
 	send     chan []byte // 송신 버퍼
-	room     *Room
+	room     *VDRoom
 	userName string
+	userID   string // 사용자 ID
 	mu       sync.Mutex
 	lastSeen time.Time
 }
@@ -79,7 +85,7 @@ type Client struct {
 // BroadcastMessage 브로드캐스트할 메시지
 type BroadcastMessage struct {
 	message []byte
-	sender  *Client
+	sender  *WSClient
 	all     bool // true면 발신자 포함, false면 제외
 }
 
@@ -91,22 +97,46 @@ type Message struct {
 
 // JoinData join 이벤트 데이터
 type JoinData struct {
-	Name string `json:"name"`
-	Room string `json:"room"`
+	Name   string `json:"name"`
+	Room   string `json:"room"`
+	UserID string `json:"user_id,omitempty"` // 사용자 ID
+}
+
+// CallRequestData 연결 요청 데이터
+type CallRequestData struct {
+	From   string `json:"from"`    // 요청자 ID
+	To     string `json:"to"`      // 대상자 ID
+	RoomID string `json:"room_id"` // 생성될 방 ID
+}
+
+// CallResponseData 연결 응답 데이터
+type CallResponseData struct {
+	From   string `json:"from"`    // 응답자 ID
+	To     string `json:"to"`      // 요청자 ID
+	RoomID string `json:"room_id"` // 방 ID
+	Accept bool   `json:"accept"`  // 수락 여부
 }
 
 // WorkItem 워커가 처리할 작업
 type WorkItem struct {
-	client  *Client
+	client  *WSClient
 	message []byte
 }
 
 // BroadcastJob 브로드캐스트 작업
 type BroadcastJob struct {
-	room    *Room
+	room    *VDRoom
 	message []byte
-	sender  *Client
+	sender  *WSClient
 	all     bool
+}
+
+// WaitingRoom 대기방 구조체
+type WaitingRoom struct {
+	Clients      map[string]*WSClient // userId -> WSClient
+	mu           sync.RWMutex
+	createdAt    time.Time
+	lastActivity time.Time
 }
 
 // SignalingController WebRTC 시그널링 컨트롤러
@@ -115,9 +145,11 @@ type SignalingController struct {
 	cfg *conf.Config
 	rep *models.Repositories
 
-	rooms       map[string]*Room // roomId -> Room
+	rooms       map[string]*VDRoom // roomId -> VDRoom
 	roomsMu     sync.RWMutex
+	waitingRoom *WaitingRoom // 대기방
 	upgrader    websocket.Upgrader
+
 	messagePool sync.Pool // 메시지 재사용을 위한 풀
 	totalConn   int64     // 전체 연결 수 (atomic)
 	// stats          *Stats
@@ -133,7 +165,12 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 		ctl:   ctl,
 		rep:   rep,
 		cfg:   ctl.cfg,
-		rooms: make(map[string]*Room),
+		rooms: make(map[string]*VDRoom),
+		waitingRoom: &WaitingRoom{
+			Clients:      make(map[string]*WSClient),
+			createdAt:    time.Now(),
+			lastActivity: time.Now(),
+		},
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  READ_BUFFER_SIZE,
 			WriteBufferSize: WRITE_BUFFER_SIZE,
@@ -165,80 +202,359 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 	return r, nil
 }
 
-func (r *SignalingController) msgWorker() {
+// messageWorker 메시지 처리 워커
+func (p *SignalingController) msgWorker() {
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-p.ctx.Done():
 			return
-		case item := <-r.wrkQueue:
-			r.processMessage(item.client, item.message)
+		case item := <-p.wrkQueue:
+			p.processMessage(item.client, item.message)
 		}
 	}
 }
 
-func (r *SignalingController) processMessage(client *Client, message []byte) {
-	var msg SignalingMessage
-	if err := json.Unmarshal(message, &msg); err != nil {
-		log.Error("Message parse error:", err)
+func (p *SignalingController) processMessage(client *WSClient, data []byte) {
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Error("Error unmarshaling message: %v", err)
 		return
 	}
 
-	msg.From = client.userName
+	// 대기방에 있는 클라이언트의 메시지 처리
+	if client.room == nil {
+		p.handleWTRoom(client, &msg)
+		return
+	}
 
-	r.handleMessage(client, &msg)
-}
+	room := client.room
+	switch msg.Type {
+	case "offer", "answer", "ice_candidate":
+		// WebRTC 시그널링 메시지는 발신자 제외하고 브로드캐스트
+		room.Broadcast <- &BroadcastMessage{
+			message: data,
+			sender:  client,
+			all:     false,
+		}
 
-func (r *SignalingController) brcWorker() {
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		case item := <-r.brcQueue:
-			r.broadcastMessage(item)
+	case "chat":
+		// 채팅 메시지 처리
+		room.mu.RLock()
+		senderName := room.UserNames[client]
+		room.mu.RUnlock()
+
+		chatMsg := Message{
+			Type: "chat",
+			Data: map[string]interface{}{
+				"sender":  senderName,
+				"message": msg.Data["message"],
+			},
+		}
+
+		chatData, _ := json.Marshal(chatMsg)
+		room.Broadcast <- &BroadcastMessage{
+			message: chatData,
+			sender:  client,
+			all:     false,
 		}
 	}
 }
 
-func (r *SignalingController) broadcastMessage(item *BroadcastJob) {
+func (p *SignalingController) brcWorker() {
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case job := <-p.brcQueue:
+			// messageSize := int64(len(job.message))
+			sentCount := int64(0)
+
+			job.room.mu.RLock()
+			for client := range job.room.Clients {
+				if !job.all && client == job.sender {
+					continue
+				}
+
+				select {
+				case client.send <- job.message:
+					sentCount++
+				default:
+					// 버퍼가 가득 찬 경우 연결 해제
+					log.Warn("Client buffer full, disconnecting")
+					go func(c *WSClient) {
+						job.room.Unregister <- c
+					}(client)
+				}
+			}
+			job.room.mu.RUnlock()
+
+			// 송신 바이트 수 추적 (전송 성공한 클라이언트 수 * 메시지 크기)
+			// atomic.AddInt64(&s.stats.TotalBytesSent, messageSize*sentCount)
+		}
+	}
+}
+
+/* func (p *SignalingController) broadcastMsg(item *BroadcastJob) {
 	item.room.Broadcast <- &BroadcastMessage{
 		message: item.message,
 		sender:  item.sender,
 		all:     item.all,
 	}
 }
+*/
 
-func (r *SignalingController) roomCleaner() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
+//====================================================================
+/*
+# 초기 접속
+handleWaitingRoomMessage : join-waiting
+handleConnection : join-waiting - dataBytes : name, room
+ - 대기방 추가 <- client
+ - sendUserList - 접속자에게 접속대상자 목록 전송
+ - broadcastUserJoined - 접속대상자에게 접속자 입장 알림
 
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		case <-ticker.C:
-			r.cleanEmptyRooms()
-		}
+# 대화 요청
+handleWaitingRoomMessage : call-request
+handleCallRequest : msg.Data : from, to, room_id
+
+# 응답 수락
+handleWaitingRoomMessage : call-response
+handleCallResponse : msg.Data : from, to, room_id, accept
+ - getRoom : roomId 789_123
+ - room.run(s-room)
+
+# 채팅
+ - r.Broadcast : 브로드캐스트
+
+msgWorker
+	- s.workerQueue <- WorkItem{client, message}
+	: processMessage(client, message)
+		- s.handleWaitingRoomMessage(client, &msg) : 접속자가 방이 대기방으로 조인
+			- s.sendUserList
+			- s.handleCallRequest
+			- s.handleCallResponse
+				- moveToRoom : 두 사용자를 방으로 이동
+		- "offer", "answer", "ice_candidate" : 대상자에게 메시지 전달
+		- "chat" : 채팅 메시지 처리
+brcWorker
+	- job := s.broadcastQueue <- BroadcastJob{room, message, sender, all}
+	: client.send <- job.message
+roomCleaner
+getRoom
+	- run
+
+readPump
+
+
+*/
+
+/*
+ */
+// handleWaitingRoomMessage 대기방 메시지 처리
+func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
+	switch msg.Type {
+	case "join-waiting":
+		// 대기방 입장 (이미 처리됨)
+		p.sendUserList(client)
+
+	case "call-request":
+		// 연결 요청
+		p.handleCallRequest(client, msg)
+
+	case "call-response":
+		// 연결 응답 (수락/거절)
+		p.handleCallResponse(client, msg)
 	}
 }
 
-func (r *SignalingController) cleanEmptyRooms() {
-	r.roomsMu.Lock()
-	defer r.roomsMu.Unlock()
+/*
+최초 접속 프로세스
+*/
+// handleConnection WebSocket 연결 처리
+// func (p *SignalingController) HandleConnection(w http.ResponseWriter, r *http.Request) {
+func (p *SignalingController) HandleConnection(c *gin.Context) {
+	// 연결 수 제한 확인
+	if atomic.LoadInt64(&p.totalConn) >= MAX_VDWS_CONNECT {
+		http.Error(c.Writer, "Server at capacity", http.StatusServiceUnavailable)
+		log.Error("Connection rejected: server at capacity")
+		return
+	}
 
-	for name, room := range r.rooms {
+	conn, err := p.upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Error("Error upgrading connection: %v", err)
+		return
+	}
+
+	atomic.AddInt64(&p.totalConn, 1)
+	// atomic.AddInt64(&s.stats.TotalConnections, 1)
+
+	client := &WSClient{
+		conn:     conn,
+		send:     make(chan []byte, MSG_BUFFER_SIZE),
+		lastSeen: time.Now(),
+	}
+
+	// join-waiting 메시지를 기다림
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Warn("Error reading join-waiting message: %v", err)
+		conn.Close()
+		atomic.AddInt64(&p.totalConn, -1)
+		return
+	}
+
+	var msg Message
+	if err := json.Unmarshal(message, &msg); err != nil {
+		log.Error("Error unmarshaling join-waiting message: %v", err)
+		conn.Close()
+		atomic.AddInt64(&p.totalConn, -1)
+		return
+	}
+
+	// join-waiting 또는 join 메시지 처리
+	if msg.Type == "join-waiting" {
+		// 대기방 입장
+		var joinData JoinData
+		dataBytes, _ := json.Marshal(msg.Data)
+		if err := json.Unmarshal(dataBytes, &joinData); err != nil {
+			log.Warn("Error parsing join-waiting data: %v", err)
+			conn.Close()
+			atomic.AddInt64(&p.totalConn, -1)
+			return
+		}
+
+		if joinData.UserID == "" {
+			log.Warn("UserID is required for waiting room")
+			conn.Close()
+			atomic.AddInt64(&p.totalConn, -1)
+			return
+		}
+
+		client.userID = joinData.UserID
+		client.userName = joinData.Name
+
+		// 대기방에 추가
+		p.waitingRoom.mu.Lock()
+		// 이미 존재하는 사용자 ID인 경우 기존 연결 종료
+		if existingClient, exists := p.waitingRoom.Clients[joinData.UserID]; exists {
+			existingClient.conn.Close()
+			delete(p.waitingRoom.Clients, joinData.UserID)
+		}
+		p.waitingRoom.Clients[joinData.UserID] = client
+		p.waitingRoom.lastActivity = time.Now()
+		p.waitingRoom.mu.Unlock()
+
+		log.Info("%s (ID: %s) joined waiting room", joinData.Name, joinData.UserID)
+
+		// 사용자 목록 전송
+		p.sendUserList(client)
+
+		// 다른 사용자들에게 새 사용자 입장 알림
+		p.broadcastUserJoined(client)
+
+	} else if msg.Type == "join" {
+		// 기존 방식: 직접 방 입장 (하위 호환성)
+		var joinData JoinData
+		dataBytes, _ := json.Marshal(msg.Data)
+		if err := json.Unmarshal(dataBytes, &joinData); err != nil {
+			log.Warn("Error parsing join data: %v", err)
+			conn.Close()
+			atomic.AddInt64(&p.totalConn, -1)
+			return
+		}
+
+		// 방 가져오기 또는 생성
+		room, err := p.getRoom(joinData.Room)
+		if err != nil {
+			log.Warn("Error getting room: %v", err)
+			conn.Close()
+			atomic.AddInt64(&p.totalConn, -1)
+			return
+		}
+
+		// 방 인원 제한 확인
 		room.mu.RLock()
-		isEmpty := len(room.UserIDs) == 0
-		inactive := time.Since(room.lastActivity) > 5*time.Minute
+		if len(room.Clients) >= MAX_CONN_ROOM {
+			room.mu.RUnlock()
+			log.Warn("Room %s is full", joinData.Room)
+			conn.Close()
+			atomic.AddInt64(&p.totalConn, -1)
+			return
+		}
 		room.mu.RUnlock()
 
-		if isEmpty && inactive {
-			delete(r.rooms, name)
-			atomic.AddInt64(&r.totalConn, -1)
-			log.Info("Cleaned up inactive room: %s", name)
+		client.room = room
+		client.userName = joinData.Name
+
+		// 클라이언트를 먼저 방에 추가 (동기식으로)
+		room.mu.Lock()
+		room.Clients[client] = true
+		room.UserNames[client] = joinData.Name
+		userCount := len(room.Clients)
+		room.lastActivity = time.Now()
+		room.mu.Unlock()
+
+		log.Info("%s joined room %s (total users: %d)", joinData.Name, joinData.Room, userCount)
+
+		// start 시그널 전송 (방에 2명이 된 경우)
+		if userCount == 2 {
+			room.mu.RLock()
+			for otherClient := range room.Clients {
+				if otherClient != client {
+					startMsg, _ := json.Marshal(Message{Type: "start"})
+					select {
+					case otherClient.send <- startMsg:
+						log.Info("Start signal sent to %s", room.UserNames[otherClient])
+						// start 시그널 송신 바이트 추적
+						// atomic.AddInt64(&p.stats.TotalBytesSent, int64(len(startMsg)))
+					default:
+						log.Warn("Failed to send start signal: buffer full")
+					}
+					break
+				}
+			}
+			room.mu.RUnlock()
 		}
+	} else {
+		log.Warn("First message must be 'join-waiting' or 'join'")
+		conn.Close()
+		atomic.AddInt64(&p.totalConn, -1)
+		return
+	}
+
+	// Read/Write 펌프 시작
+	go client.writePump()
+	go client.readPump(p)
+}
+
+// sendUserList 사용자 목록 전송
+func (p *SignalingController) sendUserList(client *WSClient) {
+	p.waitingRoom.mu.RLock()
+	userList := make([]string, 0, len(p.waitingRoom.Clients))
+	for userID := range p.waitingRoom.Clients {
+		if userID != client.userID {
+			userList = append(userList, userID)
+		}
+	}
+	p.waitingRoom.mu.RUnlock()
+
+	userListMsg := Message{
+		Type: "user-list",
+		Data: map[string]interface{}{
+			"users": userList,
+		},
+	}
+
+	data, _ := json.Marshal(userListMsg)
+	select {
+	case client.send <- data:
+	default:
+		log.Warn("Failed to send user list: buffer full")
 	}
 }
 
+/* HandleWebSocket
 // HandleWebSocket WebSocket 연결 핸들러
 func (p *SignalingController) HandleWebSocket(c *gin.Context) {
 	// userId 파라미터 가져오기
@@ -257,7 +573,7 @@ func (p *SignalingController) HandleWebSocket(c *gin.Context) {
 	}
 
 	// 클라이언트 생성
-	client := &Client{
+	client := &WSClient{
 		conn: conn,
 		send: make(chan []byte, MSG_BUFFER_SIZE),
 	}
@@ -268,19 +584,20 @@ func (p *SignalingController) HandleWebSocket(c *gin.Context) {
 	log.Info(fmt.Sprintf("New WebSocket connection: %s", userId))
 
 	// 고루틴 시작
-	go p.writePump(client)
-	go p.readPump(client)
+	go client.writePump()
+	go client.readPump(p)
 }
-
+*/
+/*
 // registerClient 클라이언트 등록
-func (p *SignalingController) registerClient(client *Client) {
+func (p *SignalingController) registerClient(client *WSClient) {
 	p.roomsMu.Lock()
 	defer p.roomsMu.Unlock()
 
 	// 기존 연결이 있으면 종료
 	if oldClient, exists := p.rooms[strconv.FormatInt(client.room.ID, 10)]; exists {
 		close(oldClient.Broadcast)
-		for client := range oldClient.UserIDs {
+		for client := range oldClient.Clients {
 			client.conn.Close()
 		}
 	}
@@ -292,7 +609,7 @@ func (p *SignalingController) registerClient(client *Client) {
 }
 
 // unregisterClient 클라이언트 등록 해제
-func (p *SignalingController) unregisterClient(client *Client) {
+func (p *SignalingController) unregisterClient(client *WSClient) {
 	p.roomsMu.Lock()
 	defer p.roomsMu.Unlock()
 
@@ -305,150 +622,123 @@ func (p *SignalingController) unregisterClient(client *Client) {
 	// 사용자 목록 브로드캐스트
 	go p.broadcastUserList()
 }
+*/
 
-// readPump 메시지 읽기
-func (p *SignalingController) readPump(client *Client) {
-	defer func() {
-		p.unregisterClient(client)
-		client.conn.Close()
-	}()
-
-	client.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-	client.conn.SetPongHandler(func(string) error {
-		client.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		return nil
-	})
-
-	for {
-		_, message, err := client.conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Error("WebSocket error:", err)
-			}
-			break
-		}
-
-		// 메시지 파싱
-		var msg SignalingMessage
-		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Error("Message parse error:", err)
-			continue
-		}
-
-		// 발신자 설정
-		msg.From = client.userName
-
-		// 메시지 처리
-		p.handleMessage(client, &msg)
-	}
-}
-
-// writePump 메시지 쓰기
-func (p *SignalingController) writePump(client *Client) {
-	ticker := time.NewTicker(54 * time.Second)
-	defer func() {
-		ticker.Stop()
-		client.conn.Close()
-	}()
-
-	for {
-		select {
-		case message, ok := <-client.send:
-			client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if !ok {
-				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-
-			w, err := client.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
-
-			// 대기 중인 메시지 일괄 전송
-			n := len(client.send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-client.send)
-			}
-
-			if err := w.Close(); err != nil {
-				return
-			}
-
-		case <-ticker.C:
-			client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
-}
-
-// handleMessage 메시지 처리
-func (p *SignalingController) handleMessage(client *Client, msg *SignalingMessage) {
+/* // handleWaitingRoomMessage 대기방 메시지 처리
+func (p *SignalingController) handleWTRoomMsg(client *WSClient, msg *Message) {
 	switch msg.Type {
-	case "offer", "answer", "ice-candidate", "hangup":
-		// 대상 사용자에게 메시지 전달
-		p.relayMessage(client, msg)
+	case "join-waiting":
+		// 대기방 입장 (이미 처리됨)
+		p.sendUserList(client)
 
-	default:
-		log.Warn(fmt.Sprintf("Unknown message type: %s from %s", msg.Type, client.userName))
+	case "call-request":
+		// 연결 요청
+		p.handleCallRequest(client, msg)
+
+	case "call-response":
+		// 연결 응답 (수락/거절)
+		p.handleCallResponse(client, msg)
 	}
 }
-
-// relayMessage 메시지 중계
-func (p *SignalingController) relayMessage(from *Client, msg *SignalingMessage) {
-	if msg.To == "" {
-		log.Warn("Message without target user")
+*/
+// handleCallRequest 연결 요청 처리
+func (p *SignalingController) handleCallRequest(client *WSClient, msg *Message) {
+	// 요청 데이터 파싱
+	dataBytes, _ := json.Marshal(msg.Data)
+	var reqData CallRequestData
+	if err := json.Unmarshal(dataBytes, &reqData); err != nil {
+		log.Error("Error parsing call request: %v", err)
 		return
 	}
 
-	p.roomsMu.RLock()
-	targetClient, exists := p.rooms[msg.To]
-	p.roomsMu.RUnlock()
+	// 대상자 찾기
+	p.waitingRoom.mu.RLock()
+	targetClient, exists := p.waitingRoom.Clients[reqData.To]
+	p.waitingRoom.mu.RUnlock()
 
 	if !exists {
-		// 대상 사용자를 찾을 수 없음
-		errorMsg := SignalingMessage{
-			Type:    "error",
-			Payload: fmt.Sprintf("User %s is not available", msg.To),
+		log.Warn("Target user %s not found in waiting room", reqData.To)
+		// 요청자에게 오류 메시지 전송
+		errorMsg := Message{
+			Type: "call-error",
+			Data: map[string]interface{}{
+				"message": "대상 사용자를 찾을 수 없습니다.",
+			},
 		}
-		p.sendToClient(from, &errorMsg)
+		data, _ := json.Marshal(errorMsg)
+		select {
+		case client.send <- data:
+		default:
+		}
 		return
 	}
 
-	// 메시지 전달
-	// p.sendToRoom(targetClient, msg)
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Error("Message marshal error:", err)
-		return
+	// 대상자에게 연결 요청 전송
+	requestMsg := Message{
+		Type: "call-request",
+		Data: map[string]interface{}{
+			"from":    reqData.From,
+			"to":      reqData.To,
+			"room_id": reqData.RoomID,
+		},
 	}
 
-	targetClient.Broadcast <- &BroadcastMessage{
-		message: data,
-		sender:  nil,
-		all:     false,
+	data, _ := json.Marshal(requestMsg)
+	select {
+	case targetClient.send <- data:
+		log.Info("Call request sent from %s to %s", reqData.From, reqData.To)
+	default:
+		log.Warn("Failed to send call request: buffer full")
 	}
-
-	log.Info(fmt.Sprintf("Message relayed: %s from %s to %s", msg.Type, from.userName, msg.To))
 }
 
-// sendToClient 클라이언트에게 메시지 전송
-func (p *SignalingController) sendToClient(client *Client, msg *SignalingMessage) {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Error("Message marshal error:", err)
+// handleCallResponse 연결 응답 처리
+func (p *SignalingController) handleCallResponse(client *WSClient, msg *Message) {
+	// 응답 데이터 파싱
+	dataBytes, _ := json.Marshal(msg.Data)
+	var respData CallResponseData
+	if err := json.Unmarshal(dataBytes, &respData); err != nil {
+		log.Error("Error parsing call response: %v", err)
 		return
 	}
 
+	// 요청자 찾기
+	p.waitingRoom.mu.RLock()
+	requesterClient, exists := p.waitingRoom.Clients[respData.To]
+	p.waitingRoom.mu.RUnlock()
+
+	if !exists {
+		log.Warn("Requester %s not found in waiting room", respData.To)
+		return
+	}
+
+	// 요청자에게 응답 전송
+	responseType := "call-reject"
+	if respData.Accept {
+		responseType = "call-accept"
+	}
+
+	responseMsg := Message{
+		Type: responseType,
+		Data: map[string]interface{}{
+			"from":    respData.From,
+			"to":      respData.To,
+			"room_id": respData.RoomID,
+			"accept":  respData.Accept,
+		},
+	}
+
+	data, _ := json.Marshal(responseMsg)
 	select {
-	case client.send <- data:
+	case requesterClient.send <- data:
+		log.Info("Call response sent from %s to %s (accept: %v)", respData.From, respData.To, respData.Accept)
 	default:
-		// 버퍼가 가득 찬 경우 클라이언트 제거
-		p.unregisterClient(client)
+		log.Warn("Failed to send call response: buffer full")
+	}
+
+	// 수락한 경우 두 사용자를 방으로 이동
+	if respData.Accept {
+		go p.moveToRoom(respData.RoomID, client, requesterClient)
 	}
 }
 
@@ -490,6 +780,60 @@ func (p *SignalingController) broadcastUserList() {
 	log.Info(fmt.Sprintf("User list broadcasted: %v", userList))
 }
 
+// broadcastUserJoined 새 사용자 입장 알림
+func (p *SignalingController) broadcastUserJoined(newClient *WSClient) {
+	p.waitingRoom.mu.RLock()
+	userList := make([]string, 0, len(p.waitingRoom.Clients))
+	for userID := range p.waitingRoom.Clients {
+		if userID != newClient.userID {
+			userList = append(userList, userID)
+		}
+	}
+	p.waitingRoom.mu.RUnlock()
+
+	// 다른 사용자들에게 새 사용자 알림
+	joinMsg := Message{
+		Type: "user-joined",
+		Data: map[string]interface{}{
+			"user_id": newClient.userID,
+			"name":    newClient.userName,
+		},
+	}
+
+	data, _ := json.Marshal(joinMsg)
+	p.waitingRoom.mu.RLock()
+	for userID, client := range p.waitingRoom.Clients {
+		if userID != newClient.userID {
+			select {
+			case client.send <- data:
+			default:
+			}
+		}
+	}
+	p.waitingRoom.mu.RUnlock()
+}
+
+// broadcastUserLeft 사용자 나감 알림
+func (p *SignalingController) broadcastUserLeft(leftClient *WSClient) {
+	leftMsg := Message{
+		Type: "user-left",
+		Data: map[string]interface{}{
+			"user_id": leftClient.userID,
+		},
+	}
+
+	data, _ := json.Marshal(leftMsg)
+	p.waitingRoom.mu.RLock()
+	for _, client := range p.waitingRoom.Clients {
+		select {
+		case client.send <- data:
+		default:
+		}
+	}
+	p.waitingRoom.mu.RUnlock()
+}
+
+/* GetConnectedUsers
 // GetConnectedUsers 연결된 사용자 목록 조회 (HTTP API)
 func (p *SignalingController) GetConnectedUsers(c *gin.Context) {
 	p.roomsMu.RLock()
@@ -504,7 +848,9 @@ func (p *SignalingController) GetConnectedUsers(c *gin.Context) {
 		"count": len(userList),
 	})
 }
+*/
 
+/* CallRequest
 // CallRequest 통화 요청 처리
 func (p *SignalingController) CallRequest(c *gin.Context) {
 	var req ptl.CallRequest
@@ -540,7 +886,9 @@ func (p *SignalingController) CallRequest(c *gin.Context) {
 		"status":   "requested",
 	})
 }
+*/
 
+/* CallAccept
 // CallAccept 통화 수락 처리
 func (p *SignalingController) CallAccept(c *gin.Context) {
 	var req ptl.CallResponse
@@ -569,7 +917,9 @@ func (p *SignalingController) CallAccept(c *gin.Context) {
 		"status": "accepted",
 	})
 }
+*/
 
+/* CallReject
 // CallReject 통화 거절 처리
 func (p *SignalingController) CallReject(c *gin.Context) {
 	var req ptl.CallResponse
@@ -597,4 +947,357 @@ func (p *SignalingController) CallReject(c *gin.Context) {
 		"roomId": req.RoomID,
 		"status": "rejected",
 	})
+}
+*/
+
+// getRoom 방을 가져오거나 새로 생성
+func (p *SignalingController) getRoom(roomName string) (*VDRoom, error) {
+	p.roomsMu.RLock()
+	if room, exists := p.rooms[roomName]; exists {
+		p.roomsMu.RUnlock()
+		return room, nil
+	}
+	p.roomsMu.RUnlock()
+
+	// 방 수 제한 확인
+	p.roomsMu.Lock()
+	defer p.roomsMu.Unlock()
+
+	// Double-check
+	if room, exists := p.rooms[roomName]; exists {
+		return room, nil
+	}
+
+	if len(p.rooms) >= MAX_VIDEO_ROOMS {
+		return nil, fmt.Errorf("maximum number of rooms reached")
+	}
+
+	log.Info("Creating new room: %s", roomName)
+	room := &VDRoom{
+		Name:         roomName,
+		Clients:      make(map[*WSClient]bool),
+		UserNames:    make(map[*WSClient]string),
+		Broadcast:    make(chan *BroadcastMessage, MSG_BUFFER_SIZE),
+		Unregister:   make(chan *WSClient),
+		createdAt:    time.Now(),
+		lastActivity: time.Now(),
+	}
+
+	p.rooms[roomName] = room
+	atomic.AddInt64(&p.totalConn, 1)
+
+	// 방 고루틴 시작
+	go room.run(p)
+
+	return room, nil
+}
+
+// moveToRoom 사용자들을 방으로 이동
+func (p *SignalingController) moveToRoom(roomID string, client1, client2 *WSClient) {
+	// 방 가져오기 또는 생성
+	room, err := p.getRoom(roomID)
+	if err != nil {
+		log.Error("Error getting room: %v", err)
+		return
+	}
+
+	// 대기방에서 제거
+	p.waitingRoom.mu.Lock()
+	delete(p.waitingRoom.Clients, client1.userID)
+	delete(p.waitingRoom.Clients, client2.userID)
+	p.waitingRoom.mu.Unlock()
+
+	// 방에 추가
+	room.mu.Lock()
+	room.Clients[client1] = true
+	room.Clients[client2] = true
+	room.UserNames[client1] = client1.userName
+	room.UserNames[client2] = client2.userName
+	room.lastActivity = time.Now()
+	room.mu.Unlock()
+
+	// 클라이언트의 room 설정
+	client1.room = room
+	client2.room = room
+
+	// 두 클라이언트에게 방 입장 완료 메시지 전송
+	joinMsg := Message{
+		Type: "room-joined",
+		Data: map[string]interface{}{
+			"room_id": roomID,
+		},
+	}
+
+	data, _ := json.Marshal(joinMsg)
+
+	// client1에게 room-joined 전송
+	select {
+	case client1.send <- data:
+		log.Info("room-joined sent to %s", client1.userID)
+	default:
+		log.Warn("Failed to send room-joined to %s: buffer full", client1.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client1.send <- data:
+				log.Info("room-joined sent to %s (retry)", client1.userID)
+			default:
+				log.Warn("Failed to send room-joined to %s after retry", client1.userID)
+			}
+		}()
+	}
+
+	// client2에게 room-joined 전송
+	select {
+	case client2.send <- data:
+		log.Info("room-joined sent to %s", client2.userID)
+	default:
+		log.Warn("Failed to send room-joined to %s: buffer full", client2.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client2.send <- data:
+				log.Info("room-joined sent to %s (retry)", client2.userID)
+			default:
+				log.Warn("Failed to send room-joined to %s after retry", client2.userID)
+			}
+		}()
+	}
+
+	// 약간의 지연 후 start 시그널 전송 (화상채팅 시작)
+	// room-joined가 먼저 처리되도록 약간의 지연 추가
+	time.Sleep(50 * time.Millisecond)
+
+	startMsg, _ := json.Marshal(Message{Type: "start"})
+	select {
+	case client1.send <- startMsg:
+		// atomic.AddInt64(&p.stats.TotalBytesSent, int64(len(startMsg)))
+		log.Info("start signal sent to %s", client1.userID)
+	default:
+		log.Warn("Failed to send start signal to %s: buffer full", client1.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client1.send <- startMsg:
+				// atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+				log.Info("start signal sent to %s (retry)", client1.userID)
+			default:
+				log.Warn("Failed to send start signal to %s after retry", client1.userID)
+			}
+		}()
+	}
+
+	select {
+	case client2.send <- startMsg:
+		// atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+		log.Info("start signal sent to %s", client2.userID)
+	default:
+		log.Warn("Failed to send start signal to %s: buffer full", client2.userID)
+		// 버퍼가 가득 찬 경우 재시도
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case client2.send <- startMsg:
+				// atomic.AddInt64(&s.stats.TotalBytesSent, int64(len(startMsg)))
+				log.Info("start signal sent to %s (retry)", client2.userID)
+			default:
+				log.Warn("Failed to send start signal to %s after retry", client2.userID)
+			}
+		}()
+	}
+
+	log.Info("Users %s and %s moved to room %s", client1.userID, client2.userID, roomID)
+}
+
+func (p *SignalingController) roomCleaner() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			p.cleanEmptyRooms()
+		}
+	}
+}
+
+func (p *SignalingController) cleanEmptyRooms() {
+	p.roomsMu.Lock()
+	defer p.roomsMu.Unlock()
+
+	for name, room := range p.rooms {
+		room.mu.RLock()
+		isEmpty := len(room.Clients) == 0
+		inactive := time.Since(room.lastActivity) > 5*time.Minute
+		room.mu.RUnlock()
+
+		if isEmpty && inactive {
+			delete(p.rooms, name)
+			atomic.AddInt64(&p.totalConn, -1)
+			log.Info("Cleaned up inactive room: %s", name)
+		}
+	}
+}
+
+// ===== VDRoom =============================================================
+
+// run 방 관리 고루틴
+func (v *VDRoom) run(p *SignalingController) {
+	ticker := time.NewTicker(PING_PERIOD)
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+		case client := <-v.Unregister:
+			v.mu.Lock()
+			if _, ok := v.Clients[client]; ok {
+				delete(v.Clients, client)
+				delete(v.UserNames, client)
+				close(client.send)
+				v.lastActivity = time.Now()
+				log.Info(fmt.Sprintf("Client unregistered from room %s (remaining: %d)", v.Name, len(v.Clients)))
+			}
+
+			// 방이 비었으면 일정 시간 후 삭제를 위해 마킹
+			if len(v.Clients) == 0 {
+				v.mu.Unlock()
+				return // 방 고루틴 종료
+			}
+			v.mu.Unlock()
+
+		case msg := <-v.Broadcast:
+			v.lastActivity = time.Now()
+
+			// 브로드캐스트 작업을 큐에 추가
+			p.brcQueue <- &BroadcastJob{
+				room:    v,
+				message: msg.message,
+				sender:  msg.sender,
+				all:     msg.all,
+			}
+
+		case <-ticker.C:
+			// Ping을 모든 클라이언트에게 전송
+			pingMsg := []byte(`{"type":"ping"}`)
+			// pingSize := int64(len(pingMsg))
+			sentCount := int64(0)
+
+			v.mu.RLock()
+			for client := range v.Clients {
+				select {
+				case client.send <- pingMsg:
+					sentCount++
+				default:
+					// 버퍼가 가득 찬 클라이언트는 연결 해제
+					go func(c *WSClient) {
+						v.Unregister <- c
+					}(client)
+				}
+			}
+			v.mu.RUnlock()
+
+			// Ping 메시지 송신 바이트 추적
+			/* 			if sentCount > 0 {
+				atomic.AddInt64(&p.stats.TotalBytesSent, pingSize*sentCount)
+			} */
+		}
+	}
+}
+
+// ===== WSClient =============================================================
+func (w *WSClient) readPump(p *SignalingController) {
+	defer func() {
+		if w.room != nil {
+			w.room.Unregister <- w
+		} else if w.userID != "" {
+			// 대기방에서 제거
+			p.waitingRoom.mu.Lock()
+			delete(p.waitingRoom.Clients, w.userID)
+			p.waitingRoom.mu.Unlock()
+			// 다른 사용자들에게 사용자 나감 알림
+			p.broadcastUserLeft(w)
+		}
+		w.conn.Close()
+		atomic.AddInt64(&p.totalConn, -1)
+	}()
+
+	w.conn.SetReadLimit(MAX_MESSAGE_SIZE)
+	w.conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
+	w.conn.SetPongHandler(func(string) error {
+		w.conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
+		w.lastSeen = time.Now()
+		return nil
+	})
+
+	for {
+		_, message, err := w.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Error("WebSocket error:", err)
+			}
+			break
+		}
+
+		w.lastSeen = time.Now()
+
+		/* 		// 수신 바이트 수 추적
+		   		messageSize := int64(len(message))
+		   		atomic.AddInt64(&p.stats.TotalBytesReceived, messageSize)
+		*/
+		// 메시지를 워커 큐에 추가
+		select {
+		case p.wrkQueue <- WorkItem{client: w, message: message}:
+		default:
+			log.Error("Worker queue full, dropping message")
+		}
+	}
+}
+
+func (w *WSClient) writePump() {
+	ticker := time.NewTicker(PING_PERIOD)
+	defer func() {
+		ticker.Stop()
+		w.conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-w.send:
+			w.conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT))
+			if !ok {
+				w.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			wt, err := w.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			wt.Write(message)
+
+			// 버퍼에 대기 중인 메시지들을 배치로 전송
+			n := len(w.send)
+			for i := 0; i < n; i++ {
+				wt.Write([]byte{'\n'})
+				wt.Write(<-w.send)
+			}
+
+			if err := wt.Close(); err != nil {
+				return
+			}
+
+		case <-ticker.C:
+			w.conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT))
+			if err := w.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
 }

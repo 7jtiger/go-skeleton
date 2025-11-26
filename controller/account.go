@@ -80,7 +80,7 @@ func (p *AccountController) CheckID(c *gin.Context) {
 		return
 	}
 
-	if p.adb.IsExistID(id) {
+	if p.adb.IsExistID(strings.TrimSpace(id)) {
 		// p.ctl.SimpleError(c, http.StatusConflict, "id is duplicate")
 		p.ctl.SimpleError(c, ptl.IDDuplicate, "ID is duplicate")
 	} else {
@@ -110,7 +110,7 @@ func (p *AccountController) CheckEmail(c *gin.Context) {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "email is required")
 		return
 	}
-	if p.adb.IsExistEmail(email) {
+	if p.adb.IsExistEmail(strings.TrimSpace(email)) {
 		log.Warn("CheckEmail", email)
 		p.ctl.SimpleError(c, ptl.EmailDuplicate, "Email is duplicate")
 	} else {
@@ -147,12 +147,12 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 		return
 	}
 
-	if p.adb.IsExistID(req.ID) {
+	if p.adb.IsExistID(strings.TrimSpace(req.ID)) {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.IDDuplicate, "ID is already in use."), http.StatusBadRequest, fmt.Errorf("ID is duplicate"))
 		return
 	}
 
-	if p.adb.IsExistEmail(req.Email) {
+	if p.adb.IsExistEmail(strings.TrimSpace(req.Email)) {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.EmailDuplicate, "Email is already in use."), http.StatusBadRequest, fmt.Errorf("Email is duplicate"))
 		return
 	}
@@ -210,14 +210,14 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		return
 	}
 
-	hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to hash password")
-		return
-	}
-
+	/* 	hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
+	   	if err != nil {
+	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to hash password")
+	   		return
+	   	}
+	*/
 	// Register the user
-	user, err := p.adb.LoginUser(req, hsedPw)
+	user, err := p.adb.LoginUser(req, []byte(strings.TrimSpace(req.PW)))
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to login user"), http.StatusBadRequest, err)
 		return

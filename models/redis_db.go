@@ -9,7 +9,6 @@ import (
 	"ms-gateway/common/utils"
 	"ms-gateway/conf"
 	ptl "ms-gateway/protocol"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -391,6 +390,57 @@ func (r *RedisDB) HSetUserInfo(user *ptl.UserInfoResp) error {
 	return nil
 }
 
+// User 사용자 정보 구조체
+type User struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Area   string `json:"area"`
+	Gender string `json:"gender"`
+}
+
+// GetUser 사용자 정보 조회
+func (r *RedisDB) GetUser(userID string) (*User, error) {
+	userJSON, err := r.client.Get(r.ctx, fmt.Sprintf("user:%s:info", userID)).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+
+	var user User
+	err = json.Unmarshal([]byte(userJSON), &user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// UpdateUserConnectionStatus 사용자 연결 상태 업데이트
+func (db *RedisDB) UpdateUserConnectionStatus(userID string, isConnected bool) error {
+	key := fmt.Sprintf("user:%s:connected", userID)
+	value := strconv.FormatBool(isConnected)
+
+	return db.client.Set(db.ctx, key, value, 0).Err()
+}
+
+// IsUserConnected 사용자 연결 상태 확인
+func (db *RedisDB) IsUserConnected(userID string) (bool, error) {
+	key := fmt.Sprintf("user:%s:connected", userID)
+	val, err := db.client.Get(db.ctx, key).Result()
+
+	if err != nil {
+		if err == redis.Nil {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return val == "true", nil
+}
+
 // GetJWTSession JWT 토큰으로 세션 정보 조회
 func (r *RedisDB) GetUserInfo(uid string) (*ptl.UserInfoResp, error) {
 	sessionJSON, err := r.client.HGet(r.ctx, "USER:INFO", uid).Result()
@@ -442,6 +492,27 @@ func (r *RedisDB) DeleteAllUserTokens(userID string) error {
 	return err
 }
 
+// GetUnreadTotalCount 사용자의 전체 읽지 않은 메시지 수 조회
+func (r *RedisDB) GetUnreadTotalCount(userID string) (int, error) {
+	// 모든 룸 정보 조회
+	roomsInfo, err := r.client.HGetAll(r.ctx, fmt.Sprintf("user:%s:chatroom_info", userID)).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	totalUnread := 0
+	for _, roomJSON := range roomsInfo {
+		var roomItem ChatRoomListItem
+		if err := json.Unmarshal([]byte(roomJSON), &roomItem); err != nil {
+			continue
+		}
+		totalUnread += roomItem.UnreadCount
+	}
+
+	return totalUnread, nil
+}
+
+/* SetChatRoom 채팅방 정보 저장
 // SetChatRoom HSet을 사용하여 채팅방 정보 저장
 func (db *RedisDB) SetChatRoom(roomID, roomName, ownerID string, isPrivate bool) error {
 	room := ChatRoomData{
@@ -481,7 +552,9 @@ func (db *RedisDB) SetChatRoom(roomID, roomName, ownerID string, isPrivate bool)
 	log.Info("채팅방 생성: ", roomID, " (", roomName, ")")
 	return nil
 }
+*/
 
+/* GetChatRoom 채팅방 정보 조회
 // GetChatRoom HGet을 사용하여 채팅방 정보 조회
 func (db *RedisDB) GetChatRoom(roomID string) (*ChatRoomData, error) {
 	roomJSON, err := db.client.HGet(db.ctx, "chat:rooms", roomID).Result()
@@ -500,7 +573,9 @@ func (db *RedisDB) GetChatRoom(roomID string) (*ChatRoomData, error) {
 
 	return &room, nil
 }
+*/
 
+/* GetChatRooms 모든 채팅방 정보 조회
 // GetChatRooms HGetAll을 사용하여 모든 채팅방 정보 조회
 func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 	roomsMap, err := db.client.HGetAll(db.ctx, "chat:rooms").Result()
@@ -529,7 +604,9 @@ func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 
 	return rooms, nil
 }
+*/
 
+/* SaveChatMessage 채팅 메시지 저장
 // SaveChatMessage HSet을 사용하여 채팅 메시지 저장
 func (db *RedisDB) SaveChatMessage(roomID, userID, content string) error {
 	messageID := utils.GenUuid()
@@ -577,7 +654,9 @@ func (db *RedisDB) SaveChatMessage(roomID, userID, content string) error {
 	_, err = pipe.Exec(db.ctx)
 	return err
 }
+*/
 
+/* GetChatMessages 특정 채팅방의 메시지 조회 (페이지네이션 지원)
 // GetChatMessages 특정 채팅방의 메시지 조회 (페이지네이션 지원)
 func (db *RedisDB) GetChatMessages(roomID string, offset, limit int) ([]ChatMessageData, error) {
 	// 메시지 타임스탬프 키 가져오기 (정렬된 순서로)
@@ -626,7 +705,9 @@ func (db *RedisDB) GetChatMessages(roomID string, offset, limit int) ([]ChatMess
 
 	return messages, nil
 }
+*/
 
+/* ActivateChatRoom 채팅방 활성화
 // ActivateChatRoom 채팅방 활성화
 func (db *RedisDB) ActivateChatRoom(roomID string) error {
 	roomData, err := db.GetChatRoom(roomID)
@@ -775,30 +856,9 @@ func (db *RedisDB) ListActiveChatRooms() ([]ChatRoomData, error) {
 
 	return rooms, nil
 }
+*/
 
-// UpdateUserConnectionStatus 사용자 연결 상태 업데이트
-func (db *RedisDB) UpdateUserConnectionStatus(userID string, isConnected bool) error {
-	key := fmt.Sprintf("user:%s:connected", userID)
-	value := strconv.FormatBool(isConnected)
-
-	return db.client.Set(db.ctx, key, value, 0).Err()
-}
-
-// IsUserConnected 사용자 연결 상태 확인
-func (db *RedisDB) IsUserConnected(userID string) (bool, error) {
-	key := fmt.Sprintf("user:%s:connected", userID)
-	val, err := db.client.Get(db.ctx, key).Result()
-
-	if err != nil {
-		if err == redis.Nil {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return val == "true", nil
-}
-
+/* AddUserToChatRoom 사용자를 채팅방에 추가
 // AddUserToChatRoom 사용자를 채팅방에 추가
 func (db *RedisDB) AddUserToChatRoom(roomID, userID string) error {
 	roomData, err := db.GetChatRoom(roomID)
@@ -825,7 +885,9 @@ func (db *RedisDB) AddUserToChatRoom(roomID, userID string) error {
 	// 채팅방 정보 업데이트
 	return db.client.HSet(db.ctx, "chat:rooms", roomID, roomJSON).Err()
 }
+/*
 
+/*
 // RemoveUserFromChatRoom 사용자를 채팅방에서 제거
 func (db *RedisDB) RemoveUserFromChatRoom(roomID, userID string) error {
 	roomData, err := db.GetChatRoom(roomID)
@@ -860,43 +922,18 @@ func (db *RedisDB) RemoveUserFromChatRoom(roomID, userID string) error {
 	// 채팅방 정보 업데이트
 	return db.client.HSet(db.ctx, "chat:rooms", roomID, roomJSON).Err()
 }
+*/
 
+/* ScanKeys Redis의 SCAN 명령어를 사용하여 지정된 패턴의 키를 검색합니다.
 // ScanKeys Redis의 SCAN 명령어를 사용하여 지정된 패턴의 키를 검색합니다.
 func (r *RedisDB) ScanKeys(cursor uint64, pattern string, count int64) ([]string, uint64, error) {
 	cmd := r.client.Scan(r.ctx, cursor, pattern, count)
 	keys, cursor, err := cmd.Result()
 	return keys, cursor, err
 }
+*/
 
-// User 사용자 정보 구조체
-type User struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Email  string `json:"email"`
-	Area   string `json:"area"`
-	Gender string `json:"gender"`
-}
-
-// GetUser 사용자 정보 조회
-func (r *RedisDB) GetUser(userID string) (*User, error) {
-	userJSON, err := r.client.Get(r.ctx, fmt.Sprintf("user:%s:info", userID)).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, errors.New("user not found")
-		}
-		return nil, err
-	}
-
-	var user User
-	err = json.Unmarshal([]byte(userJSON), &user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
-}
-
-/*
+/* SaveUser 사용자 정보 저장
 // SaveUser 사용자 정보 저장
 func (r *RedisDB) SaveUser(user User) error {
 	userJSON, err := json.Marshal(user)
@@ -907,11 +944,13 @@ func (r *RedisDB) SaveUser(user User) error {
 	return r.client.Set(r.ctx, fmt.Sprintf("user:%s:info", user.ID), userJSON, 0).Err()
 }
 */
-/* // GetUserActiveTokens 사용자의 활성 토큰 목록 조회
+
+/* GetUserActiveTokens 사용자의 활성 토큰 목록 조회
 func (r *RedisDB) GetUserActiveTokens(userID string) ([]string, error) {
 	return r.client.SMembers(r.ctx, fmt.Sprintf("user:%s:active_tokens", userID)).Result()
 }
 */
+
 /* // CleanupExpiredTokens 만료된 토큰 정리 (스케줄러에서 호출)
 func (r *RedisDB) CleanupExpiredTokens() error {
 	// 모든 JWT 세션 조회
@@ -940,6 +979,8 @@ func (r *RedisDB) CleanupExpiredTokens() error {
 	return err
 }
 */
+
+/* AddUserToChatRoomList 사용자의 채팅룸 리스트에 룸 추가 (로그인/접속 시)
 // AddUserToChatRoomList 사용자의 채팅룸 리스트에 룸 추가 (로그인/접속 시)
 func (r *RedisDB) AddUserToChatRoomList(userID, roomID string, roomName string) error {
 	now := time.Now()
@@ -973,7 +1014,8 @@ func (r *RedisDB) AddUserToChatRoomList(userID, roomID string, roomName string) 
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
-
+*/
+/*
 // MoveRoomToTop 특정 이벤트로 인해 채팅룸을 리스트 최상단으로 이동
 func (r *RedisDB) MoveRoomToTop(userID, roomID string, eventType string, lastMessage string) error {
 	now := time.Now()
@@ -1035,7 +1077,8 @@ func (r *RedisDB) MoveRoomToTop(userID, roomID string, eventType string, lastMes
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
-
+*/
+/*
 // GetUserChatRoomList 사용자의 채팅룸 리스트 조회 (최신 순으로 정렬)
 func (r *RedisDB) GetUserChatRoomList(userID string, offset, limit int) ([]ChatRoomListItem, error) {
 	// ZSET에서 점수가 높은 순(최신순)으로 룸 ID 조회
@@ -1084,7 +1127,8 @@ func (r *RedisDB) GetUserChatRoomList(userID string, offset, limit int) ([]ChatR
 
 	return rooms, nil
 }
-
+*/
+/*
 // GetUserChatRoomListWithScores 점수와 함께 채팅룸 리스트 조회 (디버깅용)
 func (r *RedisDB) GetUserChatRoomListWithScores(userID string) (map[string]float64, error) {
 	result, err := r.client.ZRevRangeWithScores(
@@ -1104,7 +1148,8 @@ func (r *RedisDB) GetUserChatRoomListWithScores(userID string) (map[string]float
 
 	return roomScores, nil
 }
-
+*/
+/*
 // RemoveUserFromChatRoomList 사용자의 채팅룸 리스트에서 룸 제거
 func (r *RedisDB) RemoveUserFromChatRoomList(userID, roomID string) error {
 	pipe := r.client.Pipeline()
@@ -1118,7 +1163,8 @@ func (r *RedisDB) RemoveUserFromChatRoomList(userID, roomID string) error {
 	_, err := pipe.Exec(r.ctx)
 	return err
 }
-
+*/
+/*
 // UpdateRoomUnreadCount 채팅룸의 읽지 않은 메시지 수 업데이트
 func (r *RedisDB) UpdateRoomUnreadCount(userID, roomID string, unreadCount int) error {
 	// 기존 룸 정보 조회
@@ -1143,32 +1189,15 @@ func (r *RedisDB) UpdateRoomUnreadCount(userID, roomID string, unreadCount int) 
 	// 룸 정보 업데이트
 	return r.client.HSet(r.ctx, fmt.Sprintf("user:%s:chatroom_info", userID), roomID, updatedRoomJSON).Err()
 }
-
+*/
+/*
 // GetChatRoomListCount 사용자의 채팅룸 리스트 총 개수 조회
 func (r *RedisDB) GetChatRoomListCount(userID string) (int64, error) {
 	return r.client.ZCard(r.ctx, fmt.Sprintf("user:%s:chatroom_list", userID)).Result()
 }
+*/
 
-// GetUnreadTotalCount 사용자의 전체 읽지 않은 메시지 수 조회
-func (r *RedisDB) GetUnreadTotalCount(userID string) (int, error) {
-	// 모든 룸 정보 조회
-	roomsInfo, err := r.client.HGetAll(r.ctx, fmt.Sprintf("user:%s:chatroom_info", userID)).Result()
-	if err != nil {
-		return 0, err
-	}
-
-	totalUnread := 0
-	for _, roomJSON := range roomsInfo {
-		var roomItem ChatRoomListItem
-		if err := json.Unmarshal([]byte(roomJSON), &roomItem); err != nil {
-			continue
-		}
-		totalUnread += roomItem.UnreadCount
-	}
-
-	return totalUnread, nil
-}
-
+/* CleanupInactiveRooms 비활성 채팅룸 정리 (일정 기간 이상 활동이 없는 룸)
 // CleanupInactiveRooms 비활성 채팅룸 정리 (일정 기간 이상 활동이 없는 룸)
 func (r *RedisDB) CleanupInactiveRooms(userID string, inactiveDays int) error {
 	cutoffTime := time.Now().AddDate(0, 0, -inactiveDays)
@@ -1199,6 +1228,7 @@ func (r *RedisDB) CleanupInactiveRooms(userID string, inactiveDays int) error {
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
+*/
 
 // GetWebRTCConfig 사용자 로그인 시 WebRTC 설정 정보 반환
 func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
@@ -1252,7 +1282,7 @@ func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
 	return config, nil
 }
 
-
+/* SetUserWebRTCSession 사용자 WebRTC 세션 정보 저장
 // SetUserWebRTCSession 사용자 WebRTC 세션 정보 저장
 func (r *RedisDB) SetUserWebRTCSession(session UserWebRTCSession) error {
 	sessionJSON, err := json.Marshal(session)
@@ -1278,7 +1308,9 @@ func (r *RedisDB) SetUserWebRTCSession(session UserWebRTCSession) error {
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
+*/
 
+/* GetUserWebRTCSession 사용자 WebRTC 세션 정보 조회 (통화 가능한 사용자 목록 조회)
 // GetUserWebRTCSession 사용자 WebRTC 세션 정보 조회
 func (r *RedisDB) GetUserWebRTCSession(userID string) (*UserWebRTCSession, error) {
 	sessionJSON, err := r.client.HGet(r.ctx, "webrtc:sessions", userID).Result()
@@ -1297,7 +1329,9 @@ func (r *RedisDB) GetUserWebRTCSession(userID string) (*UserWebRTCSession, error
 
 	return &session, nil
 }
+*/
 
+/* GetAvailableUsersForCall 통화 가능한 사용자 목록 조회 (자신을 제외한 사용자 목록 반환)
 // GetAvailableUsersForCall 통화 가능한 사용자 목록 조회
 func (r *RedisDB) GetAvailableUsersForCall(excludeUserID string) ([]string, error) {
 	allUsers, err := r.client.SMembers(r.ctx, "webrtc:available_users").Result()
@@ -1315,7 +1349,9 @@ func (r *RedisDB) GetAvailableUsersForCall(excludeUserID string) ([]string, erro
 
 	return availableUsers, nil
 }
+*/
 
+/* UpdateUserCallStatus 사용자 통화 상태 업데이트
 // UpdateUserCallStatus 사용자 통화 상태 업데이트
 func (r *RedisDB) UpdateUserCallStatus(userID string, isInCall bool, callWith string) error {
 	session, err := r.GetUserWebRTCSession(userID)
@@ -1337,7 +1373,9 @@ func (r *RedisDB) UpdateUserCallStatus(userID string, isInCall bool, callWith st
 
 	return r.SetUserWebRTCSession(*session)
 }
+*/
 
+/* CleanupInactiveSessions 비활성 WebRTC 세션 정리
 // CleanupInactiveSessions 비활성 WebRTC 세션 정리
 func (r *RedisDB) CleanupInactiveSessions() error {
 	sessions, err := r.client.HGetAll(r.ctx, "webrtc:sessions").Result()
@@ -1364,7 +1402,9 @@ func (r *RedisDB) CleanupInactiveSessions() error {
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
+*/
 
+/* GetWebRTCStats WebRTC 관련 통계 조회
 // GetWebRTCStats WebRTC 관련 통계 조회
 func (r *RedisDB) GetWebRTCStats() (map[string]interface{}, error) {
 	pipe := r.client.Pipeline()
@@ -1408,3 +1448,4 @@ func (r *RedisDB) GetWebRTCStats() (map[string]interface{}, error) {
 
 	return stats, nil
 }
+*/

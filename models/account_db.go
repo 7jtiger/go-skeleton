@@ -1,7 +1,6 @@
 package models
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 	"time"
@@ -9,6 +8,7 @@ import (
 	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
 
 	log "ms-gateway/common/logger"
 	"ms-gateway/common/utils"
@@ -169,11 +169,7 @@ func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
 	// if err != nil {
 	// 	return fmt.Errorf("error encrypting password: %v", err)
 	// }
-
-	encEmail, err := utils.EncryptChaCha20(req.Email, key)
-	if err != nil {
-		return fmt.Errorf("error encrypting password: %v", err)
-	}
+	// encEmail, err := utils.EncryptChaCha20(req.Email, key)
 
 	encName, err := utils.EncryptChaCha20(req.Name, key)
 	if err != nil {
@@ -181,7 +177,8 @@ func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
 	}
 
 	query := "INSERT INTO user_info (sid, uid, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = p.conndb.Exec(query, req.ID, req.Uid, encEmail, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	_, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	// _, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
 	}
@@ -199,7 +196,7 @@ func (p *AccountDB) updatedLastest(sid string) error {
 	return nil
 }
 
-func (p *AccountDB) LoginUser(req ptl.LoginReq, hsedPw []byte) (*ptl.UserInfoResp, error) {
+func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, error) {
 	query := "SELECT uid, pw_hash, nick FROM user_info WHERE sid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, req.ID)
 	var pwHash, uid, nick string
@@ -211,9 +208,14 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, hsedPw []byte) (*ptl.UserInfoRes
 		return nil, fmt.Errorf("error querying user: %v", err)
 	}
 
-	if !bytes.Equal([]byte(pwHash), hsedPw) {
-		return nil, fmt.Errorf("password does not match")
+	err = bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(pw))
+	if err != nil {
+		return nil, fmt.Errorf("password does not match: %v", err)
 	}
+
+	// if !bytes.Equal([]byte(pwHash), hsedPw) {
+	// 	return nil, fmt.Errorf("password does not match")
+	// }
 
 	err = p.updatedLastest(req.ID)
 	if err != nil {
