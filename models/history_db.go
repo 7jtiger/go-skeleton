@@ -112,8 +112,9 @@ func (p *HistoryDB) GetNotiAllList(uid uint64) (*[]ptl.Noti, error) {
 	return &notiList, nil
 }
 
-func (p *HistoryDB) GetNotiCount(uid uint64) (int, error) {
-	rows, err := p.conndb.Query("SELECT COUNT(*) FROM noti_his WHERE uid = ? AND stat = 0", uid)
+func (p *HistoryDB) GetNewNotiCount(uid uint64) (int, error) {
+	//stat = 0 : default, stat = 1 : send, stat = 2 : read, stat = 3 delete
+	rows, err := p.conndb.Query("SELECT COUNT(*) FROM noti_his WHERE uid = ? AND stat = 1", uid)
 	if err != nil {
 		return 0, err
 	}
@@ -213,4 +214,21 @@ func (p *HistoryDB) GetAnnouncementDetail(idx int) (*ptl.Announcement, error) {
 	}
 
 	return &a, nil
+}
+
+func (p *HistoryDB) GetNewMsgCount(uid uint64) (int, error) {
+	//stat = 0 : default, stat = 1 : send, stat = 2 : read, stat = 3 delete
+	rows, err := p.conndb.Query("SELECT COUNT(*) FROM msg_his WHERE read_uid = ? AND stat = 1", uid)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var count int
+	err = rows.Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

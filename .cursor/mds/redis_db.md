@@ -80,15 +80,17 @@
 - `CleanupInactiveRooms()`: Function to clean up chat rooms inactive for certain period
 
 ## WebRTC Management Functions (STUN only)
-- `GetWebRTCConfig()`: Function to return WebRTC configuration with Google STUN servers only (no TURN)
-- `SetUserWebRTCSession()`: Function to save user WebRTC session information and update active user list
-- `GetUserWebRTCSession()`: Function to retrieve user WebRTC session information
-- `GetAvailableUsersForCall()`: Function to retrieve list of users available for calls (excluding self)
-- `UpdateUserCallStatus()`: Function to update user's call status
-- `CleanupInactiveSessions()`: Function to clean up WebRTC sessions inactive for more than 30 minutes
-- `GetWebRTCStats()`: Function to retrieve WebRTC-related statistics (session count, active users, ongoing calls)
+- `GetWebRTCConfig()`: Function to return WebRTC configuration with Google STUN servers only (no TURN) - **ACTIVE**
+- `SetUserWebRTCSession()`: Function to save user WebRTC session information and update active user list - **COMMENTED OUT** (but used in account.go)
+- `GetUserWebRTCSession()`: Function to retrieve user WebRTC session information - **COMMENTED OUT** (but used in account.go)
+- `GetAvailableUsersForCall()`: Function to retrieve list of users available for calls (excluding self) - **COMMENTED OUT** (but used in account.go)
+- `UpdateUserCallStatus()`: Function to update user's call status - **COMMENTED OUT** (but used in account.go)
+- `CleanupInactiveSessions()`: Function to clean up WebRTC sessions inactive for more than 30 minutes - **COMMENTED OUT**
+- `GetWebRTCStats()`: Function to retrieve WebRTC-related statistics (session count, active users, ongoing calls) - **COMMENTED OUT** (but used in account.go)
 
-**Note**: TURN server credential functions removed to eliminate relay traffic overhead.
+**Note**: 
+- TURN server credential functions removed to eliminate relay traffic overhead.
+- WebRTC session management functions are currently commented out in redis_db.go but are still being called from account.go. These functions need to be uncommented or alternative implementation is required.
 
 ---
 
@@ -124,8 +126,9 @@
 
 ---
 *Created: 2025-09-15*
-*Updated: 2025-11-07*
+*Updated: 2025-11-30*
 *File Location: /home/jino/go/src/ms-gateway/models/redis_db.go*
 *Total Active Functions: 50 (TURN functions removed)*
-*Total Lines: ~1,250*
+*Total Lines: ~1,450*
 *Note: TURN server support removed on 2025-11-07 to avoid relay traffic overhead*
+*Note: WebRTC session functions are commented out but still used in account.go - needs implementation*

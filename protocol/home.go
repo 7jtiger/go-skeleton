@@ -21,6 +21,12 @@ type Story struct {
 	StoryPic string `json:"storyPic"`
 }
 
+type Pre7Story struct {
+	Idx  int    `json:"idx"`
+	Nick string `json:"nick"`
+	Pic1 string `json:"pic1"`
+}
+
 type VoiceChat struct {
 	ID      string `json:"id"`
 	VOID    string `json:"void"`

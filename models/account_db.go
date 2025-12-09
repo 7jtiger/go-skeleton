@@ -112,7 +112,9 @@ func (p *AccountDB) getAccountQuery(query string, params ...interface{}) (*sql.R
 
 	return rows, nil
 }
+*/
 
+/*
 func (p *AccountDB) getCounterQuery(query string, params ...interface{}) (int, error) {
 	var count int
 	err := p.conndb.QueryRow(query, params...).Scan(&count)
@@ -121,7 +123,9 @@ func (p *AccountDB) getCounterQuery(query string, params ...interface{}) (int, e
 	}
 	return count, nil
 }
+*/
 
+/*
 func (p *AccountDB) updateAccount(query string, params ...interface{}) error {
 	_, err := p.conndb.Exec(query, params...)
 	if err != nil {
@@ -400,4 +404,59 @@ func (p *AccountDB) DeleteUser(id string) error {
 	}
 
 	return nil
+}
+
+//==== story =================================================================================
+/*
+CREATE TABLE `story` (
+  `idx` int unsigned NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) NOT NULL,
+  `body` varchar(256) NOT NULL,
+  `pic1` varchar(145) DEFAULT NULL,
+  `pic2` varchar(145) DEFAULT NULL,
+  `pic3` varchar(145) DEFAULT NULL,
+  `pic4` varchar(145) DEFAULT NULL,
+  `pic5` varchar(145) DEFAULT NULL,
+  `stat` tinyint DEFAULT NULL COMMENT 'stat = 0 공개, stat = 1 비공객, stat = 2 유료공개, stat=4 삭제',
+  `at_create` datetime DEFAULT CURRENT_TIMESTAMP,
+  `at_update` datetime DEFAULT CURRENT_TIMESTAMP,
+  `qt_good` int DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+===============================================================================
+CREATE TABLE `story_comment` (
+  `idx` int unsigned NOT NULL AUTO_INCREMENT,
+  `str_idx` int unsigned NOT NULL,
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) DEFAULT NULL,
+  `body` varchar(256) DEFAULT NULL,
+  `stat` tinyint DEFAULT '0' COMMENT 'stat = 0 정상, stat = 1 삭제, stat = 2 신고',
+  `at_create` datetime DEFAULT CURRENT_TIMESTAMP,
+  `at_update` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`idx`,`str_idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+*/
+
+func (p *AccountDB) GetStory7List(uid uint64) (*[]ptl.Pre7Story, error) {
+	query := "SELECT idx, nick, pic1 FROM story WHERE stat = 0 ORDER BY at_create DESC LIMIT 7"
+	rows, err := p.conndb.Query(query, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pre7Story []ptl.Pre7Story
+	for rows.Next() {
+		var s ptl.Pre7Story
+		err := rows.Scan(&s.Idx, &s.Nick, &s.Pic1)
+		if err != nil {
+			return nil, err
+		}
+		pre7Story = append(pre7Story, s)
+	}
+
+	return &pre7Story, nil
 }

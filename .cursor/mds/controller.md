@@ -46,7 +46,8 @@
 
 ### User Authentication Functions
 - `RegistUserInfo()`: Registers new user with encrypted data, generates default profile settings, and validates required fields
-- `LoginUser()`: Authenticates user login, creates JWT token, stores session in Redis, and initializes WebRTC session
+- `LoginUser()`: Authenticates user login, creates JWT access/refresh tokens, stores session in Redis, initializes WebRTC session with device/network info, sets x-meta header, and returns WebRTC configuration
+- `genLoginUserToken()`: Internal function that generates JWT access token (24h) and refresh token (14d), stores them in Redis AUTH:ACCESS and AUTH:REFRESH hashes with user information
 - `LogoutUser()`: Processes user logout, deletes JWT token from Redis, and updates last access time
 
 ### Account Management Functions
@@ -64,11 +65,11 @@
 - `ModifyMainPic()`: Updates user main profile picture with file upload validation (placeholder implementation)
 
 ### WebRTC Functions
-- `GetWebRTCConfig()`: Retrieves WebRTC configuration for authenticated user from Redis
-- `GetAvailableUsers()`: Returns list of users available for video calls based on current status
-- `UpdateCallStatus()`: Updates user's call status (in call or available) with optional call partner info
-- `UpdateWebRTCHeartbeat()`: Updates WebRTC session heartbeat to maintain active session status
-- `GetWebRTCStats()`: Retrieves WebRTC system statistics for monitoring and admin purposes
+- `GetWebRTCConfig()`: Retrieves WebRTC configuration for authenticated user from Redis (JWT required)
+- `GetAvailableUsers()`: Returns list of users available for video calls based on current status (JWT required, excludes self)
+- `UpdateCallStatus()`: Updates user's call status (isInCall, callWith) in Redis WebRTC session (JWT required)
+- `UpdateWebRTCHeartbeat()`: Updates WebRTC session heartbeat, device info, and network info to maintain active session (JWT required)
+- `GetWebRTCStats()`: Retrieves WebRTC system statistics for monitoring and admin purposes (total sessions, available users, active calls)
 
 ### STUN Server Testing Functions
 - `TestStunServers()`: Tests connectivity to recommended STUN servers and returns connection report
@@ -275,5 +276,5 @@
 
 ---
 *Created: 2025-09-15*
-*Last Updated: 2025-11-05*
+*Last Updated: 2025-11-30*
 *File Location: /home/jino/go/src/ms-gateway/controller/*

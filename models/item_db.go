@@ -13,6 +13,18 @@ import (
 	"ms-gateway/conf"
 )
 
+/*
+CREATE TABLE `evt_chkin` (
+	`idx` int NOT NULL,
+	`uid` bigint unsigned NOT NULL,
+	`seq_count` int DEFAULT NULL,
+	`at_lastupd` int DEFAULT NULL,
+	PRIMARY KEY (`idx`),
+	UNIQUE KEY `idx_UNIQUE` (`idx`),
+	UNIQUE KEY `uid_UNIQUE` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+*/
+
 type ItemDB struct {
 	conndb *sql.DB
 	cfg    *conf.Config
@@ -89,4 +101,38 @@ func (p *ItemDB) heartbeat() {
 			}
 		}
 	}
+}
+
+func (p *ItemDB) GetCheckIn(uid uint64) (bool, error) {
+	date := time.Now().Format("2006-01-02")
+	row := p.conndb.QueryRow("SELECT COUNT(*) FROM evt_chkin WHERE uid = ? AND at_lastupd = ?", uid, date)
+	var count int
+	err := row.Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
+//====terms==========================================================================
+/*
+CREATE TABLE `terms_info` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `privacy_url` varchar(145) DEFAULT NULL,
+  `terms_url` varchar(145) DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+*/
+
+func (p *ItemDB) GetTermsInfo() (string, string, error) {
+	row := p.conndb.QueryRow("SELECT privacy_url, terms_url FROM terms_info")
+	var privacyUrl, termsUrl string
+	err := row.Scan(&privacyUrl, &termsUrl)
+	if err != nil {
+		return "", "", err
+	}
+	return privacyUrl, termsUrl, nil
 }

@@ -371,6 +371,16 @@ func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 */
 // handleConnection WebSocket 연결 처리
 // func (p *SignalingController) HandleConnection(w http.ResponseWriter, r *http.Request) {
+
+// HandleConnection godoc
+// @Summary Handles WebSocket connection and upgrades it to WebSocket protocol
+// @Description Handles WebSocket connection and upgrades it to WebSocket protocol and puts the client into the waiting room or chat room
+// @Tags Signaling
+// @Accept json
+// @Produce json
+// @Success 101 {object} Message "Switching Protocols - WebSocket connection successful"
+// @Router /webrtc/v01/ws [get]
+// @Param userId query string false "UID"
 func (p *SignalingController) HandleConnection(c *gin.Context) {
 	// 연결 수 제한 확인
 	if atomic.LoadInt64(&p.totalConn) >= MAX_VDWS_CONNECT {

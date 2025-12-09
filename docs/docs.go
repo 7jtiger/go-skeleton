@@ -1144,6 +1144,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/home/v01/mdata": {
+            "get": {
+                "security": [
+                    {
+                        "JwtAuth": []
+                    }
+                ],
+                "description": "Retrieves main information to be displayed on the home screen (new notifications, message count, check-in status, video/voice chat lists, story list, terms links)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Home"
+                ],
+                "summary": "Retrieves main information to be displayed on the home screen",
+                "responses": {
+                    "200": {
+                        "description": "Home screen information",
+                        "schema": {
+                            "$ref": "#/definitions/controller.HomeData"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication failed",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/webrtc/v01/available-users": {
             "get": {
                 "description": "Get list of users available for video call",
@@ -1339,36 +1385,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/webrtc/v01/test-stun": {
-            "get": {
-                "description": "Test STUN server connectivity and get public IP",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "webrtc"
-                ],
-                "summary": "Test STUN server connectivity",
-                "responses": {
-                    "200": {
-                        "description": "STUN test results",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
         "/webrtc/v01/test-stun-server": {
             "post": {
                 "description": "Test connectivity to a specific STUN server",
@@ -1414,9 +1430,90 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/webrtc/v01/ws": {
+            "get": {
+                "description": "Handles WebSocket connection and upgrades it to WebSocket protocol and puts the client into the waiting room or chat room",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signaling"
+                ],
+                "summary": "Handles WebSocket connection and upgrades it to WebSocket protocol",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UID",
+                        "name": "userId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols - WebSocket connection successful",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Message"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "controller.HomeData": {
+            "type": "object",
+            "properties": {
+                "checkIn": {
+                    "type": "boolean"
+                },
+                "msgQuantity": {
+                    "type": "integer"
+                },
+                "notiNew": {
+                    "type": "integer"
+                },
+                "policyLink": {
+                    "type": "string"
+                },
+                "storyList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.Pre7Story"
+                    }
+                },
+                "termsLink": {
+                    "type": "string"
+                },
+                "videoChatList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.WTRoomUser"
+                    }
+                },
+                "voiceChatList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.WTRoomUser"
+                    }
+                }
+            }
+        },
+        "controller.Message": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.STUNTestResult": {
             "type": "object",
             "properties": {
@@ -1488,11 +1585,8 @@ const docTemplate = `{
         "protocol.ICEServer": {
             "type": "object",
             "properties": {
-                "credential": {
-                    "type": "string"
-                },
                 "type": {
-                    "description": "stun, turn",
+                    "description": "stun only",
                     "type": "string"
                 },
                 "urls": {
@@ -1500,9 +1594,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "username": {
-                    "type": "string"
                 }
             }
         },
@@ -1558,6 +1649,20 @@ const docTemplate = `{
                     "$ref": "#/definitions/protocol.ResultCode"
                 },
                 "resultString": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.Pre7Story": {
+            "type": "object",
+            "properties": {
+                "idx": {
+                    "type": "integer"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "pic1": {
                     "type": "string"
                 }
             }
@@ -1710,6 +1815,44 @@ const docTemplate = `{
                 }
             }
         },
+        "protocol.WTRoomUser": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "did": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "intro": {
+                    "type": "string"
+                },
+                "mainPic": {
+                    "type": "string"
+                },
+                "newStat": {
+                    "type": "boolean"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "sid": {
+                    "type": "string"
+                },
+                "thumbPic": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "string"
+                }
+            }
+        },
         "protocol.WebRTCConfig": {
             "type": "object",
             "properties": {
@@ -1730,9 +1873,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "turnCredential": {
-                    "type": "string"
                 }
             }
         }

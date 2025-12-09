@@ -59,7 +59,7 @@ func (p *NotiController) GetNoti(uid uint64) (*[]ptl.Noti, error) {
 }
 
 func (p *NotiController) GetNotiNewCount(uid uint64) (int, error) {
-	count, err := p.hdb.GetNotiCount(uid)
+	count, err := p.hdb.GetNewNotiCount(uid)
 	if err != nil {
 		return 0, err
 	}

@@ -12,8 +12,9 @@
 
 ## User Authentication Functions
 - `RegistUserInfo()`: Function that registers new users and sets up default profile information
-- `LoginUser()`: Function that handles user login, generates JWT tokens, and manages sessions
-- `LogoutUser()`: Function that handles user logout and deletes JWT tokens
+- `LoginUser()`: Function that handles user login, generates JWT tokens, stores session in Redis, initializes WebRTC session, and returns WebRTC configuration
+- `genLoginUserToken()`: Internal function that generates JWT access/refresh tokens and stores them in Redis with user information
+- `LogoutUser()`: Function that handles user logout, deletes JWT token from Redis, and updates last access time
 
 ## User Account Management Functions
 - `LeaveUser()`: Function that handles user withdrawal
@@ -39,4 +40,8 @@
 ## STUN Server Test Functions
 - `TestStunServers()`: Function that tests connectivity of default STUN servers and checks public IP
 - `TestSpecificStunServer()`: Function that tests connectivity of specific STUN server
+
+---
+
+*Last Updated: 2025-11-30*
 

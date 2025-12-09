@@ -97,3 +97,17 @@ type LoginUserResp struct {
 	UID          string       `json:"uid"`
 	WebRTCConfig WebRTCConfig `json:"wrtc"`
 }
+
+type WTRoomUser struct {
+	UID      string `json:"uid"`
+	SID      string `json:"sid"`
+	DID      string `json:"did"`
+	MainPic  string `json:"mainPic"`
+	ThumbPic string `json:"thumbPic"`
+	Intro    string `json:"intro"`
+	Gender   string `json:"gender"`
+	Nick     string `json:"nick"`
+	Area     string `json:"area"`
+	Age      string `json:"age"`
+	NewStat  bool   `json:"newStat"`
+}

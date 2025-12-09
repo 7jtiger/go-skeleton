@@ -171,6 +171,7 @@ func (p *Router) JwtAuth() gin.HandlerFunc {
 
 		// JWT 토큰 유효성 검증 (HSET에서 조회)
 		userID, err := p.rdb.HGetJWTAccess(tokens[1])
+		logger.Info("userID", userID)
 		if err != nil {
 			p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid JWT")
 			return
@@ -337,7 +338,14 @@ func (p *Router) AesDecrypt() gin.HandlerFunc {
 		}
 
 		// 2. AES 키 준비
-		var aesKey = []byte(p.cfg.Server.BaseKey)
+		// var aesKey = []byte(p.cfg.Server.BaseKey)
+		aesKey, err := hex.DecodeString(p.cfg.Server.BaseKey)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to decode AES key")
+
+			return
+		}
+
 		// aesKey, err := hex.DecodeString(p.cfg.Server.BaseKey)
 		// if err != nil {
 		// 	p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to decode AES key")

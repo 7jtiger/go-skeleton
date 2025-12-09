@@ -268,13 +268,19 @@ func (r *RedisDB) HDelMember(key string) error {
 }
 */
 // SetJWTToken JWT 토큰과 세션 정보를 HSET에 저장
-func (r *RedisDB) HSetJWTAccess(token, userInfo string) error {
+
+func (r *RedisDB) HSetJWTAccess(token string, userInfo *ptl.UserInfoResp) error {
+	userInfoJSON, err := json.Marshal(userInfo)
+	if err != nil {
+		return err
+	}
+
 	options := &redis.HSetEXOptions{
 		ExpirationType: redis.HSetEXExpirationEX,
 		ExpirationVal:  86400 * 2, //sec //1day
 	}
 
-	if err := r.client.HSetEXWithArgs(r.ctx, "AUTH:ACCESS", options, token, userInfo).Err(); err != nil {
+	if err := r.client.HSetEXWithArgs(r.ctx, "AUTH:ACCESS", options, token, string(userInfoJSON)).Err(); err != nil {
 		return err
 	}
 
@@ -282,22 +288,34 @@ func (r *RedisDB) HSetJWTAccess(token, userInfo string) error {
 }
 
 // ValidateJWTToken JWT 토큰 유효성 검증 (간단 버전)
-func (r *RedisDB) HGetJWTAccess(token string) (string, error) {
+func (r *RedisDB) HGetJWTAccess(token string) (*ptl.UserInfoResp, error) {
 	session, err := r.client.HGet(r.ctx, "AUTH:ACCESS", token).Result()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return session, nil
+
+	var userInfo ptl.UserInfoResp
+	err = json.Unmarshal([]byte(session), &userInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	return &userInfo, nil
 }
 
 // SetJWTToken JWT 토큰과 세션 정보를 HSET에 저장
-func (r *RedisDB) HSetJWTRefresh(token, userInfo string) error {
+func (r *RedisDB) HSetJWTRefresh(token string, userInfo *ptl.UserInfoResp) error {
+	userInfoJSON, err := json.Marshal(userInfo)
+	if err != nil {
+		return err
+	}
+
 	options := &redis.HSetEXOptions{
 		ExpirationType: redis.HSetEXExpirationEX,
 		ExpirationVal:  86400 * 14, //sec //14day
 	}
 
-	if err := r.client.HSetEXWithArgs(r.ctx, "AUTH:REFRESH", options, token, userInfo).Err(); err != nil {
+	if err := r.client.HSetEXWithArgs(r.ctx, "AUTH:REFRESH", options, token, string(userInfoJSON)).Err(); err != nil {
 		return err
 	}
 
@@ -305,12 +323,19 @@ func (r *RedisDB) HSetJWTRefresh(token, userInfo string) error {
 }
 
 // ValidateJWTToken JWT 토큰 유효성 검증 (간단 버전)
-func (r *RedisDB) HGetJWTRefresh(token string) (string, error) {
+func (r *RedisDB) HGetJWTRefresh(token string) (*ptl.UserInfoResp, error) {
 	session, err := r.client.HGet(r.ctx, "AUTH:REFRESH", token).Result()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return session, nil
+
+	var userInfo ptl.UserInfoResp
+	err = json.Unmarshal([]byte(session), &userInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	return &userInfo, nil
 }
 
 // SetJWTToken JWT 토큰과 세션 정보를 HSET에 저장
@@ -387,6 +412,89 @@ func (r *RedisDB) HSetUserInfo(user *ptl.UserInfoResp) error {
 		return err
 	}
 
+	return nil
+}
+
+func (r *RedisDB) HSetJoinWTRoom(userID string, user *ptl.WTRoomUser) error {
+	options := &redis.HSetEXOptions{
+		ExpirationType: redis.HSetEXExpirationEX,
+		ExpirationVal:  86400 * 1, //sec //1day
+	}
+
+	userJSON, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+
+	if err := r.client.HSetEXWithArgs(r.ctx, "WTRoom:User", options, userID, string(userJSON)).Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *RedisDB) HGetWTRoomUser(userID string) (*ptl.WTRoomUser, error) {
+	res, err := r.client.HGet(r.ctx, "WTRoom:User", userID).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var user ptl.WTRoomUser
+	err = json.Unmarshal([]byte(res), &user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *RedisDB) HGetJoinWTRoomList() (*[]ptl.WTRoomUser, error) {
+	res, err := r.client.HGetAll(r.ctx, "WTRoom:User").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]ptl.WTRoomUser, 0, len(res))
+	for _, userJSON := range res {
+		var user ptl.WTRoomUser
+		err = json.Unmarshal([]byte(userJSON), &user)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return &users, nil
+}
+
+func (r *RedisDB) HGetJoinWTRoomPre7List() (*[]ptl.WTRoomUser, error) {
+	res, err := r.client.HGetAll(r.ctx, "WTRoom:User").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	i := 0
+	users := make([]ptl.WTRoomUser, 0, 7)
+	for _, userJSON := range res {
+		if i >= 7 {
+			break
+		}
+		var user ptl.WTRoomUser
+		err = json.Unmarshal([]byte(userJSON), &user)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+		i += 1
+	}
+
+	return &users, nil
+}
+
+func (r *RedisDB) HDeleteJoinWTRoom(userID string) error {
+	if err := r.client.HDel(r.ctx, "WTRoom:User", userID).Err(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -510,6 +618,78 @@ func (r *RedisDB) GetUnreadTotalCount(userID string) (int, error) {
 	}
 
 	return totalUnread, nil
+}
+
+// GetWebRTCConfig 사용자 로그인 시 WebRTC 설정 정보 반환
+func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
+	// TODO: 실제 구현에서는 conf.Config를 받아와야 함
+	// 현재는 하드코딩된 기본값 사용
+
+	// 기본 STUN 서버 구성 (Google STUN 서버들)
+	baseStunServers := []string{
+		"stun:stun.l.google.com:19302",
+		"stun:stun1.l.google.com:19302",
+		"stun:stun2.l.google.com:19302",
+		"stun:stun3.l.google.com:19302",
+		"stun:stun4.l.google.com:19302",
+	}
+
+	// ICE 서버 구성
+	iceServers := make([]ptl.ICEServer, 0, len(baseStunServers)+1)
+
+	// STUN 서버들 추가
+	for _, stunUrl := range baseStunServers {
+		iceServers = append(iceServers, ptl.ICEServer{
+			URLs: []string{stunUrl},
+			Type: "stun",
+		})
+	}
+
+	config := &ptl.WebRTCConfig{
+		ICEServers:      iceServers,
+		SignalingServer: "ws://localhost:8080/ws", // TODO: 환경별 동적 설정 필요
+		StunServers:     baseStunServers,
+		MediaSettings: ptl.MediaConfig{
+			Video: ptl.VideoConfig{
+				Enabled: true,
+				// Width:   1920,
+				// Height:  1080,
+				Width:      1280,
+				Height:     720,
+				FrameRate:  30,
+				MaxBitrate: 2000000, // 2Mbps
+				// MaxBitrate: 8000000, // 2Mbps
+			},
+			Audio: ptl.AudioConfig{
+				Enabled:          true,
+				EchoCancellation: true,
+				NoiseSuppression: true,
+				AutoGainControl:  true,
+				MaxBitrate:       96000, // 96kbps
+				// MaxBitrate:       128000, // 128kbps
+			},
+		},
+	}
+
+	/*
+		MediaSettings: MediaConfig{
+			Video: VideoConfig{
+				Enabled:    true,
+				Width:      854,    // 480p 해상도
+				Height:	    480,     // 480p 해상도
+				FrameRate:  24,     // 24fps (영화 표준, 데이터 절약)
+				MaxBitrate: 1500000, // 1.5Mbps
+			},
+			Audio: AudioConfig{
+				Enabled:          true,
+				EchoCancellation: true,
+				NoiseSuppression: true,
+				AutoGainControl:  true,
+				MaxBitrate:       64000,  // 64kbps (전화 품질 수준)
+			},
+		}
+	*/
+	return config, nil
 }
 
 /* SetChatRoom 채팅방 정보 저장
@@ -1229,58 +1409,6 @@ func (r *RedisDB) CleanupInactiveRooms(userID string, inactiveDays int) error {
 	return err
 }
 */
-
-// GetWebRTCConfig 사용자 로그인 시 WebRTC 설정 정보 반환
-func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
-	// TODO: 실제 구현에서는 conf.Config를 받아와야 함
-	// 현재는 하드코딩된 기본값 사용
-
-	// 기본 STUN 서버 구성 (Google STUN 서버들)
-	baseStunServers := []string{
-		"stun:stun.l.google.com:19302",
-		"stun:stun1.l.google.com:19302",
-		"stun:stun2.l.google.com:19302",
-		"stun:stun3.l.google.com:19302",
-		"stun:stun4.l.google.com:19302",
-	}
-
-	// ICE 서버 구성
-	iceServers := make([]ptl.ICEServer, 0, len(baseStunServers)+1)
-
-	// STUN 서버들 추가
-	for _, stunUrl := range baseStunServers {
-		iceServers = append(iceServers, ptl.ICEServer{
-			URLs: []string{stunUrl},
-			Type: "stun",
-		})
-	}
-
-	config := &ptl.WebRTCConfig{
-		ICEServers:      iceServers,
-		SignalingServer: "ws://localhost:8080/ws", // TODO: 환경별 동적 설정 필요
-		StunServers:     baseStunServers,
-		MediaSettings: ptl.MediaConfig{
-			Video: ptl.VideoConfig{
-				Enabled: true,
-				Width:   1920,
-				Height:  1080,
-				// Width:      1280,
-				// Height:     720,
-				FrameRate:  30,
-				MaxBitrate: 8000000, // 2Mbps
-			},
-			Audio: ptl.AudioConfig{
-				Enabled:          true,
-				EchoCancellation: true,
-				NoiseSuppression: true,
-				AutoGainControl:  true,
-				MaxBitrate:       128000, // 128kbps
-			},
-		},
-	}
-
-	return config, nil
-}
 
 /* SetUserWebRTCSession 사용자 WebRTC 세션 정보 저장
 // SetUserWebRTCSession 사용자 WebRTC 세션 정보 저장

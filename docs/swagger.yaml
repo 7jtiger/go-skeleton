@@ -1,4 +1,37 @@
 definitions:
+  controller.HomeData:
+    properties:
+      checkIn:
+        type: boolean
+      msgQuantity:
+        type: integer
+      notiNew:
+        type: integer
+      policyLink:
+        type: string
+      storyList:
+        items:
+          $ref: '#/definitions/protocol.Pre7Story'
+        type: array
+      termsLink:
+        type: string
+      videoChatList:
+        items:
+          $ref: '#/definitions/protocol.WTRoomUser'
+        type: array
+      voiceChatList:
+        items:
+          $ref: '#/definitions/protocol.WTRoomUser'
+        type: array
+    type: object
+  controller.Message:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      type:
+        type: string
+    type: object
   controller.STUNTestResult:
     properties:
       error:
@@ -46,17 +79,13 @@ definitions:
     type: object
   protocol.ICEServer:
     properties:
-      credential:
-        type: string
       type:
-        description: stun, turn
+        description: stun only
         type: string
       urls:
         items:
           type: string
         type: array
-      username:
-        type: string
     type: object
   protocol.LoginReq:
     properties:
@@ -92,6 +121,15 @@ definitions:
       result:
         $ref: '#/definitions/protocol.ResultCode'
       resultString:
+        type: string
+    type: object
+  protocol.Pre7Story:
+    properties:
+      idx:
+        type: integer
+      nick:
+        type: string
+      pic1:
         type: string
     type: object
   protocol.RegistReq:
@@ -192,6 +230,31 @@ definitions:
       width:
         type: integer
     type: object
+  protocol.WTRoomUser:
+    properties:
+      age:
+        type: string
+      area:
+        type: string
+      did:
+        type: string
+      gender:
+        type: string
+      intro:
+        type: string
+      mainPic:
+        type: string
+      newStat:
+        type: boolean
+      nick:
+        type: string
+      sid:
+        type: string
+      thumbPic:
+        type: string
+      uid:
+        type: string
+    type: object
   protocol.WebRTCConfig:
     properties:
       iceServers:
@@ -206,8 +269,6 @@ definitions:
         items:
           type: string
         type: array
-      turnCredential:
-        type: string
     type: object
 info:
   contact: {}
@@ -957,6 +1018,37 @@ paths:
       summary: Content test endpoint
       tags:
       - content
+  /home/v01/mdata:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves main information to be displayed on the home screen (new
+        notifications, message count, check-in status, video/voice chat lists, story
+        list, terms links)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Home screen information
+          schema:
+            $ref: '#/definitions/controller.HomeData'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Authentication failed
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      security:
+      - JwtAuth: []
+      summary: Retrieves main information to be displayed on the home screen
+      tags:
+      - Home
   /webrtc/v01/available-users:
     get:
       consumes:
@@ -1085,26 +1177,6 @@ paths:
       summary: Get WebRTC statistics
       tags:
       - webrtc
-  /webrtc/v01/test-stun:
-    get:
-      consumes:
-      - application/json
-      description: Test STUN server connectivity and get public IP
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: STUN test results
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Test STUN server connectivity
-      tags:
-      - webrtc
   /webrtc/v01/test-stun-server:
     post:
       consumes:
@@ -1135,4 +1207,25 @@ paths:
       summary: Test specific STUN server
       tags:
       - webrtc
+  /webrtc/v01/ws:
+    get:
+      consumes:
+      - application/json
+      description: Handles WebSocket connection and upgrades it to WebSocket protocol
+        and puts the client into the waiting room or chat room
+      parameters:
+      - description: UID
+        in: query
+        name: userId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols - WebSocket connection successful
+          schema:
+            $ref: '#/definitions/controller.Message'
+      summary: Handles WebSocket connection and upgrades it to WebSocket protocol
+      tags:
+      - Signaling
 swagger: "2.0"

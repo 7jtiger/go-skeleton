@@ -8,14 +8,42 @@
 - `ctl *Controller`: 메인 컨트롤러 참조
 - `cfg *conf.Config`: 설정 정보
 - `rep *models.Repositories`: 데이터베이스 리포지토리
-- `clients map[string]*Client`: 연결된 클라이언트 맵 (userId -> Client)
-- `clientsMux sync.RWMutex`: 클라이언트 맵 동기화용 뮤텍스
+- `rooms map[string]*VDRoom`: 방 맵 (roomId -> VDRoom)
+- `roomsMu sync.RWMutex`: 방 맵 동기화용 뮤텍스
+- `waitingRoom *WaitingRoom`: 대기방 (통화 요청 전 대기하는 사용자들)
 - `upgrader websocket.Upgrader`: WebSocket 업그레이더
+- `messagePool sync.Pool`: 메시지 재사용을 위한 풀
+- `totalConn int64`: 전체 연결 수 (atomic)
+- `wrkQueue chan WorkItem`: 메시지 처리 워커 큐
+- `brcQueue chan *BroadcastJob`: 브로드캐스트 작업 큐
+- `ctx context.Context`: 컨텍스트
+- `cancel context.CancelFunc`: 취소 함수
 
-#### Client struct
-- `UserID string`: 사용자 ID
-- `Conn *websocket.Conn`: WebSocket 연결
-- `Send chan []byte`: 송신 메시지 채널
+#### VDRoom struct
+- `Name string`: 방 이름
+- `ID int64`: 방 ID
+- `Clients map[*WSClient]bool`: 클라이언트 맵
+- `UserNames map[*WSClient]string`: 클라이언트 -> 사용자 이름 매핑
+- `Broadcast chan *BroadcastMessage`: 브로드캐스트 채널
+- `Unregister chan *WSClient`: 클라이언트 해제 채널
+- `mu sync.RWMutex`: 동기화 뮤텍스
+- `createdAt time.Time`: 생성 시간
+- `lastActivity time.Time`: 마지막 활동 시간
+
+#### WSClient struct
+- `conn *websocket.Conn`: WebSocket 연결
+- `send chan []byte`: 송신 버퍼
+- `room *VDRoom`: 속한 방 (nil이면 대기방)
+- `userName string`: 사용자 이름
+- `userID string`: 사용자 ID
+- `mu sync.Mutex`: 동기화 뮤텍스
+- `lastSeen time.Time`: 마지막 활동 시간
+
+#### WaitingRoom struct
+- `Clients map[string]*WSClient`: userId -> WSClient 맵
+- `mu sync.RWMutex`: 동기화 뮤텍스
+- `createdAt time.Time`: 생성 시간
+- `lastActivity time.Time`: 마지막 활동 시간
 
 #### SignalingMessage struct
 - `Type string`: 메시지 타입 (offer/answer/ice-candidate/hangup/user-list/error)
@@ -30,66 +58,90 @@
 ### NewSignalingController(ctl *Controller, rep *models.Repositories) (*SignalingController, error)
 - 시그널링 컨트롤러 인스턴스 생성
 - WebSocket Upgrader 초기화 (CORS 허용)
-- 클라이언트 맵 초기화
+- 방 맵 및 대기방 초기화
+- 메시지 풀, 워커 큐, 브로드캐스트 큐 초기화
+- NUM_WORKERS(50)개의 메시지 처리 워커 고루틴 시작
+- NUM_BRC_WORKERS(15)개의 브로드캐스트 워커 고루틴 시작
+- 방 정리 고루틴(roomCleaner) 시작
 
 ---
 
 ## WebSocket 연결 관리 함수
 
-### HandleWebSocket(c *gin.Context)
-- WebSocket 연결 요청 처리
-- `userId` 쿼리 파라미터 검증
+### HandleConnection(c *gin.Context)
+- WebSocket 연결 요청 처리 (최대 연결 수 제한: MAX_VDWS_CONNECT = 25000)
 - WebSocket 프로토콜로 업그레이드
+- 첫 메시지로 "join-waiting" 또는 "join" 메시지 대기 (10초 타임아웃)
+- "join-waiting": 대기방에 추가, 사용자 목록 전송, 다른 사용자들에게 입장 알림
+- "join": 기존 방식으로 직접 방 입장 (하위 호환성)
 - 클라이언트 객체 생성 및 등록
 - 읽기/쓰기 고루틴 시작
 
-### registerClient(client *Client)
-- 새 클라이언트를 활성 클라이언트 맵에 등록
-- 기존 연결이 있으면 종료 후 재등록
-- 사용자 목록 브로드캐스트
-
-### unregisterClient(client *Client)
-- 클라이언트를 활성 맵에서 제거
-- 송신 채널 종료
-- 사용자 목록 브로드캐스트
+### 대기방 관련 함수
+- `sendUserList(client *WSClient)`: 대기방의 사용자 목록을 클라이언트에게 전송 (자신 제외)
+- `broadcastUserJoined(newClient *WSClient)`: 새 사용자 입장을 다른 사용자들에게 알림
+- `broadcastUserLeft(leftClient *WSClient)`: 사용자 나감을 다른 사용자들에게 알림
 
 ---
 
 ## 메시지 처리 함수
 
-### readPump(client *Client)
+### 워커 시스템
+- `msgWorker()`: 메시지 처리 워커 (NUM_WORKERS = 50개)
+- `brcWorker()`: 브로드캐스트 처리 워커 (NUM_BRC_WORKERS = 15개)
+- `processMessage(client *WSClient, data []byte)`: 메시지 타입별 처리
+  - 대기방 메시지: `handleWTRoom()` 호출
+  - 방 내 메시지: offer/answer/ice_candidate는 브로드캐스트, chat는 채팅 메시지 처리
+
+### readPump(client *WSClient)
 - WebSocket으로부터 메시지 읽기 (고루틴)
-- Pong 핸들러 설정 (60초 타임아웃)
+- Pong 핸들러 설정 (PONG_WAIT = 60초 타임아웃)
 - JSON 메시지 파싱
-- 발신자 정보 자동 설정
-- 메시지 타입별 처리 위임
+- 메시지를 워커 큐(wrkQueue)에 추가
+- 연결 종료 시 대기방 또는 방에서 제거
 
-### writePump(client *Client)
+### writePump(client *WSClient)
 - WebSocket으로 메시지 쓰기 (고루틴)
-- 54초마다 Ping 메시지 자동 전송
-- 송신 채널의 메시지 일괄 전송
-- 연결 타임아웃 관리
+- PING_PERIOD(54초)마다 Ping 메시지 자동 전송
+- 송신 채널의 메시지 일괄 전송 (버퍼에 대기 중인 메시지 포함)
+- 연결 타임아웃 관리 (WRITE_WAIT = 10초)
 
-### handleMessage(client *Client, msg *SignalingMessage)
-- 수신된 시그널링 메시지 처리
-- 메시지 타입별 분기 (offer/answer/ice-candidate/hangup)
-- 중계 메시지를 대상 사용자에게 전달
+### 대기방 메시지 처리
+- `handleWTRoom(client *WSClient, msg *Message)`: 대기방 메시지 처리
+  - "join-waiting": 사용자 목록 전송
+  - "call-request": 연결 요청 처리
+  - "call-response": 연결 응답 처리 (수락 시 방으로 이동)
+- `handleCallRequest(client *WSClient, msg *Message)`: 통화 요청 처리
+  - 대상 사용자에게 call-request 메시지 전송
+  - 대상 사용자가 없으면 에러 메시지 반환
+- `handleCallResponse(client *WSClient, msg *Message)`: 통화 응답 처리
+  - 수락 시 `moveToRoom()` 호출하여 두 사용자를 방으로 이동
+  - 거절 시 요청자에게 거절 메시지 전송
 
 ---
 
-## 시그널링 중계 함수
+## 방 관리 함수
 
-### relayMessage(from *Client, msg *SignalingMessage)
-- 시그널링 메시지를 대상 사용자에게 중계
-- 대상 사용자 존재 여부 확인
-- 존재하지 않으면 발신자에게 에러 메시지 전송
-- 메시지 전달 로깅
+### getRoom(roomName string) (*VDRoom, error)
+- 방을 가져오거나 새로 생성
+- 방 수 제한 확인 (MAX_VIDEO_ROOMS = 5000)
+- 방 고루틴(run) 시작
 
-### sendToClient(client *Client, msg *SignalingMessage)
-- 특정 클라이언트에게 메시지 전송
-- JSON 직렬화
-- 송신 채널로 메시지 전달
-- 채널이 가득 차면 클라이언트 제거
+### moveToRoom(roomID string, client1, client2 *WSClient)
+- 두 사용자를 대기방에서 방으로 이동
+- 대기방에서 제거
+- 방에 추가 및 room-joined 메시지 전송
+- start 시그널 전송 (화상채팅 시작)
+
+### 방 실행 함수
+- `room.run(p *SignalingController)`: 방 관리 고루틴
+  - 클라이언트 해제 처리
+  - 브로드캐스트 메시지 처리 (brcQueue에 추가)
+  - PING_PERIOD마다 Ping 메시지 전송
+
+### 방 정리 함수
+- `roomCleaner()`: 주기적으로 비어있고 비활성인 방 정리 (1분마다)
+- `cleanEmptyRooms()`: 5분 이상 비활성인 빈 방 삭제
 
 ---
 
@@ -108,19 +160,34 @@
 
 ## 시그널링 메시지 타입
 
-### 클라이언트 → 서버
+### 대기방 메시지 (클라이언트 → 서버)
+- `join-waiting`: 대기방 입장 (필수: name, user_id)
+- `call-request`: 통화 요청 (from, to, room_id)
+- `call-response`: 통화 응답 (from, to, room_id, accept)
+
+### 대기방 메시지 (서버 → 클라이언트)
+- `user-list`: 대기방 사용자 목록 (users 배열)
+- `user-joined`: 새 사용자 입장 알림 (user_id, name)
+- `user-left`: 사용자 나감 알림 (user_id)
+- `call-request`: 통화 요청 수신 (from, to, room_id)
+- `call-accept`: 통화 수락 (from, to, room_id, accept: true)
+- `call-reject`: 통화 거절 (from, to, room_id, accept: false)
+- `call-error`: 통화 요청 오류 (message)
+- `room-joined`: 방 입장 완료 (room_id)
+
+### 방 내 메시지 (클라이언트 → 서버)
 - `offer`: WebRTC Offer 메시지
 - `answer`: WebRTC Answer 메시지
-- `ice-candidate`: ICE Candidate 정보
-- `hangup`: 통화 종료 신호
+- `ice_candidate`: ICE Candidate 정보
+- `chat`: 채팅 메시지
 
-### 서버 → 클라이언트
-- `user-list`: 연결된 사용자 목록 업데이트
+### 방 내 메시지 (서버 → 클라이언트)
+- `start`: 화상채팅 시작 신호
 - `offer`: 중계된 Offer 메시지
 - `answer`: 중계된 Answer 메시지
-- `ice-candidate`: 중계된 ICE Candidate
-- `hangup`: 중계된 통화 종료 신호
-- `error`: 오류 메시지
+- `ice_candidate`: 중계된 ICE Candidate
+- `chat`: 채팅 메시지 (sender, message)
+- `ping`: 연결 유지 Ping 메시지
 
 ---
 
@@ -137,12 +204,15 @@
 - **에러 처리**: 대상 사용자 미존재 시 에러 메시지 반환
 
 ### 동시성 제어
-- **RWMutex 사용**: 클라이언트 맵 동시 접근 보호
+- **RWMutex 사용**: 방 맵, 대기방 동시 접근 보호
 - **Thread-Safe**: 다중 클라이언트 동시 연결 안전
+- **워커 풀**: 메시지 처리 및 브로드캐스트를 워커 풀로 분산 처리
+- **Atomic 카운터**: 전체 연결 수 추적 (totalConn)
 
 ### 사용자 목록 동기화
-- **실시간 업데이트**: 연결/종료 시 즉시 브로드캐스트
+- **실시간 업데이트**: 대기방 입장/나감 시 즉시 브로드캐스트
 - **자동 알림**: 모든 클라이언트에게 변경사항 전파
+- **방 이동**: 통화 수락 시 두 사용자를 대기방에서 방으로 자동 이동
 
 ---
 
@@ -150,10 +220,12 @@
 
 ### WebSocket 엔드포인트
 ```go
-webrtc.GET("/ws", p.sig.HandleWebSocket)
+webrtc.GET("/ws", p.sig.HandleConnection)
 ```
-- URL: `ws://server:port/webrtc/v01/ws?userId={userId}`
+- URL: `ws://server:port/webrtc/v01/ws`
+- 첫 메시지: `{"type":"join-waiting","data":{"name":"사용자명","user_id":"사용자ID"}}`
 - 인증: 개발용으로 인증 없음 (프로덕션에서는 JWT 추천)
+- 최대 연결 수: 25000
 
 ### HTTP 엔드포인트
 ```go
@@ -166,24 +238,77 @@ webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
 
 ## 사용 예시
 
-### 클라이언트 연결
+### 클라이언트 연결 및 대기방 입장
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/webrtc/v01/ws?userId=user1');
+const ws = new WebSocket('ws://localhost:8080/webrtc/v01/ws');
+
+// 연결 후 첫 메시지: 대기방 입장
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'join-waiting',
+    data: {
+      name: 'Alice',
+      user_id: 'alice123'
+    }
+  }));
+};
 
 ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
   console.log('Received:', message);
+  
+  // 사용자 목록 수신
+  if (message.type === 'user-list') {
+    console.log('Available users:', message.data.users);
+  }
+  
+  // 통화 요청 수신
+  if (message.type === 'call-request') {
+    // 통화 수락 또는 거절
+    ws.send(JSON.stringify({
+      type: 'call-response',
+      data: {
+        from: 'alice123',
+        to: message.data.from,
+        room_id: message.data.room_id,
+        accept: true
+      }
+    }));
+  }
+  
+  // 방 입장 완료
+  if (message.type === 'room-joined') {
+    console.log('Joined room:', message.data.room_id);
+  }
+  
+  // 화상채팅 시작
+  if (message.type === 'start') {
+    console.log('Video chat started');
+  }
 };
-```
 
-### 시그널링 메시지 전송
-```javascript
-const message = {
-  type: 'offer',
-  to: 'user2',
-  payload: offerSDP
-};
-ws.send(JSON.stringify(message));
+// 통화 요청 전송
+function callUser(targetUserId) {
+  const roomId = `room_${Date.now()}`;
+  ws.send(JSON.stringify({
+    type: 'call-request',
+    data: {
+      from: 'alice123',
+      to: targetUserId,
+      room_id: roomId
+    }
+  }));
+}
+
+// WebRTC 시그널링 메시지 전송 (방 내)
+function sendOffer(offerSDP) {
+  ws.send(JSON.stringify({
+    type: 'offer',
+    data: {
+      sdp: offerSDP
+    }
+  }));
+}
 ```
 
 ---
@@ -205,17 +330,23 @@ ws.send(JSON.stringify(message));
 ## 성능 최적화
 
 ### 메시지 버퍼링
-- 송신 채널 버퍼 크기: 256
+- 송신 채널 버퍼 크기: MSG_BUFFER_SIZE = 256
+- 워커 큐 크기: WORKER_QUEUE_SIZE = 1000
+- 브로드캐스트 큐 크기: BROADCAST_QUEUE_SIZE = 10000
 - 대기 중인 메시지 일괄 전송
+- 메시지 풀을 통한 메모리 재사용
 
 ### 연결 타임아웃
-- Ping 주기: 54초
-- Pong 타임아웃: 60초
-- 쓰기 타임아웃: 10초
+- Ping 주기: PING_PERIOD = 54초
+- Pong 타임아웃: PONG_WAIT = 60초
+- 쓰기 타임아웃: WRITE_WAIT = 10초
+- 첫 메시지 대기: 10초
 
 ### 동시성
-- 클라이언트별 독립 고루틴
+- 클라이언트별 독립 고루틴 (readPump, writePump)
+- 워커 풀: 50개 메시지 처리 워커, 15개 브로드캐스트 워커
 - RWMutex로 읽기 동시성 극대화
+- 방별 독립 고루틴 (room.run)
 
 ---
 
@@ -303,7 +434,33 @@ cd examples
 
 ---
 
+---
+
+## 주요 변경사항 (최신 업데이트)
+
+### 대기방 시스템 추가
+- 통화 요청 전 사용자들이 대기하는 대기방(WaitingRoom) 구현
+- 대기방 입장 시 사용자 목록 자동 전송
+- 사용자 입장/나감 실시간 알림
+
+### 통화 요청/응답 시스템
+- `call-request`: 통화 요청 메시지
+- `call-response`: 통화 수락/거절 응답
+- 수락 시 자동으로 두 사용자를 방으로 이동
+
+### 워커 풀 시스템
+- 메시지 처리 워커: 50개
+- 브로드캐스트 워커: 15개
+- 큐 기반 비동기 처리로 성능 향상
+
+### 방 관리 개선
+- 방별 독립 고루틴 실행
+- 비활성 방 자동 정리 (1분 주기)
+- 방 입장 시 room-joined 및 start 시그널 자동 전송
+
+---
+
 *생성일: 2025-10-20*
-*최종 업데이트: 2025-11-05*
+*최종 업데이트: 2025-11-30*
 *파일 위치: /home/jino/go/src/ms-gateway/controller/signaling.go*
 

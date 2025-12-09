@@ -292,7 +292,7 @@ func (p *Router) Idx() *gin.Engine {
 		webrtc.GET("/stats", p.acc.GetWebRTCStats)
 
 		// STUN 서버 연결성 테스트 (인증 없이 접근 가능)
-		webrtc.GET("/test-stun", p.acc.TestStunServers)
+		// webrtc.GET("/test-stun", p.acc.TestStunServers)
 
 		// 특정 STUN 서버 테스트
 		webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
@@ -346,7 +346,7 @@ func (p *Router) Idx() *gin.Engine {
 		vdchat.POST("/call-status", p.acc.UpdateCallStatus)
 		vdchat.POST("/heartbeat", p.acc.UpdateWebRTCHeartbeat)
 		vdchat.GET("/stats", p.acc.GetWebRTCStats)
-		vdchat.GET("/test-stun", p.acc.TestStunServers)
+		// vdchat.GET("/test-stun", p.acc.TestStunServers)
 		vdchat.POST("/test-stun-server", p.acc.TestSpecificStunServer)
 		// vdchat.GET("/ws", p.sig.HandleWebSocket)
 		// vdchat.GET("/connected-users", p.sig.GetConnectedUsers)
