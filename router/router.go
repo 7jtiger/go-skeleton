@@ -295,7 +295,7 @@ func (p *Router) Idx() *gin.Engine {
 		// webrtc.GET("/test-stun", p.acc.TestStunServers)
 
 		// 특정 STUN 서버 테스트
-		webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
+		//webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
 
 		// WebSocket 시그널링 엔드포인트 (인증 없음 - 개발용)
 		webrtc.GET("/ws", p.sig.HandleConnection)

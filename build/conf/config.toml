@@ -5,7 +5,20 @@ port = ":8080"
 # port = ""
 hcheck = "http://localhost:8081"
 hcport = ":8081"
-basekey = "testtesttesttesttesttesttesttest"
+basekey = "JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87"
+fcmKeyPath = "./conf/fcm-key.json"
+jwtsecret = "439f7e12e87e327e1b439f4a5aa895627ef47280ce75b553d65f750bea447575"
+
+[webrtc] # WebRTC 설정 (STUN only, TURN 제외)
+signalingServerUrl = "ws://localhost:8080/ws"
+stunServers = ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302", "stun:stun4.l.google.com:19302"]
+maxVideoWidth = 1080
+maxVideoHeight = 1920
+maxVideoFrameRate = 30
+videoBitrate = 8000000
+audioBitrate = 128000
+sessionTimeout = 14400  # 4 hours in seconds
+heartbeatInterval = 30  # seconds
 
 [haChecker]
 checker = true

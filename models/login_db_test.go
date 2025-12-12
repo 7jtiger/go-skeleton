@@ -73,7 +73,7 @@ type MockAccountDB struct {
 }
 
 type MockUser struct {
-	UID      string
+	UID      uint64
 	SID      string
 	PWHash   string
 	Nick     string
@@ -97,7 +97,7 @@ func NewMockAccountDB() *MockAccountDB {
 	return &MockAccountDB{
 		users: map[string]MockUser{
 			"testuser": {
-				UID:      "testuid",
+				UID:      1234567890,
 				SID:      "testuser",
 				PWHash:   encryptedPW,
 				Nick:     "테스트유저",
@@ -215,7 +215,7 @@ func TestMockAccountDBLoginUser(t *testing.T) {
 					if result.ID != "testuser" {
 						t.Errorf("Expected ID 'testuser', got '%s'", result.ID)
 					}
-					if result.Uid != "testuid" {
+					if result.Uid != 1234567890 {
 						t.Errorf("Expected UID 'testuid', got '%s'", result.Uid)
 					}
 					if result.Nick != "테스트유저" {
@@ -324,12 +324,5 @@ func BenchmarkPasswordDecryption(b *testing.B) {
 			b.Errorf("Benchmark failed: %v", err)
 		}
 	}
+
 }
-
-
-
-
-
-
-
-

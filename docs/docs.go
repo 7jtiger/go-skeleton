@@ -1683,7 +1683,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "gender": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "id": {
                     "description": "key, sid",
@@ -1709,7 +1709,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -1791,7 +1791,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -1849,7 +1849,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },

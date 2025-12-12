@@ -2,12 +2,14 @@ package controller
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/base32"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
 	"io"
+	"math/big"
 	"mime/multipart"
 	"ms-gateway/common/utils"
 	"ms-gateway/protocol"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pquerna/otp/totp"
+	"golang.org/x/crypto/bcrypt"
 	// "gocv.io/x/gocv"
 )
 
@@ -254,6 +257,24 @@ func DecryptData(data interface{}) (string, error) {
 	return encryptedData, nil
 }
 
+func Test_GenUuid(t *testing.T) {
+	bytes := make([]byte, 8)
+	_, err := crand.Read(bytes)
+	if err != nil {
+		t.Errorf("Failed to generate random bytes: %v", err)
+		return
+	}
+
+	// 바이트를 big.Int로 변환
+	uid := new(big.Int).SetBytes(bytes)
+
+	// MySQL BIGINT UNSIGNED 범위 제한 (2^63-1)
+	maxBigInt := new(big.Int).SetUint64(1<<63 - 1) // 9223372036854775807
+	uid.Mod(uid, maxBigInt)
+
+	fmt.Println(uid.String())
+}
+
 func TestAccRegist(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	qurl := "/acc/v01/regist"
@@ -302,7 +323,7 @@ func TestAccLogin(t *testing.T) {
 
 	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
 	var key = []string{"data"}
-	var value = []string{"test43", "123456789"}
+	var value = []string{"test243", "123456789"}
 
 	// Convert the key-value pairs to a map for easier JSON handling
 	dataMap := LoginReq{
@@ -315,6 +336,14 @@ func TestAccLogin(t *testing.T) {
 		t.Errorf("Failed to encrypt data: %v", err)
 		return
 	}
+	fmt.Println(encryptedData)
+
+	decryptedData, err := DecryptData(encryptedData)
+	if err != nil {
+		t.Errorf("Failed to decrypt data: %v", err)
+		return
+	}
+	fmt.Println(decryptedData)
 
 	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
 
@@ -323,6 +352,16 @@ func TestAccLogin(t *testing.T) {
 	}
 
 	fmt.Println(res)
+}
+
+func TestAccLogin2(t *testing.T) {
+	hash := "$2a$11$tO.ziYPkqMgVY28iiTn54ufX3TmIJlm13UiRIchaYQ80EUlu.HhZC"
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("123456789"))
+	if err != nil {
+		t.Errorf("Failed to compare hash and password: %v", err)
+		return
+	}
+	fmt.Println("Password matches")
 }
 
 func TestAccLogout(t *testing.T) {
@@ -633,8 +672,9 @@ func TestWebcamDisplay(t *testing.T) {
 */
 
 func TestGetRandDefIntroImg(t *testing.T) {
-	img := GetRandDefIntroImg(1)
+	img := GetRandDefIntroImg("1")
 	fmt.Println(img)
+
 }
 
 type ModifyMainPicReq struct {

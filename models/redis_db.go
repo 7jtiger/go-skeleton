@@ -408,14 +408,15 @@ func (r *RedisDB) HSetUserInfo(user *ptl.UserInfoResp) error {
 		return fmt.Errorf("error decrypting email: %v", err)
 	}
 
-	if err := r.client.HSet(context.Background(), "USER:INFO", []string{user.Uid, encSessionJSON}).Err(); err != nil {
+	userIDStr := strconv.FormatUint(user.Uid, 10)
+	if err := r.client.HSet(context.Background(), "USER:INFO", []string{userIDStr, encSessionJSON}).Err(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *RedisDB) HSetJoinWTRoom(userID string, user *ptl.WTRoomUser) error {
+func (r *RedisDB) HSetJoinWTRoom(userID uint64, user *ptl.WTRoomUser) error {
 	options := &redis.HSetEXOptions{
 		ExpirationType: redis.HSetEXExpirationEX,
 		ExpirationVal:  86400 * 1, //sec //1day
@@ -426,15 +427,17 @@ func (r *RedisDB) HSetJoinWTRoom(userID string, user *ptl.WTRoomUser) error {
 		return err
 	}
 
-	if err := r.client.HSetEXWithArgs(r.ctx, "WTRoom:User", options, userID, string(userJSON)).Err(); err != nil {
+	userIDStr := strconv.FormatUint(userID, 10)
+	if err := r.client.HSetEXWithArgs(r.ctx, "WTRoom:User", options, userIDStr, string(userJSON)).Err(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *RedisDB) HGetWTRoomUser(userID string) (*ptl.WTRoomUser, error) {
-	res, err := r.client.HGet(r.ctx, "WTRoom:User", userID).Result()
+func (r *RedisDB) HGetWTRoomUser(userID uint64) (*ptl.WTRoomUser, error) {
+	userIDStr := strconv.FormatUint(userID, 10)
+	res, err := r.client.HGet(r.ctx, "WTRoom:User", userIDStr).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -491,8 +494,9 @@ func (r *RedisDB) HGetJoinWTRoomPre7List() (*[]ptl.WTRoomUser, error) {
 	return &users, nil
 }
 
-func (r *RedisDB) HDeleteJoinWTRoom(userID string) error {
-	if err := r.client.HDel(r.ctx, "WTRoom:User", userID).Err(); err != nil {
+func (r *RedisDB) HDeleteJoinWTRoom(userID uint64) error {
+	userIDStr := strconv.FormatUint(userID, 10)
+	if err := r.client.HDel(r.ctx, "WTRoom:User", userIDStr).Err(); err != nil {
 		return err
 	}
 	return nil
@@ -621,7 +625,7 @@ func (r *RedisDB) GetUnreadTotalCount(userID string) (int, error) {
 }
 
 // GetWebRTCConfig 사용자 로그인 시 WebRTC 설정 정보 반환
-func (r *RedisDB) GetWebRTCConfig(userID string) (*ptl.WebRTCConfig, error) {
+func (r *RedisDB) GetWebRTCConfig(userID uint64) (*ptl.WebRTCConfig, error) {
 	// TODO: 실제 구현에서는 conf.Config를 받아와야 함
 	// 현재는 하드코딩된 기본값 사용
 

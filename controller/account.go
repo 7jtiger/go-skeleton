@@ -11,6 +11,7 @@ import (
 	"ms-gateway/protocol"
 	ptl "ms-gateway/protocol"
 	"net/http"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -158,8 +159,8 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 
 	// gender := strconv.Itoa(req.Gender)
 	// Generate additional fields
-	// var err error
-	req.Uid = utils.GenUuid()
+	req.Uid = p.getUid()
+
 	req.Nick = utils.GenDefNick()
 	req.ThumbIcon = GetRandDefIcon(req.Gender)
 	req.MainPic = GetRandDefIntroImg(req.Gender)
@@ -178,6 +179,23 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 	}
 
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+}
+
+func (p *AccountController) getUid() uint64 {
+	// var err error
+	for {
+		uid, err := utils.GenRandomUID()
+		if err != nil {
+			continue
+		}
+
+		IsExistUid := p.adb.IsExistUid(uid)
+		if IsExistUid { //true : 존재함, false : 존재하지 않음
+			continue // 존재하면 다시 생성
+		}
+
+		return uid // 존재하지 않으면 반환
+	}
 }
 
 // swagger:route POST /acc/v01/login login user
@@ -210,13 +228,15 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 	}
 
 	/* 	hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
+	   	// hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
 	   	if err != nil {
 	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to hash password")
 	   		return
 	   	}
 	*/
 	// Register the user
-	user, err := p.adb.LoginUser(req, []byte(strings.TrimSpace(req.PW)))
+	// user, err := p.adb.LoginUser(req, []byte(strings.TrimSpace(req.PW)))
+	user, err := p.adb.LoginUser(req, []byte(req.PW))
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to login user"), http.StatusBadRequest, err)
 		return
@@ -228,7 +248,7 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		return
 	}
 
-	mStr := fmt.Sprintf("%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
+	mStr := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
 		user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
 	// 	UID:             parts[0],
 	// 	SID:		     parts[1],
@@ -277,11 +297,12 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 	   		log.Warn("Failed to set JWT refresh token:", err)
 	   	} */
 
+	uidStr := strconv.FormatUint(user.Uid, 10)
 	responseData := ptl.LoginUserResp{
 		Message:      "success",
 		AccessToken:  acTok,
 		RefreshToken: refTok,
-		UID:          user.Uid,
+		UID:          uidStr,
 		WebRTCConfig: *webrtcConfig,
 	}
 
@@ -310,12 +331,13 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 }
 
 func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, string, error) {
+	uidStr := strconv.FormatUint(user.Uid, 10)
 	claims := utils.JWTClaims{
-		UserID: user.Uid,
+		UserID: uidStr,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "cupitok.com",
 			Subject:   "Authentication",
-			Audience:  jwt.ClaimStrings{user.Uid},
+			Audience:  jwt.ClaimStrings{uidStr},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
@@ -921,7 +943,13 @@ func (p *AccountController) GetWebRTCConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := p.rdb.GetWebRTCConfig(userID.(string))
+	uid, err := strconv.ParseUint(userID.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse user ID"), http.StatusBadRequest, err)
+		return
+	}
+
+	config, err := p.rdb.GetWebRTCConfig(uid)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get WebRTC config"), http.StatusInternalServerError, err)
 		return

@@ -1,11 +1,10 @@
 package models
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
-
-	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
@@ -167,21 +166,49 @@ func (p *AccountDB) IsExistEmail(email string) bool {
 	return true // 존재함
 }
 
+func (p *AccountDB) IsExistUid(uid uint64) bool {
+	query := "SELECT COUNT(*) FROM user_info WHERE uid = ?"
+	row := p.conndb.QueryRow(query, uid)
+	var count int
+
+	err := row.Scan(&count)
+	if err == sql.ErrNoRows {
+		return false // 존재하지 않음
+	} else if err != nil {
+		log.Error("IsExistUid database error:", err)
+		return true
+	}
+
+	if count > 0 {
+		return true // 존재함
+	} else {
+		return false // 존재하지 않음
+	}
+
+	// return count > 0 // 존재함
+}
+
 func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
-	key := fmt.Sprintf("Cupitok-%s-Gateway", req.Uid)
+	key := fmt.Sprintf("Cupitok-%d-Gateway", req.Uid)
 	// encpw, err := utils.EncryptChaCha20(req.PW, key)
 	// if err != nil {
 	// 	return fmt.Errorf("error encrypting password: %v", err)
 	// }
-	// encEmail, err := utils.EncryptChaCha20(req.Email, key)
 
+	// 이메일 암호화
+	encEmail, err := utils.EncryptChaCha20(req.Email, key)
+	if err != nil {
+		return fmt.Errorf("error encrypting email: %v", err)
+	}
+
+	// 이름 암호화
 	encName, err := utils.EncryptChaCha20(req.Name, key)
 	if err != nil {
-		return fmt.Errorf("error encrypting password: %v", err)
+		return fmt.Errorf("error encrypting name: %v", err)
 	}
 
 	query := "INSERT INTO user_info (sid, uid, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	_, err = p.conndb.Exec(query, req.ID, req.Uid, encEmail, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	// _, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
@@ -203,7 +230,8 @@ func (p *AccountDB) updatedLastest(sid string) error {
 func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, error) {
 	query := "SELECT uid, pw_hash, nick FROM user_info WHERE sid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, req.ID)
-	var pwHash, uid, nick string
+	var pwHash, nick string
+	var uid uint64
 
 	err := row.Scan(&uid, &pwHash, &nick)
 	if err == sql.ErrNoRows {
@@ -212,7 +240,9 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 		return nil, fmt.Errorf("error querying user: %v", err)
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(pw))
+	fmt.Println("pwHash:", pwHash)
+	fmt.Println("pw:", string(pw))
+	err = bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(string(pw)))
 	if err != nil {
 		return nil, fmt.Errorf("password does not match: %v", err)
 	}
@@ -376,21 +406,41 @@ func (p *AccountDB) GetUserInfo(id string) (ptl.UserInfoResp, error) {
 	query := "SELECT sid, uid, did, email, name, nick, gender, age, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE sid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, id)
 	var user ptl.UserInfoResp
+	var encEmail, encName string
+	var did sql.NullString
 
-	key := fmt.Sprintf("Cupitok-%s-Gateway", id)
-	decEmail, err := utils.DecryptChaCha20(user.Email, key)
-	if err != nil {
-		return ptl.UserInfoResp{}, fmt.Errorf("error decrypting email: %v", err)
-	}
-
-	decName, err := utils.DecryptChaCha20(user.Name, key)
-	if err != nil {
-		return ptl.UserInfoResp{}, fmt.Errorf("error decrypting name: %v", err)
-	}
-
-	err = row.Scan(&user.ID, &user.Uid, &user.Did, &decEmail, &decName, &user.Nick, &user.Gender, &user.Age, &user.Birth, &user.Area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
+	// 먼저 데이터베이스에서 암호화된 값들을 스캔 (NULL 가능한 컬럼은 sql.NullString 사용)
+	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Age, &user.Birth, &user.Area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
 	if err != nil {
 		return ptl.UserInfoResp{}, err
+	}
+
+	// NULL 처리: did가 NULL이면 빈 문자열로 설정
+	if did.Valid {
+		user.Did = did.String
+	} else {
+		user.Did = ""
+	}
+
+	// uid를 사용하여 키 생성 (CheckNameBirth와 동일한 방식)
+	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
+
+	// 이메일 복호화
+	if encEmail != "" {
+		decEmail, err := utils.DecryptChaCha20(encEmail, key)
+		if err != nil {
+			return ptl.UserInfoResp{}, fmt.Errorf("error decrypting email: %v", err)
+		}
+		user.Email = decEmail
+	}
+
+	// 이름 복호화
+	if encName != "" {
+		decName, err := utils.DecryptChaCha20(encName, key)
+		if err != nil {
+			return ptl.UserInfoResp{}, fmt.Errorf("error decrypting name: %v", err)
+		}
+		user.Name = decName
 	}
 
 	return user, nil

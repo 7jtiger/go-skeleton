@@ -143,7 +143,7 @@ definitions:
       email:
         type: string
       gender:
-        type: integer
+        type: string
       id:
         description: key, sid
         type: string
@@ -161,7 +161,7 @@ definitions:
       thmb_pic:
         type: string
       uid:
-        type: string
+        type: integer
     type: object
   protocol.RespDataHeader:
     properties:
@@ -215,7 +215,7 @@ definitions:
       thmb_pic:
         type: string
       uid:
-        type: string
+        type: integer
     type: object
   protocol.VideoConfig:
     properties:
@@ -253,7 +253,7 @@ definitions:
       thumbPic:
         type: string
       uid:
-        type: string
+        type: integer
     type: object
   protocol.WebRTCConfig:
     properties:

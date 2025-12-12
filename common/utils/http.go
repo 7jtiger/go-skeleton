@@ -285,6 +285,7 @@ func SendTelegramAlert(name, mod, body string) bool {
 
 func GenUuid() string {
 	uuid := uuid.New()
+
 	uuid4 := hex.EncodeToString(uuid[:])
 	return uuid4
 }

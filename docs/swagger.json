@@ -1672,7 +1672,7 @@
                     "type": "string"
                 },
                 "gender": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "id": {
                     "description": "key, sid",
@@ -1698,7 +1698,7 @@
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -1780,7 +1780,7 @@
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -1838,7 +1838,7 @@
                     "type": "string"
                 },
                 "uid": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },

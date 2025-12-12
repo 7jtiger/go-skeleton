@@ -339,18 +339,13 @@ func (p *Router) AesDecrypt() gin.HandlerFunc {
 
 		// 2. AES 키 준비
 		// var aesKey = []byte(p.cfg.Server.BaseKey)
-		aesKey, err := hex.DecodeString(p.cfg.Server.BaseKey)
-		if err != nil {
-			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to decode AES key")
-
-			return
-		}
-
 		// aesKey, err := hex.DecodeString(p.cfg.Server.BaseKey)
 		// if err != nil {
 		// 	p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to decode AES key")
 		// 	return
 		// }
+
+		aesKey := []byte(p.cfg.Server.BaseKey)
 
 		// 3. data 필드 복호화
 		decryptedBytes, err := utils.DecryptGCM(encReq.Data, aesKey)

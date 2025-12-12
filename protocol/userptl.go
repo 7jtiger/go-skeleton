@@ -3,9 +3,9 @@ package protocol
 type RegistReq struct {
 	ID        string `json:"id"` //key, sid
 	PW        string `json:"pw"`
-	Uid       string `json:"uid"`
+	Uid       uint64 `json:"uid"`
 	Name      string `json:"name"`
-	Gender    int    `json:"gender"`
+	Gender    string `json:"gender"`
 	Age       string `json:"age"`
 	Birth     string `json:"birth"`
 	Area      string `json:"area"`
@@ -23,7 +23,7 @@ type LoginReq struct {
 
 type UserInfoResp struct {
 	ID       string `json:"sid"`
-	Uid      string `json:"uid"`
+	Uid      uint64 `json:"uid"`
 	Did      string `json:"did"`
 	Email    string `json:"email"`
 	Name     string `json:"name"`
@@ -39,7 +39,7 @@ type UserInfoResp struct {
 }
 
 type MetaHeader struct {
-	UID      string `json:"uid"`
+	UID      uint64 `json:"uid"`
 	SID      string `json:"sid"`
 	DID      string `json:"did"`
 	Nick     string `json:"nick"`
@@ -99,7 +99,7 @@ type LoginUserResp struct {
 }
 
 type WTRoomUser struct {
-	UID      string `json:"uid"`
+	UID      uint64 `json:"uid"`
 	SID      string `json:"sid"`
 	DID      string `json:"did"`
 	MainPic  string `json:"mainPic"`

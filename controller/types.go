@@ -27,9 +27,9 @@ func joinMsg(args ...interface{}) string {
 	return msg
 }
 
-func GetRandDefIcon(gender int) string {
+func GetRandDefIcon(gender string) string {
 	icons := []string{}
-	if gender == 1 { // male
+	if gender == "1" { // male
 		icons = []string{
 			"https://i.ibb.co/fYrCXYn1/icon-male-01.webp",
 			"https://i.ibb.co/YBThXZ4G/icon-male-02.webp",
@@ -48,9 +48,9 @@ func GetRandDefIcon(gender int) string {
 	return icons[rand.Intn(len(icons))]
 }
 
-func GetRandDefIntroImg(gender int) string {
+func GetRandDefIntroImg(gender string) string {
 	imgs := []string{}
-	if gender == 1 { // male
+	if gender == "1" { // male
 		imgs = []string{
 			"https://i.ibb.co/YThwgz5L/male-ai-01.webp",
 			"https://i.ibb.co/QF37KRST/male-ai-02.webp",
