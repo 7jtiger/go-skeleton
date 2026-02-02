@@ -30,6 +30,7 @@ type Router struct {
 	hm   *ctl.HomeController
 	nt   *ctl.NotiController
 	sig  *ctl.SignalingController
+	st   *ctl.StoryController
 	chat *ctl.ChatController
 	rdb  *models.RedisDB
 	// hHealth *ctl.Health
@@ -46,6 +47,7 @@ func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
 		nt:   ct.NotiCtl,
 		sig:  ct.Signaling,
 		chat: ct.ChatCtl,
+		st:   ct.StoryCtl,
 		rdb:  ct.GetRedis(),
 		// hHealth: ct.GetHealthHandler(),
 	}
@@ -135,6 +137,10 @@ func (p *Router) otpAuth() gin.HandlerFunc {
 
 func (p *Router) Idx() *gin.Engine {
 	e := gin.Default()
+
+	// MultipartForm 메모리 제한 설정 (32MB - 파일 업로드용)
+	e.MaxMultipartMemory = 32 << 20 // 32MB
+
 	e.Use(logger.GinLogger())
 	e.Use(logger.GinRecovery(true))
 	e.Use(CORS())
@@ -253,18 +259,33 @@ func (p *Router) Idx() *gin.Engine {
 		mission.GET("/detail/:id")
 	}
 
-	story := e.Group("story/v01", p.SecurityHeaders(), liteAuth())
+	// story := e.Group("story/v01", p.SecurityHeaders(), p.JwtAuth())
+	// story := e.Group("story/v01", p.SecurityHeaders(), liteAuth())
+	story := e.Group("story/v01", p.SecurityHeaders())
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
 		story.GET("/home/:id")
-		story.GET("/list/:stat/:id")
-		story.GET("/detail/:idx")
+		story.GET("/list/:uid", p.st.GetStoryList)
+		story.GET("/detail/:idx", p.st.GetStoryDetail)
+		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryPic)
+
+		// ------------- story -------------
+		story.POST("/updstat", p.st.UpdateStoryStat)
+		story.POST("/updbody", p.st.UpdateStrBody)
+		story.POST("/delpic", p.st.DeleteStrPic)
+
+		// ------------- comment -------------
+		story.GET("/comment/list", p.st.GetStrCommentList)
+		story.POST("/comment/create", p.st.CreateStrComment)
+		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
+		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)
+		// story.POST("/comment/delete", p.st.DeleteStrStatPic)
 	}
 
 	//누드, 음모 확인 기능
 	upload := e.Group("upload/v01", p.SecurityHeaders(), liteAuth())
 	{
-		upload.POST("/story/img")
+		upload.POST("/story/img", p.ValidateFileUpload(5, 5))
 		upload.POST("/present")
 	}
 

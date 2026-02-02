@@ -207,8 +207,9 @@ func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
 		return fmt.Errorf("error encrypting name: %v", err)
 	}
 
+	age := utils.CalcBirth2Age(req.Birth)
 	query := "INSERT INTO user_info (sid, uid, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = p.conndb.Exec(query, req.ID, req.Uid, encEmail, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	_, err = p.conndb.Exec(query, req.ID, req.Uid, encEmail, encpw, encName, req.Nick, req.Gender, age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	// _, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)

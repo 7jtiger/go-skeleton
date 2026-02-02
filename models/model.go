@@ -44,6 +44,7 @@ func NewModel(cf *conf.Config) (*Repositories, error) {
 		NewHistoryDB,
 		NewItemDB,
 		NewRedisDB,
+		NewStoryDB,
 		// NewContractDB,
 		// NewBankerDB,
 		// NewConnectNetwork,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"hash/fnv"
 	"math/rand"
+	"strconv"
 	"testing"
 
 	// "crypto/rand"
@@ -45,6 +46,8 @@ func ConnectDB(dname string) *sql.DB {
 		uri = "root:qwer@tcp(192.168.48.196:3306)/hdb?parseTime=true"
 	} else if dname == "idb" {
 		uri = "root:qwer@tcp(192.168.48.196:3306)/idb?parseTime=true"
+	} else if dname == "sdb" {
+		uri = "root:qwer@tcp(192.168.48.196:3306)/sdb?parseTime=true"
 	} else {
 		return nil
 	}
@@ -381,6 +384,109 @@ func Test_HSetChatRoomList(t *testing.T) {
 	}
 
 	fmt.Println(roomJSON)
+}
+
+// ===============Story db test===============================================
+/*
+CREATE TABLE `story` (
+  `idx` int unsigned NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) NOT NULL,
+  `body` varchar(512) DEFAULT NULL,
+  `stat` tinyint DEFAULT '1' COMMENT 'stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 : ',
+  `qt_good` int DEFAULT NULL,
+  `qt_checked` int DEFAULT NULL COMMENT '조회수',
+  `str_img` json NOT NULL,
+  `at_update` datetime DEFAULT NULL,
+  `at_create` datetime DEFAULT NULL,
+  `str_imgbak` json DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+*/
+func Test_SetStory(t *testing.T) {
+	sdb := ConnectDB("sdb")
+	if sdb == nil {
+		fmt.Println("데이터베이스 연결 실패")
+		return
+	}
+	defer sdb.Close()
+
+	sinfo := map[string]string{
+		"uid":   "2345091823",
+		"nick":  "testnick",
+		"stat":  "1",
+		"idx_0": "bc1.jpg",
+		"idx_1": "bc2.jpg",
+		"idx_2": "bc3.jpg",
+		"sbody": "테스트 스토리 내용입니다",
+	}
+
+	// Test data: map of filenames to Cloudflare image URLs
+	imageURLs := map[string]string{
+		"bc1.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public",
+		"bc2.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public",
+		"bc3.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public",
+	}
+
+	// Sample story data
+	uid := uint64(2345091823)
+	// sbody := sinfo["sbody"]
+
+	simg := &ptl.StoryImage{}
+	var err error
+	simg.StrImg, err = json.Marshal(imageURLs)
+	if err != nil {
+		fmt.Println("JSON 직렬화 실패:", err)
+		return
+	}
+
+	stat, err := strconv.Atoi(sinfo["stat"])
+	if err != nil {
+		fmt.Println("stat 변환 실패:", err)
+		return
+	}
+
+	simg.Body = sinfo["sbody"]
+	simg.Nick = sinfo["nick"]
+	simg.Stat = stat
+
+	// for filename, url := range imageURLs {
+	// 	fmt.Println(filename, url)
+
+	// 	imageURLsJSON = append(imageURLsJSON, url)
+	// }
+
+	// Insert story into database
+	query := `INSERT INTO story (uid, nick, body, stat, str_img, at_create, at_update) 
+				VALUES (?, ?, ?, ?, ?, NOW(), NOW())`
+	result, err := sdb.Exec(query, uid, simg.Nick, simg.Body, simg.Stat, simg.StrImg)
+	if err != nil {
+		fmt.Println("스토리 삽입 실패:", err)
+		return
+	}
+
+	lastID, err := result.LastInsertId()
+	if err != nil {
+		fmt.Println("LastInsertId 조회 실패:", err)
+	}
+	fmt.Println(result)
+	// result, err := sdb.Exec(query, uid, sbody, simg.StrImg01, simg.StrImg02, simg.StrImg03, simg.StrImg04, simg.StrImg05, simg.AtCreate, simg.AtUpdate)
+
+	/* 	result, err := sdb.Exec(query, uid, sbody, string(imageURLsJSON))
+	   	if err != nil {
+	   		fmt.Println("스토리 삽입 실패:", err)
+	   		return
+	   	}
+
+	   	lastID, err := result.LastInsertId()
+	   	if err != nil {
+	   		fmt.Println("LastInsertId 조회 실패:", err)
+	   		return
+	   	}
+	*/
+	fmt.Printf("스토리 삽입 성공 - ID: %d\n", lastID)
+	fmt.Printf("이미지 URLs: %v\n", imageURLs)
+
 }
 
 // ===============history db test===============================================

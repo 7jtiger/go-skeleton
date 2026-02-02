@@ -123,7 +123,7 @@ func (m *MockAccountDB) LoginUser(req ptl.LoginReq) (*ptl.UserInfoResp, error) {
 	}
 
 	// 패스워드 복호화 및 검증
-	key := fmt.Sprintf("Cupitok-%s-Gateway", user.UID)
+	key := fmt.Sprintf("Cupitok-%d-Gateway", user.UID)
 	decPW, err := utils.DecryptChaCha20(user.PWHash, key)
 	if err != nil {
 		return nil, fmt.Errorf("error decrypting password: %v", err)
@@ -216,7 +216,7 @@ func TestMockAccountDBLoginUser(t *testing.T) {
 						t.Errorf("Expected ID 'testuser', got '%s'", result.ID)
 					}
 					if result.Uid != 1234567890 {
-						t.Errorf("Expected UID 'testuid', got '%s'", result.Uid)
+						t.Errorf("Expected UID '1231241231', got '%d'", result.Uid)
 					}
 					if result.Nick != "테스트유저" {
 						t.Errorf("Expected Nick '테스트유저', got '%s'", result.Nick)

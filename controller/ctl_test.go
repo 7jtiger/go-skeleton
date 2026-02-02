@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,6 +258,22 @@ func DecryptData(data interface{}) (string, error) {
 	return encryptedData, nil
 }
 
+func Test_DecryptData(t *testing.T) {
+	// data := "BNvbgARYucDQhlGQ43bB3MYtqw52ADS08YDy85ZnyNaYK1LWphA6qQ9L1O+9+Dd2p3DKVj2ZY6cfd3SAiCiV8Aah6v02Qd9zWfqXMKLY3N3XNQpgGOHhuwNQN8ol63ypn7SGlnEN3OqY/uRQsKAGqSM/ogvSe8x7M40UwCxcZD1veNZIL8Gr1N1JorqCTgJyFHq4l2a8JUcwDuAF/Gd50A=="
+	// data := "bX58xL87yL4eRyQCtgF/CBtAWzTt6Mgrcn6xdPoCDDUDcuDay29eEYK96B8W8kkqTkTfNCfA+1qerXxoyb8waoHYf7ovsKU/bnG5cnWnPjl3m5tDoVZz2y0UAm4in1sbWagUjSTaTXe58wBRl7r83TsBRVBmY030Lt2WQkwRvxJJz1Eo9kryQLWY8QHozgaUk7Fx4VEcZAXLr90="
+	data := "+f7doUUBGS/tqQZy/toBSAFqa/Wny4oq61dv11hjVsvNFdF9Wh1q9mIa6nF/oGDZ3SEqSn3cTPCKesZHZcZu4VA2Mzh941ACLecyri9ImPuDIsCHJ42hwmbCImdaJa38v579Jf6VOnZSF3XMvQLmgaFdIbckIG/pL7r17TweNudoG6RfOyYbFfzwkNl+CaWmJ1GkQpRSqYmSefzfug=="
+
+	// Encrypt the JSON data using EncryptGCM
+	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
+	encryptedData, err := utils.DecryptGCM(data, keyBytes)
+	if err != nil {
+		t.Errorf("Failed to decrypt data: %v", err)
+		return
+	}
+
+	fmt.Println(string(encryptedData))
+}
+
 func Test_GenUuid(t *testing.T) {
 	bytes := make([]byte, 8)
 	_, err := crand.Read(bytes)
@@ -275,6 +292,29 @@ func Test_GenUuid(t *testing.T) {
 	fmt.Println(uid.String())
 }
 
+func Test_CalcBirth2Age(t *testing.T) {
+	birth := "1990-01-01"
+	// Parse birth date
+	birthDate, err := time.Parse("2006-01-02", birth)
+	if err != nil {
+		t.Errorf("Failed to parse birth date: %v", err)
+		return
+	}
+
+	// Get current date
+	now := time.Now()
+
+	// Calculate age
+	age := now.Year() - birthDate.Year()
+
+	// Adjust age if birthday hasn't occurred this year yet
+	if now.Month() < birthDate.Month() || (now.Month() == birthDate.Month() && now.Day() < birthDate.Day()) {
+		age--
+	}
+
+	fmt.Printf("Birth: %s, Current Age: %d\n", birth, age)
+}
+
 func TestAccRegist(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	qurl := "/acc/v01/regist"
@@ -282,7 +322,8 @@ func TestAccRegist(t *testing.T) {
 	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
 	// var key = []string{"info"}
 	var key = []string{"data"}
-	var value = []string{"test243", "123456789", "홍두께", "1", "24", "1990-01-01", "서울", "test243@test.com"}
+	// var value = []string{"test243", "123456789", "홍두께", "1", "24", "1990-01-01", "서울", "test243@test.com"}
+	var value = []string{"qqqq1111", "qqqq1111!", "동욱", "0", "24", "1990-01-01", "서울", "test243@test.com"}
 
 	// Convert the key-value pairs to a map for easier JSON handling
 	dataMap := RegistReq{
@@ -352,6 +393,459 @@ func TestAccLogin(t *testing.T) {
 	}
 
 	fmt.Println(res)
+}
+
+func TestGetStoryDetail(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	idx := "3"
+	qurl := fmt.Sprintf("/story/v01/detail/%s", idx)
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get story detail: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetStoryList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/list"
+
+	var key = []string{"uid"}
+	var value = []string{"7766493213763375817"}
+
+	res, err := Get(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to get story list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetStoryListByUid(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	uid := "2345091823"
+	qurl := fmt.Sprintf("/story/v01/list/%s", uid)
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get story list by uid: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestDeleteStrPic(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/delpic"
+
+	var key = []string{"idx", "pic_idx"}
+	var value = []string{"3", "1"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to delete str pic: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestCreateStrComment(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/comment/create"
+
+	var key = []string{"str_idx", "wuid", "nick", "stat", "body"}
+	var value = []string{"3", "77645423236541", "test", "1", "111111 test comment body"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to create str comment: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetStrCommentList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/comment/list"
+
+	var key = []string{"str_idx"}
+	var value = []string{"3"}
+
+	res, err := Get(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to get str comment list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUpdateStrBody(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/updbody"
+
+	var key = []string{"idx", "body"}
+	var value = []string{"3", "updated story body content"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to update str body: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUpdateStoryStat(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/updstat"
+
+	var key = []string{"idx", "stat"}
+	var value = []string{"3", "2"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to update story stat: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUpdateStrBodyComment(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/updbody"
+
+	var key = []string{"idx", "body"}
+	var value = []string{"1", "updated comment body"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to update str body comment: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func Test_UpdStatComment(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/comment/updstat"
+
+	var key = []string{"idx", "stat"}
+	var value = []string{"1", "3"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to update str stat comment: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUploadStoryPic(t *testing.T) {
+	accountID := "3a5160a653bf6175ea5c5b24ee01e344"
+	apiToken := "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
+
+	// for _, file := range files {
+	// Open the file
+	src, err := os.Open("/home/jino/tmp/bc1.jpg")
+	if err != nil {
+		fmt.Println("Failed to open file: ", err.Error())
+		return
+	}
+	defer src.Close()
+
+	// Create multipart form data
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add file to form
+	part, err := writer.CreateFormFile("file", "bc1.jpg")
+	if err != nil {
+		fmt.Println("Failed to create form file: ", err.Error())
+		return
+	}
+
+	if _, err := io.Copy(part, src); err != nil {
+		fmt.Println("Failed to copy file: ", err.Error())
+		return
+	}
+
+	/* 	// Add requireSignedURLs field
+	   	if err := writer.WriteField("requireSignedURLs", "true"); err != nil {
+	   		fmt.Println("Failed to write requireSignedURLs field: ", err.Error())
+	   		return
+	   	}
+
+	*/ // // Add id field if exists in putInfo
+	// if info, ok := putInfo[file.Filename]; ok {
+	// 	if id, exists := info["key"]; exists {
+	// 		writer.WriteField("id", id)
+	// 	}
+	// }
+
+	// Get content type before closing writer
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	// Create request
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		fmt.Println("Failed to create request: ", err.Error())
+		return
+	}
+
+	// Set headers - Content-Type must be set before Authorization
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Failed to upload to Cloudflare: ", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Failed to read response body: ", err.Error())
+		return
+	}
+
+	// Check response
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Cloudflare upload failed with status %d: %s\n", resp.StatusCode, string(bodyBytes))
+		fmt.Printf("Request URL: %s\n", url)
+		fmt.Printf("Authorization header: Bearer %s\n", apiToken)
+		return
+	}
+
+	fmt.Println("Successfully uploaded bc1.jpg to Cloudflare")
+	fmt.Println("Response:", string(bodyBytes))
+	// }
+
+}
+
+func TestRequestFileUpload(t *testing.T) {
+	// Test file upload to story endpoint
+	// This test simulates: curl -X POST http://localhost:8080/story/v01/upload -F "files=@/home/jino/tmp/bc1.jpg" -H "X-Totp: test" -v
+
+	targetUrl := "localhost:8080"
+	endpoint := "/story/v01/upload"
+	filePath := "/home/jino/tmp/bc1.jpg"
+
+	// Create multipart form data
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Errorf("Failed to open file: %v", err)
+		return
+	}
+	defer file.Close()
+
+	// Create form file field
+	part, err := writer.CreateFormFile("files", filepath.Base(filePath))
+	if err != nil {
+		t.Errorf("Failed to create form file: %v", err)
+		return
+	}
+
+	// Copy file content to form
+	_, err = io.Copy(part, file)
+	if err != nil {
+		t.Errorf("Failed to copy file content: %v", err)
+		return
+	}
+
+	// Get content type before closing writer
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	// Create request
+	url := fmt.Sprintf("http://%s%s", targetUrl, endpoint)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		t.Errorf("Failed to create request: %v", err)
+		return
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("X-Totp", "test")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Errorf("Failed to upload file: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("Failed to read response body: %v", err)
+		return
+	}
+
+	// Check response
+	fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("Response: %s\n", string(bodyBytes))
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Upload failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return
+	}
+
+	fmt.Println("Successfully uploaded file to story endpoint")
+
+}
+
+func Test_GetFilename(t *testing.T) {
+	fullPath := "home/jino/tmp/bc1.jpg"
+	parts := strings.Split(fullPath, "/")
+	// filename := parts[len(parts)-1]
+	var filename string
+	if len(parts) > 1 {
+		filename = parts[len(parts)-1]
+	}
+	fmt.Println(filename)
+}
+
+func TestMultiFileUpload(t *testing.T) {
+	// Test file upload to story endpoint
+	// This test simulates: curl -X POST http://localhost:8080/story/v01/upload -F "files=@/home/jino/tmp/bc1.jpg" -F "uid=test_user_123" -F "index_0=0" -H "X-Totp: test" -v
+
+	targetUrl := "localhost:8080"
+	endpoint := "/story/v01/upload"
+	filePath := "/home/jino/tmp/bc1.jpg"
+	filePath2 := "/home/jino/tmp/bc2.jpg"
+	filePath3 := "/home/jino/tmp/bc3.jpg"
+	testUid := "7766493213763375817" // 테스트용 uid
+
+	// Create multipart form data
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// List of files to upload
+	filePaths := []string{filePath, filePath2, filePath3}
+
+	// Add uid field first
+	err := writer.WriteField("uid", testUid)
+	if err != nil {
+		t.Errorf("Failed to write uid field: %v", err)
+		return
+	}
+
+	err = writer.WriteField("stat", "1")
+	if err != nil {
+		t.Errorf("Failed to write stat field: %v", err)
+		return
+	}
+
+	err = writer.WriteField("nick", "testnick")
+	if err != nil {
+		t.Errorf("Failed to write stat field: %v", err)
+		return
+	}
+
+	err = writer.WriteField("sbody", "teqewrqwreqwreqwerqwreqwreqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerwqerqwerstteststsetsteewststestsetsetestestesetsetestestestsetestseetestestestestsetestestestestsetestestsetestestsetsetestesetestestsetsetestsetsetestestewsterstewrtkldsjgklsdjklsdfajklasfjdlkjaklsjfaljfaskdljfklasjfklasjfdlkasjklfjaslkfjkalsjfklasjfklasjfkljasklfjasklfjlkasfd")
+	if err != nil {
+		t.Errorf("Failed to write uid field: %v", err)
+		return
+	}
+
+	// Add each file to the multipart form with index
+	for _, fp := range filePaths {
+		// Open the file
+		file, err := os.Open(fp)
+		if err != nil {
+			t.Errorf("Failed to open file %s: %v", fp, err)
+			return
+		}
+		defer file.Close()
+
+		// Create form file field
+		part, err := writer.CreateFormFile("files", filepath.Base(fp))
+		if err != nil {
+			t.Errorf("Failed to create form file for %s: %v", fp, err)
+			return
+		}
+
+		// Copy file content to form
+		_, err = io.Copy(part, file)
+		if err != nil {
+			t.Errorf("Failed to copy file content for %s: %v", fp, err)
+			return
+		}
+		/*
+			parts := strings.Split(fp, "/")
+			var fname = ""
+			if len(parts) > 1 {
+				fname = parts[len(parts)-1]
+			} else {
+				fname = fp
+			}
+
+			// Add index field for this file
+			indexFieldName := fmt.Sprintf("idx_%d", idx)
+			err = writer.WriteField(indexFieldName, fmt.Sprintf("%s", fname))
+			if err != nil {
+				t.Errorf("Failed to write index field for %s: %v", fp, err)
+				return
+			} */
+	}
+
+	// Get content type before closing writer
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	// Create request
+	url := fmt.Sprintf("http://%s%s", targetUrl, endpoint)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		t.Errorf("Failed to create request: %v", err)
+		return
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("X-Totp", "test")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Errorf("Failed to upload file: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("Failed to read response body: %v", err)
+		return
+	}
+
+	// Check response
+	fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("Response: %s\n", string(bodyBytes))
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Upload failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return
+	}
+
+	fmt.Println("Successfully uploaded multiple files to story endpoint")
+
 }
 
 func TestAccLogin2(t *testing.T) {

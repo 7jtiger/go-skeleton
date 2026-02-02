@@ -1179,6 +1179,506 @@
                 }
             }
         },
+        "/story/v01/comment/create": {
+            "post": {
+                "description": "Create a new comment for a story",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Create a story comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Story index",
+                        "name": "str_idx",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Writer user ID",
+                        "name": "wuid",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Nickname",
+                        "name": "nick",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)",
+                        "name": "stat",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comment body (max 256 characters)",
+                        "name": "body",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Comment data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.StrCmtCreateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully created str comment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - missing or invalid parameters",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/comment/updbody": {
+            "post": {
+                "description": "Update the body content of a story comment",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "Update story comment body",
+                "parameters": [
+                    {
+                        "description": "Comment body update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.StrCmtUpdBodyReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated str body comment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Invalid parameters",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/comment/updstat": {
+            "post": {
+                "description": "Update the status of a story comment (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "Update story comment status",
+                "parameters": [
+                    {
+                        "description": "Comment status update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.StrCmtUpdStatReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated str stat comment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Invalid parameters",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/delpic": {
+            "post": {
+                "description": "Delete a picture from a story and move it to backup",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Delete a story picture",
+                "parameters": [
+                    {
+                        "description": "Delete story picture request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.DeleteStrPicReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully deleted story picture",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Invalid parameters or empty picture list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/detail/{idx}": {
+            "get": {
+                "description": "Retrieve detailed information of a specific story including comments",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Get story detail by story index",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Story Index",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved story detail - returns story object with nick, body, str_img (JSON array), at_create fields and commentList array with idx, wuid, nick, body, at_create fields",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid or missing idx",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error - failed to get story detail or comment list",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/list/{uid}": {
+            "get": {
+                "description": "Retrieve list of stories for a specific user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Get story list by user ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "uid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved story list - returns array of story objects with idx, nick, str_img (JSON array), at_create fields",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid or missing uid",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error - failed to get story list",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/updbody": {
+            "post": {
+                "description": "Update the body content of a story",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Update story body",
+                "parameters": [
+                    {
+                        "description": "Update story body request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.UpdateStrBodyReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated story body",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Invalid parameters",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/updstat": {
+            "post": {
+                "description": "Update the status of a story",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Update story status",
+                "parameters": [
+                    {
+                        "description": "Update story status request stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 :resv",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.UpdateStrStatReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated story stat",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Invalid parameters",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload story picture to Cloudflare Images",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "story"
+                ],
+                "summary": "Upload story picture",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Story image files (max 5MB each, max 5 files, max body length 512)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "uid",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Story body",
+                        "name": "sbody",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Nickname",
+                        "name": "nick",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Story status (0: del, 1: pub, 2: private, 3: limit, 4: resv)",
+                        "name": "stat",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "TOTP token for authentication",
+                        "name": "X-Totp",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully uploaded story picture",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - no files uploaded",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error - upload failed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/webrtc/v01/available-users": {
             "get": {
                 "description": "Get list of users available for video call",
@@ -1571,6 +2071,17 @@
                 }
             }
         },
+        "protocol.DeleteStrPicReq": {
+            "type": "object",
+            "properties": {
+                "idx": {
+                    "type": "string"
+                },
+                "pic_idx": {
+                    "type": "string"
+                }
+            }
+        },
         "protocol.ICEServer": {
             "type": "object",
             "properties": {
@@ -1736,6 +2247,70 @@
             "x-enum-varnames": [
                 "Success"
             ]
+        },
+        "protocol.StrCmtCreateReq": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "stat": {
+                    "type": "string"
+                },
+                "str_idx": {
+                    "type": "string"
+                },
+                "wuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.StrCmtUpdBodyReq": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "idx": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.StrCmtUpdStatReq": {
+            "type": "object",
+            "properties": {
+                "idx": {
+                    "type": "string"
+                },
+                "stat": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.UpdateStrBodyReq": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "idx": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.UpdateStrStatReq": {
+            "type": "object",
+            "properties": {
+                "idx": {
+                    "type": "string"
+                },
+                "stat": {
+                    "type": "string"
+                }
+            }
         },
         "protocol.UserInfoResp": {
             "type": "object",

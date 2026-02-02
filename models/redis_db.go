@@ -375,8 +375,8 @@ func (r *RedisDB) DeleteJWTToken(token string) error {
 	pipe.HDel(r.ctx, "AUTH:ACCESS", token)
 
 	// 2. 사용자 활성 토큰 목록에서 제거
-	pipe.SRem(r.ctx, fmt.Sprintf("user:%s:active_tokens", session), token)
-
+	// pipe.SRem(r.ctx, fmt.Sprintf("user:%s:active_tokens", session), token)
+	pipe.SRem(r.ctx, fmt.Sprintf("user:%d:active_tokens", session.Uid), token)
 	_, err = pipe.Exec(r.ctx)
 	return err
 }
@@ -402,7 +402,7 @@ func (r *RedisDB) HSetUserInfo(user *ptl.UserInfoResp) error {
 		return err
 	}
 
-	key := fmt.Sprintf("Cupitok-%s-Gateway", user.Uid)
+	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
 	encSessionJSON, err := utils.EncryptChaCha20(string(sessionJSON), key)
 	if err != nil {
 		return fmt.Errorf("error decrypting email: %v", err)

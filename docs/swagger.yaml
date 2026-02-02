@@ -77,6 +77,13 @@ definitions:
       noiseSuppression:
         type: boolean
     type: object
+  protocol.DeleteStrPicReq:
+    properties:
+      idx:
+        type: string
+      pic_idx:
+        type: string
+    type: object
   protocol.ICEServer:
     properties:
       type:
@@ -186,6 +193,47 @@ definitions:
     type: integer
     x-enum-varnames:
     - Success
+  protocol.StrCmtCreateReq:
+    properties:
+      body:
+        type: string
+      nick:
+        type: string
+      stat:
+        type: string
+      str_idx:
+        type: string
+      wuid:
+        type: string
+    type: object
+  protocol.StrCmtUpdBodyReq:
+    properties:
+      body:
+        type: string
+      idx:
+        type: string
+    type: object
+  protocol.StrCmtUpdStatReq:
+    properties:
+      idx:
+        type: string
+      stat:
+        type: string
+    type: object
+  protocol.UpdateStrBodyReq:
+    properties:
+      body:
+        type: string
+      idx:
+        type: string
+    type: object
+  protocol.UpdateStrStatReq:
+    properties:
+      idx:
+        type: string
+      stat:
+        type: string
+    type: object
   protocol.UserInfoResp:
     properties:
       age:
@@ -1049,6 +1097,349 @@ paths:
       summary: Retrieves main information to be displayed on the home screen
       tags:
       - Home
+  /story/v01/comment/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a new comment for a story
+      parameters:
+      - description: Story index
+        in: query
+        name: str_idx
+        required: true
+        type: string
+      - description: Writer user ID
+        in: query
+        name: wuid
+        required: true
+        type: string
+      - description: Nickname
+        in: query
+        name: nick
+        required: true
+        type: string
+      - description: Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)
+        in: query
+        name: stat
+        required: true
+        type: string
+      - description: Comment body (max 256 characters)
+        in: query
+        name: body
+        required: true
+        type: string
+      - description: Comment data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.StrCmtCreateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully created str comment
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - missing or invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a story comment
+      tags:
+      - story
+  /story/v01/comment/updbody:
+    post:
+      consumes:
+      - application/json
+      description: Update the body content of a story comment
+      parameters:
+      - description: Comment body update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.StrCmtUpdBodyReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated str body comment
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - Invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update story comment body
+      tags:
+      - Story
+  /story/v01/comment/updstat:
+    post:
+      consumes:
+      - application/json
+      description: Update the status of a story comment (0:default, 1:private, 2:reserved,
+        3:reserved, 4:deleted)
+      parameters:
+      - description: Comment status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.StrCmtUpdStatReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated str stat comment
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - Invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update story comment status
+      tags:
+      - Story
+  /story/v01/delpic:
+    post:
+      consumes:
+      - application/json
+      description: Delete a picture from a story and move it to backup
+      parameters:
+      - description: Delete story picture request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.DeleteStrPicReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully deleted story picture
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - Invalid parameters or empty picture list
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a story picture
+      tags:
+      - story
+  /story/v01/detail/{idx}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve detailed information of a specific story including comments
+      parameters:
+      - description: Story Index
+        in: path
+        name: idx
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved story detail - returns story object
+            with nick, body, str_img (JSON array), at_create fields and commentList
+            array with idx, wuid, nick, body, at_create fields
+          schema:
+            $ref: '#/definitions/protocol.RespDataHeader'
+        "400":
+          description: Bad request - invalid or missing idx
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error - failed to get story detail or comment
+            list
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get story detail by story index
+      tags:
+      - story
+  /story/v01/list/{uid}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve list of stories for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: uid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved story list - returns array of story
+            objects with idx, nick, str_img (JSON array), at_create fields
+          schema:
+            $ref: '#/definitions/protocol.RespDataHeader'
+        "400":
+          description: Bad request - invalid or missing uid
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error - failed to get story list
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get story list by user ID
+      tags:
+      - story
+  /story/v01/updbody:
+    post:
+      consumes:
+      - application/json
+      description: Update the body content of a story
+      parameters:
+      - description: Update story body request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.UpdateStrBodyReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated story body
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - Invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update story body
+      tags:
+      - story
+  /story/v01/updstat:
+    post:
+      consumes:
+      - application/json
+      description: Update the status of a story
+      parameters:
+      - description: 'Update story status request stat=0 : del, stat=1 : pub, stat=2
+          : private, stat=3 : limit, stat=4 :resv'
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.UpdateStrStatReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated story stat
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - Invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update story status
+      tags:
+      - story
+  /story/v01/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload story picture to Cloudflare Images
+      parameters:
+      - description: Story image files (max 5MB each, max 5 files, max body length
+          512)
+        in: formData
+        name: files
+        required: true
+        type: file
+      - description: User ID
+        in: formData
+        name: uid
+        required: true
+        type: string
+      - description: Story body
+        in: formData
+        name: sbody
+        type: string
+      - description: Nickname
+        in: formData
+        name: nick
+        type: string
+      - description: 'Story status (0: del, 1: pub, 2: private, 3: limit, 4: resv)'
+        in: formData
+        name: stat
+        type: string
+      - description: TOTP token for authentication
+        in: header
+        name: X-Totp
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully uploaded story picture
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - no files uploaded
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error - upload failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload story picture
+      tags:
+      - story
   /webrtc/v01/available-users:
     get:
       consumes:

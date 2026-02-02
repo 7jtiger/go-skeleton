@@ -1,0 +1,652 @@
+package controller
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"ms-gateway/conf"
+	"ms-gateway/models"
+	"net/http"
+	"strconv"
+
+	log "ms-gateway/common/logger"
+	ptl "ms-gateway/protocol"
+
+	"github.com/gin-gonic/gin"
+)
+
+type CldFlrInfo struct {
+	Filename string `json:"filename"`
+	URL      string `json:"url"`
+}
+
+type StoryController struct {
+	ctl *Controller
+	cfg *conf.Config
+	rep *models.Repositories
+
+	adb *models.AccountDB
+	hdb *models.HistoryDB
+	sdb *models.StoryDB
+}
+
+func NewStoryController(ctl *Controller, rep *models.Repositories) (*StoryController, error) {
+	r := &StoryController{
+		ctl: ctl,
+		rep: rep,
+		cfg: ctl.cfg,
+	}
+
+	if err := rep.Get(&r.adb, &r.hdb, &r.sdb); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+// GetStoryList godoc
+// @Summary Get story list by user ID
+// @Description Retrieve list of stories for a specific user
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param uid path string true "User ID"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved story list - returns array of story objects with idx, nick, str_img (JSON array), at_create fields"
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid or missing uid"
+// @Failure 500 {object} protocol.RespHeader "Internal server error - failed to get story list"
+// @Router /story/v01/list/{uid} [get]
+func (p *StoryController) GetStoryList(c *gin.Context) {
+	uid := c.Param("uid")
+	if uid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+		return
+	}
+
+	uidInt, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+		return
+	}
+
+	storyList, err := p.sdb.GetStoryList(uidInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, storyList)
+}
+
+// GetStoryDetail godoc
+// @Summary Get story detail by story index
+// @Description Retrieve detailed information of a specific story including comments
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param idx path string true "Story Index"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved story detail - returns story object with nick, body, str_img (JSON array), at_create fields and commentList array with idx, wuid, nick, body, at_create fields"
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid or missing idx"
+// @Failure 500 {object} protocol.RespHeader "Internal server error - failed to get story detail or comment list"
+// @Router /story/v01/detail/{idx} [get]
+// @Example Request: GET /story/v01/detail/3
+// @Example Response: {"code":200,"message":"success","data":{"story":{"nick":"testnick","body":"test story body","str_img":["https://example.com/img1.jpg","https://example.com/img2.jpg"],"at_create":"2024-01-01T12:00:00Z"},"commentList":[{"idx":1,"wuid":"77645423236541","nick":"test","body":"111111 test comment body","at_create":"2024-01-01T12:30:00Z"}]}}
+func (p *StoryController) GetStoryDetail(c *gin.Context) {
+	idx := c.Param("idx")
+	if idx == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	idxInt, err := strconv.Atoi(idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	story, err := p.sdb.GetStory(idxInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story detail", err)
+		return
+	}
+
+	commentList, err := p.sdb.GetStrCmtDetail(idxInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get str comment list", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"story": story, "commentList": commentList})
+}
+
+// UploadStoryPic godoc
+// @Summary Upload story picture
+// @Description Upload story picture to Cloudflare Images
+// @Tags story
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param files formData file true "Story image files (max 5MB each, max 5 files, max body length 512)"
+// @Param uid formData string true "User ID"
+// @Param sbody formData string false "Story body"
+// @Param nick formData string false "Nickname"
+// @Param stat formData string false "Story status (0: del, 1: pub, 2: private, 3: limit, 4: resv)"
+// @Param X-Totp header string false "TOTP token for authentication"
+//
+//	@Example curl -X POST http://localhost:8080/story/v01/upload \
+//	  -F "files=@/home/tmp/bc1.jpg" \
+//	  -F "files=@/home/tmp/bc2.jpg" \
+//	  -F "files=@/home/tmp/bc3.jpg" \
+//	  -F "uid=12312413241241" \
+//	  -F "sbody=teststesetsets" \
+//	  -F "nick=testnick" \
+//	  -F "stat=1" \
+//	  -H "X-Totp: test" \
+//	  -v
+//
+// @Success 200 {object} map[string]interface{} "Successfully uploaded story picture"
+// @Failure 400 {object} map[string]interface{} "Bad request - no files uploaded"
+// @Failure 500 {object} map[string]interface{} "Internal server error - upload failed"
+// @Router /story/v01/upload [post]
+func (p *StoryController) UploadStoryPic(c *gin.Context) {
+	fileInfo, ok := c.Get("uploadedFiles")
+	if !ok {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "No files uploaded")
+		return
+	}
+	sinfo, ok := c.Get("sinfo")
+	if !ok {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "No sinfo uploaded")
+		return
+	}
+
+	sinfoMap := sinfo.(map[string][]string)
+	//map[nick:[testnick] sbody:[te] stat:[1] uid:[7766493213763375817]]"
+	sstat := sinfoMap["stat"][0]
+	suid := sinfoMap["uid"][0]
+	ssbody := sinfoMap["sbody"][0]
+	snick := sinfoMap["nick"][0]
+	if sstat == "" || suid == "0" || ssbody == "" || snick == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Stat, Uid, Sbody, Nick are required")
+		return
+	}
+
+	files := fileInfo.([]*multipart.FileHeader)
+	cldFlrInfos, err := p.uploadCldFlr(files)
+	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public bc2.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/6238b8a7-cf66-445e-48f3-64f93d1fb900/public bc3.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/59895828-7bed-4690-3721-1e38331c0c00/public]
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story picture", err)
+		return
+	}
+
+	dix := map[string]string{}
+	i := 1
+	for _, value := range *cldFlrInfos {
+		idx := strconv.Itoa(i)
+		dix[idx] = value
+		i++
+	}
+
+	simg := &ptl.StoryImage{}
+	simg.StrImg, err = json.Marshal(dix)
+	if err != nil {
+		log.Error("Failed to marshal story image: %v", err)
+		return
+	}
+
+	simg.Body = ssbody
+	simg.Nick = snick
+	nstat, err := strconv.Atoi(sstat)
+	if err != nil {
+		log.Error("Failed to convert stat to int: %v", err)
+		return
+	}
+	simg.Stat = nstat
+	simg.Uid, err = strconv.ParseUint(suid, 10, 64)
+	if err != nil {
+		log.Error("Failed to convert uid to uint64: %v", err)
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to convert uid to uint64", err)
+		return
+	}
+
+	lastID, err := p.sdb.SetStory(simg)
+	if err != nil {
+		log.Error("Failed to set story: %v", err)
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to set story", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully uploaded story picture", "lastID": lastID})
+}
+
+// func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader, putInfo map[string]map[string]string) (*[]CldFlrInfo, error) {
+func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[string]string, error) {
+	accountID := "3a5160a653bf6175ea5c5b24ee01e344"
+	apiToken := "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
+
+	// cldFlrInfos := make([]CldFlrInfo, 4)
+	cldFlrInfos := make(map[string]string, 4)
+	for _, file := range files {
+		// Open the file
+		src, err := file.Open()
+		if err != nil {
+			log.Error("Failed to open file: %v", err)
+			return nil, err
+		}
+		defer src.Close()
+
+		// Create multipart form data
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		// Add file to form
+		part, err := writer.CreateFormFile("file", file.Filename)
+		if err != nil {
+			log.Error("Failed to create form file: %v", err)
+			return nil, err
+		}
+
+		if _, err := io.Copy(part, src); err != nil {
+			log.Error("Failed to copy file: %v", err)
+			return nil, err
+		}
+
+		writer.Close()
+
+		// Create request
+		url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID)
+		req, err := http.NewRequest("POST", url, body)
+		if err != nil {
+			log.Error("Failed to create request: %v", err)
+			return nil, err
+		}
+
+		// Set headers
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+
+		// Send request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Error("Failed to upload to Cloudflare: %v", err)
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		// Read response body
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Failed to read response body: %v", err)
+			return nil, err
+		}
+
+		// cldFlrInfo := CldFlrInfo{}
+		// Parse response to extract success, filename, and variants
+		var tempResponse struct {
+			Success bool `json:"success"`
+			Result  struct {
+				Filename string   `json:"filename"`
+				Variants []string `json:"variants"`
+			} `json:"result"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &tempResponse); err != nil {
+			log.Error("Failed to parse response for extraction: %v", err)
+			return nil, err
+		}
+
+		cldFlrInfos[file.Filename] = tempResponse.Result.Variants[0]
+
+		//{true {bc1.jpg [https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/6e8b29d4-4378-499a-7334-bd019dc25900/public]}}
+		// 2026-01-26T22:33:00.075+0900	INFO	info	{"Info": "Response body: %s{\n  \"result\": {\n    \"id\": \"100320e3-fb16-490a-7b21-a931feec6400\",\n    \"filename\": \"bc1.jpg\",\n    \"uploaded\": \"2026-01-26T13:30:51.197Z\",\n    \"requireSignedURLs\": false,\n    \"variants\": [\n      \"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/100320e3-fb16-490a-7b21-a931feec6400/public\"\n    ]\n  },\n  \"success\": true,\n  \"errors\": [],\n  \"messages\": []\n}"}
+		log.Info("Response body: %s", string(bodyBytes))
+
+		if resp.StatusCode != http.StatusOK {
+			// bodyBytes, _ := io.ReadAll(resp.Body)
+			log.Error("Cloudflare upload failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+			return nil, fmt.Errorf("cloudflare upload failed with status %d", resp.StatusCode)
+		}
+	}
+
+	return &cldFlrInfos, nil
+}
+
+// UpdateStoryStat godoc
+// @Summary Update story status
+// @Description Update the status of a story
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param request body protocol.UpdateStrStatReq true "Update story status request stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 :resv"
+// @Success 200 {object} map[string]interface{} "Successfully updated story stat"
+// @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/updstat [post]
+func (p *StoryController) UpdateStoryStat(c *gin.Context) {
+	var req ptl.UpdateStrStatReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.Idx == "" || req.Stat == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx and Stat are required")
+		return
+	}
+
+	strIdx, err := strconv.Atoi(req.Idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	nstat, err := strconv.Atoi(req.Stat)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Stat is required")
+		return
+	}
+
+	affected, err := p.sdb.UpdateStoryStat(strIdx, nstat)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to update story stat", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated story stat", "affected": affected})
+}
+
+// UpdateStrBody godoc
+// @Summary Update story body
+// @Description Update the body content of a story
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param request body protocol.UpdateStrBodyReq true "Update story body request"
+// @Success 200 {object} map[string]interface{} "Successfully updated story body"
+// @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/updbody [post]
+func (p *StoryController) UpdateStrBody(c *gin.Context) {
+	var req ptl.UpdateStrBodyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.Idx == "" || req.Body == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx and Body are required")
+		return
+	}
+
+	strIdx, err := strconv.Atoi(req.Idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StrIdx is required")
+		return
+	}
+
+	affected, err := p.sdb.UpdateStrBody(strIdx, req.Body)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to update str body comment", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str body comment", "affected": affected})
+}
+
+// DeleteStrPic godoc
+// @Summary Delete a story picture
+// @Description Delete a picture from a story and move it to backup
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param request body protocol.DeleteStrPicReq true "Delete story picture request"
+// @Success 200 {object} map[string]interface{} "Successfully deleted story picture"
+// @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters or empty picture list"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/delpic [post]
+func (p *StoryController) DeleteStrPic(c *gin.Context) {
+
+	var req ptl.DeleteStrPicReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.Idx == "" || req.Pic == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx and Pic are required")
+		return
+	}
+
+	strIdxInt, err := strconv.Atoi(req.Idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StrIdx is required")
+		return
+	}
+
+	sPic := req.Pic
+	strImg, strImgBak, err := p.sdb.GetStrPicList(strIdxInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get str pic list", err)
+		return
+	}
+	if strImg == nil && strImgBak == nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Str pic list is empty")
+		return
+	}
+
+	//todo 분해
+	// strImg
+	mImg := make(map[string]string)
+	mImgBak := make(map[string]string)
+
+	json.Unmarshal(strImg, &mImg)
+	json.Unmarshal(strImgBak, &mImgBak)
+
+	durl := mImg[sPic]
+	mImgBak[sPic] = durl
+
+	delete(mImg, sPic)
+
+	// mImgBytes, err := json.Marshal(mImg)
+	mImgBytes, err := json.Marshal(mImg)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to marshal mImg", err)
+		return
+	}
+	mImgBakBytes, err := json.Marshal(mImgBak)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to marshal mImgBak", err)
+		return
+	}
+	affected, err := p.sdb.DeleteStrPic(strIdxInt, mImgBytes, mImgBakBytes)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to update str pic comment", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str pic comment", "affected": affected})
+}
+
+// ------------- comment -------------
+// CreateStrComment godoc
+// @Summary Create a story comment
+// @Description Create a new comment for a story
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param str_idx query string true "Story index"
+// @Param wuid query string true "Writer user ID"
+// @Param nick query string true "Nickname"
+// @Param stat query string true "Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)"
+// @Param body query string true "Comment body (max 256 characters)"
+// @Param data body protocol.StrCmtCreateReq true "Comment data"
+// @Success 200 {object} map[string]interface{} "Successfully created str comment"
+// @Failure 400 {object} map[string]interface{} "Bad request - missing or invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/comment/create [post]
+func (p *StoryController) CreateStrComment(c *gin.Context) {
+	var req ptl.StrCmtCreateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.StrIdx == "" || req.Wuid == "" || req.Nick == "" || req.Stat == "" || req.Body == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Cid is required")
+		return
+	}
+
+	strIdxInt, err := strconv.ParseInt(req.StrIdx, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StrIdx is required")
+		return
+	}
+
+	wuidInt, err := strconv.ParseInt(req.Wuid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Wuid is required")
+	}
+
+	nstat, err := strconv.Atoi(req.Stat)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Stat is required")
+		return
+	}
+
+	cmt := &ptl.StrComment{
+		StrIdx: int(strIdxInt),
+		Wuid:   uint64(wuidInt),
+		Nick:   req.Nick,
+		Stat:   nstat,
+		Body:   req.Body,
+	}
+
+	lastID, err := p.sdb.SetStrComment(cmt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to set str comment", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully created str comment", "lastID": lastID})
+}
+
+// UpdateStrStatComment godoc
+// @Summary Update story comment status
+// @Description Update the status of a story comment (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.StrCmtUpdStatReq true "Comment status update request"
+// @Success 200 {object} map[string]interface{} "Successfully updated str stat comment"
+// @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/comment/updstat [post]
+func (p *StoryController) UpdateStrStatComment(c *gin.Context) {
+	//"Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)"
+	var req ptl.StrCmtUpdStatReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.Idx == "" || req.Stat == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx and Stat are required")
+		return
+	}
+
+	cmtIdx, err := strconv.Atoi(req.Idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	nstat, err := strconv.Atoi(req.Stat)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Stat is required")
+		return
+	}
+
+	affected, err := p.sdb.UpdateStrStatComment(cmtIdx, nstat)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to update str stat comment", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str stat comment", "affected": affected})
+}
+
+// UpdateStrBodyComment godoc
+// @Summary Update story comment body
+// @Description Update the body content of a story comment
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.StrCmtUpdBodyReq true "Comment body update request"
+// @Success 200 {object} map[string]interface{} "Successfully updated str body comment"
+// @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/comment/updbody [post]
+func (p *StoryController) UpdateStrBodyComment(c *gin.Context) {
+	var req ptl.StrCmtUpdBodyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+
+	if req.Body == "" || req.Idx == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Body and Idx are required")
+		return
+	}
+
+	cmtIdx, err := strconv.Atoi(req.Idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	affected, err := p.sdb.UpdateStrBodyComment(cmtIdx, req.Body)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to update str body comment", err)
+		return
+	}
+
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str body comment", "affected": affected})
+}
+
+func (p *StoryController) GetStrCommentList(c *gin.Context) {
+	strIdx := c.Query("str_idx")
+	if strIdx == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StrIdx is required")
+		return
+	}
+
+	strIdxInt, err := strconv.ParseInt(strIdx, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StrIdx is required")
+		return
+	}
+
+	comments, err := p.sdb.GetStrCommentList(strIdxInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get str comment list", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, comments)
+}
+
+/* func (p *StoryController) GetStoryList(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+		return
+	}
+
+	storyList, err := p.sdb.GetStoryList(uint64(uid))
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
+		return
+	}
+} */

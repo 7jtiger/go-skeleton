@@ -31,6 +31,7 @@ type Controller struct {
 	FCMPusher *FCMPusher
 	Signaling *SignalingController
 	ChatCtl   *ChatController
+	StoryCtl  *StoryController
 	Rdb       *models.RedisDB
 }
 
@@ -67,6 +68,10 @@ func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories)
 	*/
 	// Signaling 컨트롤러 생성
 	if r.Signaling, err = NewSignalingController(r, rep); err != nil {
+		return nil, err
+	}
+
+	if r.StoryCtl, err = NewStoryController(r, rep); err != nil {
 		return nil, err
 	}
 

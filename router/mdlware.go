@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -57,7 +58,7 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, X-Forwarded-For, Authorization, Accept, Origin, Cache-Control, X-Requested-With, OTP-Auth, X-Otp, X-Meta, X-Name, Siwe-Session")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, X-Forwarded-For, Authorization, Accept, Origin, Cache-Control, X-Requested-With, OTP-Auth, X-Otp, X-Totp, X-Meta, X-Name, Siwe-Session")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
@@ -209,13 +210,131 @@ func (p *Router) OptionalJwt() gin.HandlerFunc {
 	}
 }
 
+// detectContentTypeFromFile reads the first 512 bytes and detects content type.
+// Uses both http.DetectContentType and magic bytes for reliable detection.
+// Used when client sends application/octet-stream so we can allow real image/video types.
+func detectContentTypeFromFile(fh *multipart.FileHeader) (string, error) {
+	f, err := fh.Open()
+	if err != nil {
+		return "", fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+	if n == 0 {
+		return "", fmt.Errorf("file is empty")
+	}
+	buf = buf[:n]
+
+	firstBytesLen := 16
+	if n < 16 {
+		firstBytesLen = n
+	}
+	firstBytesHex := hex.EncodeToString(buf[:firstBytesLen])
+
+	// 먼저 매직 바이트로 직접 확인 (더 확실함)
+	detected := detectByMagicBytes(buf, n)
+	if detected != "" {
+		logger.Info("detectContentTypeFromFile: Detected by magic bytes",
+			"filename", fh.Filename,
+			"content_type", detected,
+			"first_bytes", firstBytesHex)
+		return detected, nil
+	}
+
+	// 매직 바이트로 확인 안되면 http.DetectContentType 사용
+	detected = http.DetectContentType(buf)
+	logger.Info("detectContentTypeFromFile: Using http.DetectContentType",
+		"filename", fh.Filename,
+		"detected_raw", detected,
+		"bytes_read", n,
+		"first_bytes", firstBytesHex)
+
+	if idx := strings.Index(detected, ";"); idx >= 0 {
+		detected = strings.TrimSpace(detected[:idx])
+	}
+
+	logger.Info("detectContentTypeFromFile: Final content type", "filename", fh.Filename, "content_type", detected)
+	return detected, nil
+}
+
+// detectByMagicBytes checks file magic bytes to determine content type
+func detectByMagicBytes(buf []byte, n int) string {
+	if n < 4 {
+		return ""
+	}
+
+	// JPEG: FF D8 FF
+	if n >= 3 && buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF {
+		return "image/jpeg"
+	}
+
+	// PNG: 89 50 4E 47
+	if n >= 4 && buf[0] == 0x89 && buf[1] == 0x50 && buf[2] == 0x4E && buf[3] == 0x47 {
+		return "image/png"
+	}
+
+	// GIF87a: 47 49 46 38 37 61
+	// GIF89a: 47 49 46 38 39 61
+	if n >= 6 && buf[0] == 0x47 && buf[1] == 0x49 && buf[2] == 0x46 && buf[3] == 0x38 {
+		if (buf[4] == 0x37 || buf[4] == 0x39) && buf[5] == 0x61 {
+			return "image/gif"
+		}
+	}
+
+	// WEBP: RIFF...WEBP (RIFF는 4바이트, 다음 4바이트는 파일 크기, 그 다음 4바이트는 "WEBP")
+	if n >= 12 && string(buf[0:4]) == "RIFF" && string(buf[8:12]) == "WEBP" {
+		return "image/webp"
+	}
+
+	// MP4: ftyp... (보통 4바이트 offset 후에 ftyp가 나타남)
+	// MP4는 여러 변형이 있어서 더 복잡하지만, 일반적으로 ftyp로 시작
+	if n >= 8 {
+		// ftyp는 보통 4바이트 offset 후에 나타남
+		if string(buf[4:8]) == "ftyp" {
+			return "video/mp4"
+		}
+		// 또는 처음부터 ftyp로 시작할 수도 있음
+		if n >= 4 && string(buf[0:4]) == "ftyp" {
+			return "video/mp4"
+		}
+	}
+
+	return ""
+}
+
 // ValidateFileUpload checks if the uploaded files meet the requirements
 func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		logger.Info("ValidateFileUpload: Request received",
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"content-type", c.GetHeader("Content-Type"),
+			"content-length", c.GetHeader("Content-Length"))
+
+		// Content-Type 확인
+		contentType := c.GetHeader("Content-Type")
+		if !strings.HasPrefix(contentType, "multipart/form-data") {
+			logger.Warn("ValidateFileUpload: Invalid content type", "content-type", contentType)
+			p.ctl.RespError(c, "Invalid content type. Expected multipart/form-data", http.StatusBadRequest)
+			return
+		}
+
 		// 파일이 존재하는지 먼저 확인
+		// MultipartForm()은 MaxMultipartMemory 설정에 따라 메모리나 디스크에 저장됨
 		form, err := c.MultipartForm()
 		if err != nil {
-			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
+			logger.Warn("ValidateFileUpload: Failed to parse multipart form", "error", err.Error())
+			// 더 자세한 에러 정보 제공
+			if strings.Contains(err.Error(), "request body too large") {
+				p.ctl.RespError(c, "Request body too large. Maximum size exceeded", http.StatusRequestEntityTooLarge)
+			} else {
+				p.ctl.RespError(c, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+			}
 			return
 		}
 
@@ -227,9 +346,16 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 
 		// Get files from form
 		files := form.File["files"]
+		// 디버깅을 위한 form 키 목록
+		formKeys := make([]string, 0, len(form.File))
+		for k := range form.File {
+			formKeys = append(formKeys, k)
+		}
+		logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
 
 		// Check if any files were uploaded
 		if len(files) == 0 {
+			logger.Warn("ValidateFileUpload: No files in 'files' field")
 			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
 			return
 		}
@@ -241,6 +367,11 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 		}
 
 		// Check each file
+		//5MB = 5 << 20   // 5 MB
+		//100MB = 100 << 20  // 100 MB
+		//20MB = 20 << 20  // 20 MB
+		//2MB = 2 << 20  // 2 MB
+		//50MB = 50 << 20  // 50 MB
 		maxSize := size << 20 // 10MB per file
 		// 추후 확장된다면 protocol에 추가하고 라우터에 맞는
 		// 컨텐츠 타입들만 선언된 타입을 인자로 받도록 수정 가능
@@ -251,6 +382,7 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 			"image/png":  true,
 			"image/gif":  true,
 			"image/webp": true,
+			"video/mp4":  true,
 		}
 
 		validFiles := make([]*multipart.FileHeader, 0, len(files))
@@ -258,14 +390,29 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 		for _, fileHeader := range files {
 			// Check file size
 			if fileHeader.Size > maxSize {
-				p.ctl.RespError(c, "File "+fileHeader.Filename+" exceeds 10MB limit", http.StatusBadRequest)
+				// maxSizeMB := size
+				p.ctl.RespError(c, fmt.Sprintf("File %s exceeds %dMB limit", fileHeader.Filename, size), http.StatusBadRequest)
 				return
 			}
 
-			// Check file type
-			contentType := fileHeader.Header.Get("Content-Type")
+			// Check file type (헤더 + application/octet-stream일 때 실제 내용으로 재판별)
+			contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+			if idx := strings.Index(contentType, ";"); idx >= 0 {
+				contentType = strings.TrimSpace(contentType[:idx])
+			}
+
+			// originalContentType := contentType
+			if contentType == "" || contentType == "application/octet-stream" {
+				detected, err := detectContentTypeFromFile(fileHeader)
+				if err != nil {
+					logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
+					p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)
+					return
+				}
+				contentType = detected
+			}
 			if !allowedTypes[contentType] {
-				p.ctl.RespError(c, "File "+fileHeader.Filename+" has invalid type. Only PDF, JPG, PNG, GIF and WEBP files are allowed", http.StatusBadRequest)
+				p.ctl.RespError(c, fmt.Sprintf("File %s has invalid type. Only JPG, PNG, GIF, WEBP (images) and MP4 (video) files are allowed", fileHeader.Filename), http.StatusBadRequest)
 				return
 			}
 
@@ -274,6 +421,7 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 
 		// Store validated files in context
 		c.Set("uploadedFiles", validFiles)
+		c.Set("sinfo", form.Value)
 
 		c.Next()
 	}
