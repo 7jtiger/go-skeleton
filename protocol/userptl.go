@@ -95,6 +95,7 @@ type LoginUserResp struct {
 	AccessToken  string       `json:"acTok"`
 	RefreshToken string       `json:"refTok"`
 	UID          string       `json:"uid"`
+	MetaHeader   string       `json:"meta"`
 	WebRTCConfig WebRTCConfig `json:"wrtc"`
 }
 

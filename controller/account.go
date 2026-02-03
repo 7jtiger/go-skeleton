@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	log "ms-gateway/common/logger"
@@ -202,18 +203,47 @@ func (p *AccountController) getUid() uint64 {
 // login user
 // responses:200:
 // @Summary Login a user
-// @Description Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success.
+// @Description Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success. Also sets x-meta header with user metadata.
 // @Tags user
 // @Accept json
 // @Produce json
 // @Param data body protocol.LoginReq true "Login request data {id : xxx, pw : hash}"
 // @Success 200 {object} protocol.LoginUserResp "Login success with token, uid, and webrtc config"
+// @Header 200 {string} x-meta "User metadata in format: uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro"
 // @Failure 400 {object} protocol.RespHeader "Bad request"
 // @Failure 102 {object} protocol.RespHeader "Parameter is missing"
 // @Failure 104 {object} protocol.RespHeader "Failed to login user"
 // @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
 // @Router /acc/v01/login [post]
+// @Example request:// {//   "id": "test123",//   "pw": "mypassword123"// }
+//
+// @Example response (success):
+// {
+//   "msg": "success",
+//   "acTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+//   "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+//   "uid": "77665817",
+//   "wrtc": {
+//     "iceServers": [
+//       {
+//         "urls": ["stun:stun.l.google.com:19302"]
+//       }
+//     ]
+//   }
+// }
+//
+// @Example response (failure):
+// {
+//   "result": 104,
+//   "resultString": "failed to login user",
+//   "data": null
+// }
+//
+// @Note x-meta header format:
+// uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro
+// Example: "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+
 func (p *AccountController) LoginUser(c *gin.Context) {
 	var req ptl.LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -300,6 +330,7 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 	uidStr := strconv.FormatUint(user.Uid, 10)
 	responseData := ptl.LoginUserResp{
 		Message:      "success",
+		MetaHeader:   mStr,
 		AccessToken:  acTok,
 		RefreshToken: refTok,
 		UID:          uidStr,
@@ -326,8 +357,8 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		return
 	}
 
-	// p.ctl.SendDataResponse(c, http.StatusOK, responseData)
-	p.ctl.RespSuccess(c, responseData)
+	p.ctl.SendDataResponse(c, http.StatusOK, responseData)
+	// p.ctl.RespSuccess(c, responseData)
 }
 
 func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, string, error) {
@@ -852,78 +883,81 @@ func (p *AccountController) DeleteUser(c *gin.Context) {
 
 // ModifyMainPic godoc
 // @Summary Modify main picture
-// @Description Modify main picture
+// @Description Upload and modify user's main profile picture to Cloudflare Images
 // @Tags user
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param data body object true "User ID {uid: xxx}"
+// @Security BearerAuth
+// @Param files formData file true "Profile image file (max 5MB)"
+// @Param data formData string true "Encrypted user data {uid: xxx}"
 // @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 115 {object} protocol.RespHeader "Failed to delete user"
+// @Failure 400 {object} protocol.RespHeader "error: error message - No files uploaded, No sinfo uploaded, Failed to decrypt sinfo, Failed to parse sinfo data, UID is required in sinfo"
+// @Failure 500 {object} protocol.RespHeader "error: error message - Failed to upload main picture, Failed to modify main picture on db"
+// @Router /inserv/v01/upd/mpic [post]
+//
+//	@Example curl -X POST http://localhost:8080/inserv/v01/upd/mpic \
+//	  -F "files=@/home/tmp/bc1.jpg" \
+//	  -F "data=wdXTrpgAu+c8HhkKx6fNEzLIdrtGCsVYSLcDT6rgBm0+aEEGPSjnQVqL2nc=" {"uid": "8697414060736839837"} \
+//	  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+//	  -H "x-meta: 8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!" \
+//	  -v
+//
+// @Example Response:
+//
+//	{"header": { "code": 0,"message": "success" }, "body": "success"}
 func (p *AccountController) ModifyMainPic(c *gin.Context) {
-	var req struct {
-		UID string `json:"uid" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
-		return
-	}
-
-	if req.UID == "" {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.InvalidParam, "all fields are required"), http.StatusBadRequest, fmt.Errorf("all fields are required"))
-		return
-	}
-
 	fileInfo, ok := c.Get("uploadedFiles")
 	if !ok {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.InvalidParam, "invalid request body"), http.StatusBadRequest, fmt.Errorf("invalid request body"))
+		p.ctl.SimpleError(c, http.StatusBadRequest, "No files uploaded")
+		return
+	}
+	//from.Value :map[data:[wdXTrpgAu+c8HhkKx6fNEzLIdrtGCsVYSLcDT6rgBm0+aEEGPSjnQVqL2nc=]]
+	//from.Value["data"][0] : 6XMm5LGE6ETe4HRsQbEJWxypTmyYiFEnZaKlyOOhbxaCzGNwTScIFxJGnLQ=
+	sinfo, ok := c.Get("sinfo")
+	if !ok {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "No sinfo uploaded")
+		return
+	}
+
+	sinfoBytes, err := utils.DecryptGCM(sinfo.(string), []byte(p.cfg.Server.BaseKey))
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to decrypt sinfo", err)
+		return
+	}
+
+	var sinfoData struct {
+		UID string `json:"uid"`
+	}
+
+	if err := json.Unmarshal(sinfoBytes, &sinfoData); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to parse sinfo data", err)
+		return
+	}
+
+	if sinfoData.UID == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "UID is required in sinfo")
 		return
 	}
 
 	files := fileInfo.([]*multipart.FileHeader)
-	putInfo := make(map[string]map[string]string)
+	cldFlrInfos, err := utils.UploadCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload main picture", err)
+		return
+	}
 
-	fmt.Println(files)
-	fmt.Println(putInfo)
+	// Extract URLs from cldFlrInfos map
+	urls := make([]string, 0, len(*cldFlrInfos))
+	for _, url := range *cldFlrInfos {
+		urls = append(urls, url)
+	}
 
-	// Upload the file to S3
+	if err := p.adb.ModifyUserInfo("", sinfoData.UID, "", "main_pic", urls[0]); err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to modify main picture on db", err)
+		return
+	}
 
 	p.ctl.SendResponse(c, http.StatusOK, "success")
-	return
-	/* 	eaddr := c.MustGet("user").(string)
-
-	   	fileInfo, ok := c.Get("uploadedFiles")
-	   	if !ok {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.InvalidParam, "invalid request body"), http.StatusBadRequest, fmt.Errorf("invalid request body"))
-	   		return
-	   	}
-
-	   	files := fileInfo.([]*multipart.FileHeader)
-	   	putInfo := make(map[string]map[string]string)
-	   	for _, file := range files {
-	   		putInfo[file.Filename] = map[string]string{
-	   			"bucket": p.cfg.AWS.S3.BucketName,
-	   			"key":    fmt.Sprintf("c2c/user/%s/%s", "profile", file.Filename),
-	   		}
-	   	}
-
-	   	// Upload the file to S3
-	   	uploadResp, err := utils.FilesS3Uploader(files, putInfo, p.s3)
-	   	if err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to upload file"), http.StatusInternalServerError, err)
-	   		return
-	   	}
-
-	   	// Update the profile image in the database
-	   	err = p.accountDB.UpdateUserProfileImage(eaddr, uploadResp[0])
-	   	if err != nil {
-	   		p.ctl.RespError(c, http.StatusInternalServerError, ptl.Wrap(err))
-	   		return
-	   	}
-	*/
 }
 
 // @Summary Get WebRTC configuration

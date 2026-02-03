@@ -277,7 +277,7 @@ func (r *RedisDB) HSetJWTAccess(token string, userInfo *ptl.UserInfoResp) error 
 
 	options := &redis.HSetEXOptions{
 		ExpirationType: redis.HSetEXExpirationEX,
-		ExpirationVal:  86400 * 2, //sec //1day
+		ExpirationVal:  86400 * 7, //sec //1day
 	}
 
 	if err := r.client.HSetEXWithArgs(r.ctx, "AUTH:ACCESS", options, token, string(userInfoJSON)).Err(); err != nil {

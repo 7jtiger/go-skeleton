@@ -2,9 +2,14 @@
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"mime/multipart"
+	"net/http"
 	"net/smtp"
 	"os"
 	"os/user"
@@ -15,6 +20,8 @@ import (
 
 	"github.com/jlaffaye/ftp"
 	slack "github.com/m0t0k1ch1/go-slack-poster"
+
+	// "github.com/rs/zerolog/log"
 	"gopkg.in/gomail.v2"
 )
 
@@ -272,4 +279,82 @@ func GenDefNick() string {
 func GenerateOTP() string {
 	otp := fmt.Sprintf("%06d", rand.Intn(1000000))
 	return otp
+}
+
+func UploadCldFlr(files []*multipart.FileHeader, accountID, apiToken string) (*map[string]string, error) {
+	cldFlrInfos := make(map[string]string, 4)
+	for _, file := range files {
+		// Open the file
+		src, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer src.Close()
+
+		// Create multipart form data
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		// Add file to form
+		part, err := writer.CreateFormFile("file", file.Filename)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, err := io.Copy(part, src); err != nil {
+			return nil, err
+		}
+
+		writer.Close()
+
+		// Create request
+		url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID)
+		req, err := http.NewRequest("POST", url, body)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set headers
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+
+		// Send request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		// Read response body
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		// cldFlrInfo := CldFlrInfo{}
+		// Parse response to extract success, filename, and variants
+		var tempResponse struct {
+			Success bool `json:"success"`
+			Result  struct {
+				Filename string   `json:"filename"`
+				Variants []string `json:"variants"`
+			} `json:"result"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &tempResponse); err != nil {
+			return nil, err
+		}
+
+		cldFlrInfos[file.Filename] = tempResponse.Result.Variants[0]
+
+		//{true {bc1.jpg [https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/6e8b29d4-4378-499a-7334-bd019dc25900/public]}}
+		// 2026-01-26T22:33:00.075+0900	INFO	info	{"Info": "Response body: %s{\n  \"result\": {\n    \"id\": \"100320e3-fb16-490a-7b21-a931feec6400\",\n    \"filename\": \"bc1.jpg\",\n    \"uploaded\": \"2026-01-26T13:30:51.197Z\",\n    \"requireSignedURLs\": false,\n    \"variants\": [\n      \"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/100320e3-fb16-490a-7b21-a931feec6400/public\"\n    ]\n  },\n  \"success\": true,\n  \"errors\": [],\n  \"messages\": []\n}"}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("cloudflare upload failed with status %d", resp.StatusCode)
+		}
+	}
+
+	return &cldFlrInfos, nil
 }

@@ -261,7 +261,8 @@ func DecryptData(data interface{}) (string, error) {
 func Test_DecryptData(t *testing.T) {
 	// data := "BNvbgARYucDQhlGQ43bB3MYtqw52ADS08YDy85ZnyNaYK1LWphA6qQ9L1O+9+Dd2p3DKVj2ZY6cfd3SAiCiV8Aah6v02Qd9zWfqXMKLY3N3XNQpgGOHhuwNQN8ol63ypn7SGlnEN3OqY/uRQsKAGqSM/ogvSe8x7M40UwCxcZD1veNZIL8Gr1N1JorqCTgJyFHq4l2a8JUcwDuAF/Gd50A=="
 	// data := "bX58xL87yL4eRyQCtgF/CBtAWzTt6Mgrcn6xdPoCDDUDcuDay29eEYK96B8W8kkqTkTfNCfA+1qerXxoyb8waoHYf7ovsKU/bnG5cnWnPjl3m5tDoVZz2y0UAm4in1sbWagUjSTaTXe58wBRl7r83TsBRVBmY030Lt2WQkwRvxJJz1Eo9kryQLWY8QHozgaUk7Fx4VEcZAXLr90="
-	data := "+f7doUUBGS/tqQZy/toBSAFqa/Wny4oq61dv11hjVsvNFdF9Wh1q9mIa6nF/oGDZ3SEqSn3cTPCKesZHZcZu4VA2Mzh941ACLecyri9ImPuDIsCHJ42hwmbCImdaJa38v579Jf6VOnZSF3XMvQLmgaFdIbckIG/pL7r17TweNudoG6RfOyYbFfzwkNl+CaWmJ1GkQpRSqYmSefzfug=="
+	// data := "+f7doUUBGS/tqQZy/toBSAFqa/Wny4oq61dv11hjVsvNFdF9Wh1q9mIa6nF/oGDZ3SEqSn3cTPCKesZHZcZu4VA2Mzh941ACLecyri9ImPuDIsCHJ42hwmbCImdaJa38v579Jf6VOnZSF3XMvQLmgaFdIbckIG/pL7r17TweNudoG6RfOyYbFfzwkNl+CaWmJ1GkQpRSqYmSefzfug=="
+	data := "6XMm5LGE6ETe4HRsQbEJWxypTmyYiFEnZaKlyOOhbxaCzGNwTScIFxJGnLQ="
 
 	// Encrypt the JSON data using EncryptGCM
 	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
@@ -387,7 +388,17 @@ func TestAccLogin(t *testing.T) {
 	fmt.Println(decryptedData)
 
 	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
-
+	/*
+		"{\"result\":0,\"resultString\":\"Success\",
+		\"data\":{\"msg\":\"success\",\"acTok\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNjEyNiwibmJmIjoxNzcwMTI5NzI2LCJpYXQiOjE3NzAxMjk3MjYsImp0aSI6IjM5OTIwNTE2LWQ0OTgtNDhiNi1iNTdhLTliOGMwOWI5NmZlMiJ9.6qz-WDaNQVeR7X1YyYLr4_n6QFtH3rLl-DSkhOIC2dI\",
+		\"refTok\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNjEyNiwibmJmIjoxNzcwMTI5NzI2LCJpYXQiOjE3NzAxMjk3MjYsImp0aSI6IjM5OTIwNTE2LWQ0OTgtNDhiNi1iNTdhLTliOGMwOWI5NmZlMiJ9.6qz-WDaNQVeR7X1YyYLr4_n6QFtH3rLl-DSkhOIC2dI\",
+		\"uid\":\"8697414060736839837\",
+		\"meta\":\"8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!\",
+		\"wrtc\":{\"iceServers\":[{\"urls\":[\"stun:stun.l.google.com:19302\"],\"type\":\"stun\"},{\"urls\":[\"stun:stun1.l.google.com:19302\"],\"type\":\"stun\"},{\"urls\":[\"stun:stun2.l.google.com:19302\"],\"type\":\"stun\"},{\"urls\":[\"stun:stun3.l.google.com:19302\"],\"type\":\"stun\"},{\"urls\":[\"stun:stun4.l.google.com:19302\"],\"type\":\"stun\"}],\"signalingServer\":\"ws://localhost:8080/ws\",
+		\"stunServers\":[\"stun:stun.l.google.com:19302\",\"stun:stun1.l.google.com:19302\",\"stun:stun2.l.google.com:19302\",\"stun:stun3.l.google.com:19302\",\"stun:stun4.l.google.com:19302\"],
+		\"mediaSettings\":{\"video\":{\"enabled\":true,\"width\":1280,\"height\":720,\"frameRate\":30,\"maxBitrate\":2000000},
+		\"audio\":{\"enabled\":true,\"echoCancellation\":true,\"noiseSuppression\":true,\"autoGainControl\":true,\"maxBitrate\":96000}}}}}"
+	*/
 	if err != nil {
 		t.Errorf("Failed to add partner: %v", err)
 	}
@@ -433,6 +444,9 @@ func TestGetStoryListByUid(t *testing.T) {
 		t.Errorf("Failed to get story list by uid: %v", err)
 	}
 
+	/*
+		{"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:27:44Z"},{"idx":1,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
+	*/
 	fmt.Println(res)
 }
 
@@ -1177,7 +1191,7 @@ type ModifyMainPicReq struct {
 
 func TestModifyMainPic(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/acc/v01/upd/mpic"
+	qurl := "/inserv/v01/upd/mpic"
 
 	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
 	// var key = []string{"data"}
@@ -1194,6 +1208,9 @@ func TestModifyMainPic(t *testing.T) {
 		return
 	}
 
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
 	// Create a new file upload request
 	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
 	file, err := os.Open(filePath)
@@ -1202,54 +1219,57 @@ func TestModifyMainPic(t *testing.T) {
 	}
 	defer file.Close()
 
-	fileInfo, err := file.Stat()
-	if err != nil {
-		t.Fatalf("파일 정보 가져오기 실패: %v", err)
-	}
-
-	// 파일을 읽어들여 바이트 배열로 변환
-	fileBytes := make([]byte, fileInfo.Size())
-	_, err = file.Read(fileBytes)
-	if err != nil {
-		t.Fatalf("파일 읽기 실패: %v", err)
-	}
-
-	// 파일 업로드 요청 생성
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	// Add file to form
+	part, err := writer.CreateFormFile("files", filepath.Base(filePath))
 	if err != nil {
 		t.Fatalf("폼 파일 생성 실패: %v", err)
 	}
-	part.Write(fileBytes)
 
-	// 인코딩 된 파라메터 추가
-	err = writer.WriteField("data", encryptedData)
+	// Copy file content to form
+	_, err = io.Copy(part, file)
 	if err != nil {
-		t.Fatalf("폼 필드 추가 실패: %v", err)
-	}
-
-	writer.Close()
-
-	req, err := http.NewRequest("POST", *targetUrl+qurl, body)
-	if err != nil {
-		t.Fatalf("HTTP 요청 생성 실패: %v", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("이미지 업로드 실패: %v", err)
+		t.Errorf("Failed to copy file content: %v", err)
 		return
 	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("이미지 업로드 실패, 상태 코드: %d", res.StatusCode)
-	} else {
-		fmt.Println("이미지 업로드 성공")
+	err = writer.WriteField("data", encryptedData)
+	if err != nil {
+		t.Errorf("Failed to write data field: %v", err)
+		return
 	}
+
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	// Create request
+	url := fmt.Sprintf("http://%s%s", *targetUrl, qurl)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		t.Errorf("Failed to create request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Authorization", "Bearer "+
+		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxMjYxMiwibmJmIjoxNzcwMTI2MjEyLCJpYXQiOjE3NzAxMjYyMTIsImp0aSI6ImY0MjI4NmZmLWE1YTUtNGE3Yy1hM2M0LWEyY2NlZDUwYjQ1YyJ9.N9NeyBmSr_ePxBphBw1haUrBoDSEuTkj2sh9OY2LBO8")
+
+	req.Header.Set("x-meta", "8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("요청 전송 실패: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("응답 읽기 실패: %v", err)
+	}
+
+	fmt.Printf("Response Status: %d\n", resp.StatusCode)
+	fmt.Printf("Response Body: %s\n", string(respBody))
 
 }
 
@@ -1329,6 +1349,20 @@ func TestSimpleMainPic(t *testing.T) {
 		fmt.Println("이미지 업로드 성공")
 	}
 
+}
+
+func Test_tmp(t *testing.T) {
+	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public]
+	testMap := map[string]string{
+		"bc1.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public",
+	}
+	fmt.Println(testMap)
+
+	urls := make([]string, 0, len(testMap))
+	for _, url := range testMap {
+		urls = append(urls, url)
+	}
+	fmt.Println(urls)
 }
 
 func TestSendEmail(t *testing.T) {

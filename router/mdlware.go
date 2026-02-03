@@ -310,13 +310,15 @@ func detectByMagicBytes(buf []byte, n int) string {
 // ValidateFileUpload checks if the uploaded files meet the requirements
 func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("ValidateFileUpload: Request received",
-			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
-			"content-type", c.GetHeader("Content-Type"),
-			"content-length", c.GetHeader("Content-Length"))
-
 		// Content-Type 확인
+		/*
+			meta := c.GetHeader("x-meta")
+			if meta == "" {
+				p.ctl.RespError(c, "Missing x-meta header", http.StatusBadRequest)
+				return
+			}
+			// fmt.Println(meta) */
+
 		contentType := c.GetHeader("Content-Type")
 		if !strings.HasPrefix(contentType, "multipart/form-data") {
 			logger.Warn("ValidateFileUpload: Invalid content type", "content-type", contentType)
@@ -422,6 +424,119 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 		// Store validated files in context
 		c.Set("uploadedFiles", validFiles)
 		c.Set("sinfo", form.Value)
+
+		c.Next()
+	}
+}
+
+func (p *Router) EncParamFileUpload(maxFiles int, size int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		/*
+			meta := c.GetHeader("x-meta")
+			if meta == "" {
+				p.ctl.RespError(c, "Missing x-meta header", http.StatusBadRequest)
+				return
+			}
+			// fmt.Println(meta) */
+
+		contentType := c.GetHeader("Content-Type")
+		if !strings.HasPrefix(contentType, "multipart/form-data") {
+			logger.Warn("ValidateFileUpload: Invalid content type", "content-type", contentType)
+			p.ctl.RespError(c, "Invalid content type. Expected multipart/form-data", http.StatusBadRequest)
+			return
+		}
+
+		form, err := c.MultipartForm()
+		if err != nil {
+			logger.Warn("ValidateFileUpload: Failed to parse multipart form", "error", err.Error())
+			if strings.Contains(err.Error(), "request body too large") {
+				p.ctl.RespError(c, "Request body too large. Maximum size exceeded", http.StatusRequestEntityTooLarge)
+			} else {
+				p.ctl.RespError(c, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+			}
+			return
+		}
+
+		if form == nil || form.File == nil {
+			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
+			return
+		}
+
+		// Get files from form
+		files := form.File["files"]
+		formKeys := make([]string, 0, len(form.File))
+		for k := range form.File {
+			formKeys = append(formKeys, k)
+		}
+		logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
+
+		// Check if any files were uploaded
+		if len(files) == 0 {
+			logger.Warn("ValidateFileUpload: No files in 'files' field")
+			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
+			return
+		}
+
+		// Check number of files
+		if len(files) > maxFiles {
+			p.ctl.RespError(c, "Too many files. Maximum allowed is "+strconv.Itoa(maxFiles), http.StatusBadRequest)
+			return
+		}
+
+		// Check each file
+		//5MB = 5 << 20   // 5 MB
+		//100MB = 100 << 20  // 100 MB
+		//20MB = 20 << 20  // 20 MB
+		//2MB = 2 << 20  // 2 MB
+		//50MB = 50 << 20  // 50 MB
+		maxSize := size << 20 // 10MB per file
+		// 추후 확장된다면 protocol에 추가하고 라우터에 맞는
+		// 컨텐츠 타입들만 선언된 타입을 인자로 받도록 수정 가능
+		allowedTypes := map[string]bool{
+			// "application/pdf": true,
+			"image/jpeg": true,
+			"image/jpg":  true,
+			"image/png":  true,
+			"image/gif":  true,
+			"image/webp": true,
+			"video/mp4":  true,
+		}
+
+		validFiles := make([]*multipart.FileHeader, 0, len(files))
+
+		for _, fileHeader := range files {
+			if fileHeader.Size > maxSize {
+				p.ctl.RespError(c, fmt.Sprintf("File %s exceeds %dMB limit", fileHeader.Filename, size), http.StatusBadRequest)
+				return
+			}
+
+			// Check file type (헤더 + application/octet-stream일 때 실제 내용으로 재판별)
+			contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+			if idx := strings.Index(contentType, ";"); idx >= 0 {
+				contentType = strings.TrimSpace(contentType[:idx])
+			}
+
+			// originalContentType := contentType
+			if contentType == "" || contentType == "application/octet-stream" {
+				detected, err := detectContentTypeFromFile(fileHeader)
+				if err != nil {
+					logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
+					p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)
+					return
+				}
+				contentType = detected
+			}
+			if !allowedTypes[contentType] {
+				p.ctl.RespError(c, fmt.Sprintf("File %s has invalid type. Only JPG, PNG, GIF, WEBP (images) and MP4 (video) files are allowed", fileHeader.Filename), http.StatusBadRequest)
+				return
+			}
+
+			validFiles = append(validFiles, fileHeader)
+		}
+
+		// Store validated files in context
+		c.Set("uploadedFiles", validFiles)
+		c.Set("sinfo", form.Value["data"][0])
 
 		c.Next()
 	}

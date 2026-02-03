@@ -241,8 +241,8 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 		return nil, fmt.Errorf("error querying user: %v", err)
 	}
 
-	fmt.Println("pwHash:", pwHash)
-	fmt.Println("pw:", string(pw))
+	// fmt.Println("pwHash:", pwHash)
+	// fmt.Println("pw:", string(pw))
 	err = bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(string(pw)))
 	if err != nil {
 		return nil, fmt.Errorf("password does not match: %v", err)
@@ -390,6 +390,8 @@ func (p *AccountDB) ModifyUserInfo(id, uid, email, cate, value string) error {
 		}
 
 		query = fmt.Sprintf("UPDATE user_info SET email = %s WHERE sid = %s AND uid = %s AND email = %s", encNewEmail, id, uid, encEmail)
+	case "main_pic":
+		query = fmt.Sprintf("UPDATE user_info SET main_pic = %s WHERE uid = %s", value, uid)
 	default:
 		return fmt.Errorf("invalid category: %s", cate)
 	}

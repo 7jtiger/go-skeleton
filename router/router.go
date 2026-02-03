@@ -201,7 +201,8 @@ func (p *Router) Idx() *gin.Engine {
 		//cate : pw / area / nick / email
 		pfset.POST("/modify", p.acc.ModifyUserInfo)
 
-		pfset.POST("/upd/mpic", p.AesDecrypt(), p.acc.ModifyMainPic)
+		// pfset.POST("/upd/mpic", p.AesDecrypt(), p.ValidateFileUpload(1, 5), p.acc.ModifyMainPic)
+		pfset.POST("/upd/mpic", p.EncParamFileUpload(1, 5), p.acc.ModifyMainPic)
 
 		// 로그아웃
 		pfset.POST("/logout", p.acc.LogoutUser)
@@ -275,7 +276,7 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/delpic", p.st.DeleteStrPic)
 
 		// ------------- comment -------------
-		story.GET("/comment/list", p.st.GetStrCommentList)
+		// story.GET("/comment/list", p.st.GetStrCommentList)
 		story.POST("/comment/create", p.st.CreateStrComment)
 		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
 		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)

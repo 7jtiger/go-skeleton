@@ -1,10 +1,7 @@
 package controller
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
 	"mime/multipart"
 	"ms-gateway/conf"
 	"ms-gateway/models"
@@ -12,6 +9,7 @@ import (
 	"strconv"
 
 	log "ms-gateway/common/logger"
+	"ms-gateway/common/utils"
 	ptl "ms-gateway/protocol"
 
 	"github.com/gin-gonic/gin"
@@ -46,6 +44,29 @@ func NewStoryController(ctl *Controller, rep *models.Repositories) (*StoryContro
 	return r, nil
 }
 
+// 현재 접속중인 이성 기준, 리스트 수집
+// 해당 리스트별 스토리 최신 1개 리스트 출력
+func (p *StoryController) GetStoryHomeList(c *gin.Context) {
+	uid := c.Param("uid")
+	if uid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+	}
+
+	uidInt, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+		return
+	}
+
+	storyList, err := p.sdb.GetStoryList(uidInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, storyList)
+}
+
 // GetStoryList godoc
 // @Summary Get story list by user ID
 // @Description Retrieve list of stories for a specific user
@@ -57,6 +78,8 @@ func NewStoryController(ctl *Controller, rep *models.Repositories) (*StoryContro
 // @Failure 400 {object} protocol.RespHeader "Bad request - invalid or missing uid"
 // @Failure 500 {object} protocol.RespHeader "Internal server error - failed to get story list"
 // @Router /story/v01/list/{uid} [get]
+// @Example Request: GET /story/v01/list/5817
+// @Example Response: {"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"1":"https://iy.net/bLg/26c0/lic","2":"https://iy.net/g/94d61/public","3":"https://iy.net/bg/e80/public"},"at_create":"2026-02-02T07:27:44Z"},{"idx":1,"nick":"testnick","str_img":{"1":"https://i.net/bg/ec3d00/public","2":"https://imaet/bh7hqLg/9200/public","3":"https://inet/bhyxVLg/e811fef00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
 func (p *StoryController) GetStoryList(c *gin.Context) {
 	uid := c.Param("uid")
 	if uid == "" {
@@ -173,7 +196,8 @@ func (p *StoryController) UploadStoryPic(c *gin.Context) {
 	}
 
 	files := fileInfo.([]*multipart.FileHeader)
-	cldFlrInfos, err := p.uploadCldFlr(files)
+	// cldFlrInfos, err := p.uploadCldFlr(files)
+	cldFlrInfos, err := utils.UploadCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
 	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public bc2.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/6238b8a7-cf66-445e-48f3-64f93d1fb900/public bc3.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/59895828-7bed-4690-3721-1e38331c0c00/public]
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story picture", err)
@@ -220,6 +244,7 @@ func (p *StoryController) UploadStoryPic(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully uploaded story picture", "lastID": lastID})
 }
 
+/*
 // func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader, putInfo map[string]map[string]string) (*[]CldFlrInfo, error) {
 func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[string]string, error) {
 	accountID := "3a5160a653bf6175ea5c5b24ee01e344"
@@ -312,7 +337,7 @@ func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[stri
 
 	return &cldFlrInfos, nil
 }
-
+*/
 // UpdateStoryStat godoc
 // @Summary Update story status
 // @Description Update the status of a story
@@ -324,6 +349,9 @@ func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[stri
 // @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/updstat [post]
+// @Example Request: POST /story/v01/updstat
+// @Example Request Body: {"idx":"3","stat":"2"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully updated story stat","affected":1}}
 func (p *StoryController) UpdateStoryStat(c *gin.Context) {
 	var req ptl.UpdateStrStatReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -368,6 +396,9 @@ func (p *StoryController) UpdateStoryStat(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/updbody [post]
+// @Example Request: POST /story/v01/updbody
+// @Example Request Body: {"idx":"3","body":"updated story body content"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully updated story body","affected":1}}
 func (p *StoryController) UpdateStrBody(c *gin.Context) {
 	var req ptl.UpdateStrBodyReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -406,6 +437,9 @@ func (p *StoryController) UpdateStrBody(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters or empty picture list"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/delpic [post]
+// @Example Request: POST /story/v01/delpic
+// @Example Request Body: {"idx":"3","pic_idx":"1"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully deleted story picture","affected":1}}
 func (p *StoryController) DeleteStrPic(c *gin.Context) {
 
 	var req ptl.DeleteStrPicReq
@@ -486,6 +520,9 @@ func (p *StoryController) DeleteStrPic(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "Bad request - missing or invalid parameters"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/comment/create [post]
+// @Example Request: POST /story/v01/comment/create
+// @Example Request Body: {"str_idx":"3","wuid":"77645423236541","nick":"test","stat":"1","body":"111111 test comment body"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully created str comment","lastID":1}}
 func (p *StoryController) CreateStrComment(c *gin.Context) {
 	var req ptl.StrCmtCreateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -543,6 +580,9 @@ func (p *StoryController) CreateStrComment(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/comment/updstat [post]
+// @Example Request: POST /story/v01/comment/updstat
+// @Example Request Body: {"idx":"3","stat":"2"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully updated str stat comment","affected":1}}
 func (p *StoryController) UpdateStrStatComment(c *gin.Context) {
 	//"Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)"
 	var req ptl.StrCmtUpdStatReq
@@ -588,6 +628,9 @@ func (p *StoryController) UpdateStrStatComment(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "Bad request - Invalid parameters"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /story/v01/comment/updbody [post]
+// @Example Request: POST /story/v01/comment/updbody
+// @Example Request Body: {"idx":"3","body":"updated comment body content"}
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"Successfully updated str body comment","affected":1}}
 func (p *StoryController) UpdateStrBodyComment(c *gin.Context) {
 	var req ptl.StrCmtUpdBodyReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -615,6 +658,7 @@ func (p *StoryController) UpdateStrBodyComment(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str body comment", "affected": affected})
 }
 
+/*
 func (p *StoryController) GetStrCommentList(c *gin.Context) {
 	strIdx := c.Query("str_idx")
 	if strIdx == "" {
@@ -636,7 +680,7 @@ func (p *StoryController) GetStrCommentList(c *gin.Context) {
 
 	p.ctl.SendDataResponse(c, http.StatusOK, comments)
 }
-
+*/
 /* func (p *StoryController) GetStoryList(c *gin.Context) {
 	uid := c.Query("uid")
 	if uid == "" {

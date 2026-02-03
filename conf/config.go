@@ -32,6 +32,7 @@ type Networks struct {
 	// Logger    *log.Logger
 }
 */
+
 type Config struct {
 	Server struct {
 		Name       string
@@ -42,6 +43,8 @@ type Config struct {
 		BaseKey    string
 		FcmKeyPath string
 		JWTSecret  string
+		CfId       string
+		CfToken    string
 	}
 
 	WebRTC struct {

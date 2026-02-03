@@ -8,6 +8,8 @@ hcport = ":8081"
 basekey = "JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87"
 fcmKeyPath = "./conf/fcm-key.json"
 jwtsecret = "439f7e12e87e327e1b439f4a5aa895627ef47280ce75b553d65f750bea447575"
+cfId = "3a5160a653bf6175ea5c5b24ee01e344"
+cfToken = "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
 
 [webrtc] # WebRTC 설정 (STUN only, TURN 제외)
 signalingServerUrl = "ws://localhost:8080/ws"
