@@ -94,26 +94,6 @@ definitions:
           type: string
         type: array
     type: object
-  protocol.LoginReq:
-    properties:
-      id:
-        type: string
-      pw:
-        type: string
-    type: object
-  protocol.LoginUserResp:
-    properties:
-      acTok:
-        type: string
-      msg:
-        type: string
-      refTok:
-        type: string
-      uid:
-        type: string
-      wrtc:
-        $ref: '#/definitions/protocol.WebRTCConfig'
-    type: object
   protocol.MediaConfig:
     properties:
       audio:
@@ -609,49 +589,6 @@ paths:
       summary: Leave a user
       tags:
       - user
-  /acc/v01/login:
-    post:
-      consumes:
-      - application/json
-      description: Calls /acc/v01/login to login a user. Returns JWT token, user ID,
-        and WebRTC config on success.
-      parameters:
-      - description: 'Login request data {id : xxx, pw : hash}'
-        in: body
-        name: data
-        required: true
-        schema:
-          $ref: '#/definitions/protocol.LoginReq'
-      produces:
-      - application/json
-      responses:
-        "102":
-          description: Parameter is missing
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "104":
-          description: Failed to login user
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "106":
-          description: Failed to parse JSON
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "200":
-          description: Login success with token, uid, and webrtc config
-          schema:
-            $ref: '#/definitions/protocol.LoginUserResp'
-        "400":
-          description: Bad request
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Login a user
-      tags:
-      - user
   /acc/v01/logout:
     post:
       consumes:
@@ -1097,6 +1034,45 @@ paths:
       summary: Retrieves main information to be displayed on the home screen
       tags:
       - Home
+  /inserv/v01/upd/mpic:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload and modify user's main profile picture to Cloudflare Images
+      parameters:
+      - description: Profile image file (max 5MB)
+        in: formData
+        name: files
+        required: true
+        type: file
+      - description: 'Encrypted user data {uid: xxx}'
+        in: formData
+        name: data
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'msg: success'
+          schema:
+            $ref: '#/definitions/protocol.OkResp'
+        "400":
+          description: 'error: error message - No files uploaded, No sinfo uploaded,
+            Failed to decrypt sinfo, Failed to parse sinfo data, UID is required in
+            sinfo'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: 'error: error message - Failed to upload main picture, Failed
+            to modify main picture on db'
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      security:
+      - BearerAuth: []
+      summary: Modify main picture
+      tags:
+      - user
   /story/v01/comment/create:
     post:
       consumes:

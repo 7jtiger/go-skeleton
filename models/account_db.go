@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -208,8 +209,8 @@ func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
 	}
 
 	age := utils.CalcBirth2Age(req.Birth)
-	query := "INSERT INTO user_info (sid, uid, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = p.conndb.Exec(query, req.ID, req.Uid, encEmail, encpw, encName, req.Nick, req.Gender, age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	query := "INSERT INTO user_info (sid, uid, did, dos, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	_, err = p.conndb.Exec(query, req.ID, req.Uid, req.DID, req.DOS, encEmail, encpw, encName, req.Nick, req.Gender, age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	// _, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
@@ -228,13 +229,23 @@ func (p *AccountDB) updatedLastest(sid string) error {
 	return nil
 }
 
+func (p *AccountDB) updatedDid(uid uint64, did, dos string) error {
+	query := "UPDATE user_info SET did = ?, dos = ?, at_upd = ? WHERE uid = ?"
+	_, err := p.conndb.Exec(query, did, dos, time.Now(), strconv.FormatUint(uid, 10))
+	if err != nil {
+		return fmt.Errorf("error executing query: %v", err)
+	}
+
+	return nil
+}
+
 func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, error) {
-	query := "SELECT uid, pw_hash, nick FROM user_info WHERE sid = ? LIMIT 1"
+	query := "SELECT uid, pw_hash, nick, did, dos FROM user_info WHERE sid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, req.ID)
-	var pwHash, nick string
+	var pwHash, nick, did, dos string
 	var uid uint64
 
-	err := row.Scan(&uid, &pwHash, &nick)
+	err := row.Scan(&uid, &pwHash, &nick, &did, &dos)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	} else if err != nil {
@@ -246,6 +257,13 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 	err = bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(string(pw)))
 	if err != nil {
 		return nil, fmt.Errorf("password does not match: %v", err)
+	}
+
+	if did != req.DID {
+		err = p.updatedDid(uid, req.DID, req.DOS)
+		if err != nil {
+			return nil, fmt.Errorf("error updating did: %v", err)
+		}
 	}
 
 	// if !bytes.Equal([]byte(pwHash), hsedPw) {
@@ -447,6 +465,28 @@ func (p *AccountDB) GetUserInfo(id string) (ptl.UserInfoResp, error) {
 	}
 
 	return user, nil
+}
+
+func (p *AccountDB) GetSetAlert(uid uint64) (int, error) {
+	query := "SELECT set_alert FROM user_info WHERE uid = ?"
+	row := p.conndb.QueryRow(query, uid)
+	var setAlert int
+	err := row.Scan(&setAlert)
+	if err != nil {
+		return -1, err
+	}
+
+	return setAlert, nil
+}
+
+func (p *AccountDB) SetAlert(uid uint64, value int) error {
+	query := "UPDATE user_info SET set_alert = ? WHERE uid = ?"
+	_, err := p.conndb.Exec(query, value, uid)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *AccountDB) DeleteUser(id string) error {

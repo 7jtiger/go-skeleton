@@ -452,70 +452,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/acc/v01/login": {
-            "post": {
-                "description": "Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Login a user",
-                "parameters": [
-                    {
-                        "description": "Login request data {id : xxx, pw : hash}",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.LoginReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "104": {
-                        "description": "Failed to login user",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "200": {
-                        "description": "Login success with token, uid, and webrtc config",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.LoginUserResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
         "/acc/v01/logout": {
             "post": {
                 "description": "Performs logout. Returns \"success\" message on success.",
@@ -1183,6 +1119,62 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/inserv/v01/upd/mpic": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload and modify user's main profile picture to Cloudflare Images",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Modify main picture",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Profile image file (max 5MB)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Encrypted user data {uid: xxx}",
+                        "name": "data",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "error: error message - No files uploaded, No sinfo uploaded, Failed to decrypt sinfo, Failed to parse sinfo data, UID is required in sinfo",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "error: error message - Failed to upload main picture, Failed to modify main picture on db",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -2105,37 +2097,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "protocol.LoginReq": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "pw": {
-                    "type": "string"
-                }
-            }
-        },
-        "protocol.LoginUserResp": {
-            "type": "object",
-            "properties": {
-                "acTok": {
-                    "type": "string"
-                },
-                "msg": {
-                    "type": "string"
-                },
-                "refTok": {
-                    "type": "string"
-                },
-                "uid": {
-                    "type": "string"
-                },
-                "wrtc": {
-                    "$ref": "#/definitions/protocol.WebRTCConfig"
                 }
             }
         },

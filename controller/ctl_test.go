@@ -83,6 +83,41 @@ func Get(host, relativePath string, keys []string, values []string) (string, err
 	}
 }
 
+func GetWithToken(host, relativePath string, keys []string, values []string, token string) (string, error) {
+	// if len(keys) != len(values) {
+	// 	return "", fmt.Errorf("mismatch length of keys and values")
+	// }
+	u := url.URL{Scheme: "http", Host: host, Path: relativePath}
+	if request, err := http.NewRequest("GET", u.String(), nil); err != nil {
+		return "", err
+	} else {
+		q := request.URL.Query()
+		for i, key := range keys {
+			q.Add(key, values[i])
+		}
+		request.URL.RawQuery = q.Encode()
+
+		// Set Authorization header with Bearer token
+		request.Header.Set("Authorization", "Bearer "+token)
+
+		client := http.Client{
+			//Timeout: 50e9,
+		}
+
+		if response, err := client.Do(request); err != nil {
+			return "", err
+		} else {
+			defer response.Body.Close()
+
+			if body, err := io.ReadAll(response.Body); err != nil {
+				return "", err
+			} else {
+				return string(body), nil
+			}
+		}
+	}
+}
+
 func PostJson(host, relativePath string, keys []string, values []string) (string, error) {
 	// if len(keys) != len(values) {
 	// 	return "", fmt.Errorf("mismatch length of keys and values")
@@ -242,6 +277,23 @@ func EncryptData(data interface{}) (string, error) {
 	return encryptedData, nil
 }
 
+func Test_EncryptData(t *testing.T) {
+	data := "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("Failed to marshal data:", err)
+	}
+
+	// Encrypt the JSON data using EncryptGCM
+	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
+	encryptedData, err := utils.EncryptGCM(jsonData, keyBytes)
+	if err != nil {
+		fmt.Println("Failed to encrypt data: ", err)
+	}
+
+	fmt.Println(encryptedData)
+}
+
 func DecryptData(data interface{}) (string, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -262,7 +314,8 @@ func Test_DecryptData(t *testing.T) {
 	// data := "BNvbgARYucDQhlGQ43bB3MYtqw52ADS08YDy85ZnyNaYK1LWphA6qQ9L1O+9+Dd2p3DKVj2ZY6cfd3SAiCiV8Aah6v02Qd9zWfqXMKLY3N3XNQpgGOHhuwNQN8ol63ypn7SGlnEN3OqY/uRQsKAGqSM/ogvSe8x7M40UwCxcZD1veNZIL8Gr1N1JorqCTgJyFHq4l2a8JUcwDuAF/Gd50A=="
 	// data := "bX58xL87yL4eRyQCtgF/CBtAWzTt6Mgrcn6xdPoCDDUDcuDay29eEYK96B8W8kkqTkTfNCfA+1qerXxoyb8waoHYf7ovsKU/bnG5cnWnPjl3m5tDoVZz2y0UAm4in1sbWagUjSTaTXe58wBRl7r83TsBRVBmY030Lt2WQkwRvxJJz1Eo9kryQLWY8QHozgaUk7Fx4VEcZAXLr90="
 	// data := "+f7doUUBGS/tqQZy/toBSAFqa/Wny4oq61dv11hjVsvNFdF9Wh1q9mIa6nF/oGDZ3SEqSn3cTPCKesZHZcZu4VA2Mzh941ACLecyri9ImPuDIsCHJ42hwmbCImdaJa38v579Jf6VOnZSF3XMvQLmgaFdIbckIG/pL7r17TweNudoG6RfOyYbFfzwkNl+CaWmJ1GkQpRSqYmSefzfug=="
-	data := "6XMm5LGE6ETe4HRsQbEJWxypTmyYiFEnZaKlyOOhbxaCzGNwTScIFxJGnLQ="
+	// data := "6XMm5LGE6ETe4HRsQbEJWxypTmyYiFEnZaKlyOOhbxaCzGNwTScIFxJGnLQ="
+	data := "K3s3VvPcUdZD1X8cDq96OWfb4oE9QuMfcDkKWGZdZju+puABUfQXx8CGvnufyG1Xrq2glSzSsURQ5VplMA1vjbQI5ESoXi6soYjpxcG3dypsYvCcuScHn2jkZHExe4IsvUNTz++fSzIUOggPLU0CsNWv6nw="
 
 	// Encrypt the JSON data using EncryptGCM
 	keyBytes := []byte("JX03yhFNF2sh0Zoiu8yLzeCzjPCoCz87") // 32 bytes key
@@ -406,6 +459,132 @@ func TestAccLogin(t *testing.T) {
 	fmt.Println(res)
 }
 
+func Test_FBlogin(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/login"
+
+	var key = []string{"data"}
+	var value = []string{"test243", "123456789"}
+
+	dataMap := LoginReq{
+		Id: value[0],
+		Pw: value[1],
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+	fmt.Println(encryptedData)
+
+	decryptedData, err := DecryptData(encryptedData)
+	if err != nil {
+		t.Errorf("Failed to decrypt data: %v", err)
+		return
+	}
+	fmt.Println(decryptedData)
+
+	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
+	if err != nil {
+		t.Errorf("Failed to login: %v", err)
+		return
+	}
+
+	fmt.Println(res)
+}
+
+func Test_GetSetting(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := fmt.Sprintf("/user/v01/set/%s", "8697414060736839837")
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNTc1NywibmJmIjoxNzcwMTI5MzU3LCJpYXQiOjE3NzAxMjkzNTcsImp0aSI6ImE0Zjc1OGVjLWQyZWEtNGQzOS05ZDVmLTNjMzQyMTc4M2ZhMCJ9.EMC2dOpcuIr33UBbjhfe8ahbqvXSpgr2-cfBkGbCLns"
+
+	//"77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+
+	// meta := "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, token)
+	if err != nil {
+		t.Errorf("Failed to get story detail: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func Test_SetSetting(t *testing.T) {
+	// 0
+	base := 0
+
+	// noti=1, call=2, msg=4, rerv=8\n0 = all alert\n1111 = no alert\n0001 = no noti\n0011 = no noti call\n0111 = no noti, call, msg\n
+	noti := 1
+	call := 2
+	msg := 4
+	rvr := 8
+
+	noNoti := noti | base
+	noNotiCall := noti | call | base
+	noNotiMsg := noti | msg | base
+	noNotiRvr := noti | rvr | base
+
+	fmt.Println(noNoti)
+	fmt.Println(noNotiCall)
+	fmt.Println(noNotiMsg)
+	fmt.Println(noNotiRvr)
+
+	noNotiRvrValue := 15 & noti //1
+	fmt.Println("noNotiRvr value:", noNotiRvrValue)
+
+	noNotiRvre := noti & 15 //
+	fmt.Println("noNotiRvre value:", noNotiRvre)
+
+	noNotiValue := 12 & noti //0
+	fmt.Println("noNoti value:", noNotiValue)
+
+	noValue := 15 &^ noti //14
+	fmt.Println("noValue value:", noValue)
+
+	res1 := 15 ^ 7
+	fmt.Println("res1 value:", res1)
+
+	res3 := res1 ^ 7
+	fmt.Println("res3 value:", res3)
+
+	res2 := 7 ^ 15
+	fmt.Println("res2 value:", res2)
+
+}
+
+/*
+{
+    "sid": "test243",
+    "uid": 8697414060736839837,
+    "did": "",
+    "email": "test243@test.com",
+    "name": "홍두께",
+    "nick": "건강한 꼬마 오렌지",
+    "gender": "1",
+    "age": "24",
+    "birthday": "1990-01-01T00:00:00Z",
+    "area": "서울",
+    "stat": "0",
+    "main_pic": "https://i.ibb.co/QF37KRST/male-ai-02.webp",
+    "thmb_pic": "https://i.ibb.co/C5c51dYg/icon-male-04.webp",
+    "sp_intro": "반가워요 큐피톡에서 만나요!"
+}
+*/
+
+func Test_ToMetaHeader(t *testing.T) {
+
+	meta := "test243 8697414060736839837  test243@test.com 홍두께 건강한 꼬마 오렌지 1 24 1990-01-01T00:00:00Z 서울 0 https://i.ibb.co/QF37KRST/male-ai-02.webp https://i.ibb.co/C5c51dYg/icon-male-04.webp 반가워요 큐피톡에서 만나요!"
+	parts := strings.Split(meta, " ")
+	if len(parts) != 13 {
+		return
+	}
+
+	fmt.Println(meta)
+
+}
+
+// ----  stroy ----------------
 func TestGetStoryDetail(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	idx := "3"

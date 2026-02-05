@@ -1,9 +1,15 @@
 package protocol
 
+import (
+	"strings"
+)
+
 type RegistReq struct {
 	ID        string `json:"id"` //key, sid
 	PW        string `json:"pw"`
 	Uid       uint64 `json:"uid"`
+	DID       string `json:"did"`
+	DOS       string `json:"dos"`
 	Name      string `json:"name"`
 	Gender    string `json:"gender"`
 	Age       string `json:"age"`
@@ -17,8 +23,10 @@ type RegistReq struct {
 }
 
 type LoginReq struct {
-	ID string `json:"id"`
-	PW string `json:"pw"`
+	ID  string `json:"id"`
+	PW  string `json:"pw"`
+	DID string `json:"did"`
+	DOS string `json:"dos"`
 }
 
 type UserInfoResp struct {
@@ -39,7 +47,8 @@ type UserInfoResp struct {
 }
 
 type MetaHeader struct {
-	UID      uint64 `json:"uid"`
+	// UID      uint64 `json:"uid"`
+	UID      string `json:"uid"`
 	SID      string `json:"sid"`
 	DID      string `json:"did"`
 	Nick     string `json:"nick"`
@@ -111,4 +120,44 @@ type WTRoomUser struct {
 	Area     string `json:"area"`
 	Age      string `json:"age"`
 	NewStat  bool   `json:"newStat"`
+}
+
+/*
+	 type HeaderUser struct {
+		SID      string `json:"sid"`
+		UID      string `json:"uid"`
+		DID      string `json:"did"`
+		Email    string `json:"email"`
+		Name     string `json:"name"`
+		Nick     string `json:"nick"`
+		Gender   string `json:"gender"`
+		Age      string `json:"age"`
+		Birth    string `json:"birth"`
+		Area     string `json:"area"`
+		Stat     string `json:"stat"`
+		MainPic  string `json:"main_pic"`
+		ThumbPic string `json:"thmb_pic"`
+		SPIntro  string `json:"sp_intro"`
+	}
+*/
+func ToMetaHeader(meta string) *MetaHeader {
+	parts := strings.Split(meta, " ")
+	if len(parts) != 8 {
+		return nil
+	}
+
+	/* 	meta := ptl.MetaHeader{
+		SID:      parts[0],
+		UID:      parts[1],
+		DID:      parts[2],
+		Nick:     parts[3],
+		Gender:   parts[4],
+		Age:      parts[5],
+		Area:     parts[6],
+		Email:    parts[7],
+		MainPic:  parts[8],
+		ThumbPic: parts[9],
+		SPIntro:  parts[10],
+	} */
+	return nil
 }

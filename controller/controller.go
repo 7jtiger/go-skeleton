@@ -32,7 +32,9 @@ type Controller struct {
 	Signaling *SignalingController
 	ChatCtl   *ChatController
 	StoryCtl  *StoryController
-	Rdb       *models.RedisDB
+	SetCtl    *SetController
+
+	Rdb *models.RedisDB
 }
 
 func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories) (*Controller, error) {
@@ -62,6 +64,9 @@ func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories)
 		return nil, err
 	}
 
+	if r.SetCtl, err = NewSetController(r, rep); err != nil {
+		return nil, err
+	}
 	/* 	if r.FCMPusher, err = NewFCMPusher(r, hch, rep); err != nil {
 	   		return nil, err
 	   	}
@@ -164,6 +169,16 @@ func (p *Controller) GetController(target interface{}) error {
 		*t = p.PfCtl
 	case **ChatController:
 		*t = p.ChatCtl
+	case **SetController:
+		*t = p.SetCtl
+	case **HomeController:
+		*t = p.HomeCtl
+	case **NotiController:
+		*t = p.NotiCtl
+	case **SignalingController:
+		*t = p.Signaling
+	case **StoryController:
+		*t = p.StoryCtl
 	default:
 		return fmt.Errorf("unknown controller type")
 	}

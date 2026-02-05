@@ -72,35 +72,44 @@ func CORS() gin.HandlerFunc {
 // Meta data를 들고 올경우 파싱해서 넘겨줌.
 func (p *Router) GetReqXMeta() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		metaHeader := c.GetHeader("x-meta")
-		if metaHeader == "" {
+		encMetaHeader := c.GetHeader("x-meta")
+		if encMetaHeader == "" {
 			p.ctl.RespError(c, "Missing x-meta header", http.StatusBadRequest)
 			return
 		}
 
-		parts := strings.Split(metaHeader, "/")
-		if len(parts) != 8 {
-			p.ctl.RespError(c, "Invalid x-meta header format", http.StatusBadRequest)
+		metaBytes, err := utils.DecryptGCM(encMetaHeader, []byte(p.cfg.Server.BaseKey))
+		if err != nil {
+			p.ctl.RespError(c, "Failed to decrypt x-meta header", http.StatusBadRequest)
 			return
 		}
 
-		// meta := ptc.MetaHeader{
-		// 	UID:             parts[0],
-		// 	SID:		     parts[1],
-		// 	DID:		     parts[2],
-		// 	NICK: 		     parts[3],
-		// 	GENDER: 	     parts[4],
-		// 	AGE: 		     parts[5],
-		// 	AREA: 		     parts[6],
-		// 	EMAIL: 		     parts[7],
-		// 	MAIN_PIC: 		 parts[8],
-		// 	THMB_PIC: 		 parts[9],
-		// 	SP_INTRO:        parts[10],
-		// }
+		// fmt.Println(string(encryptedData))
+		/* "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!" */
+		/*
+			parts := strings.Split(string(metaBytes), "/")
+			if len(parts) != 8 {
+				p.ctl.RespError(c, "Invalid x-meta header format", http.StatusBadRequest)
+				return
+			}
 
+			meta := ptl.MetaHeader{
+				UID:      parts[0],
+				SID:      parts[1],
+				DID:      parts[2],
+				Nick:     parts[3],
+				Gender:   parts[4],
+				Age:      parts[5],
+				Area:     parts[6],
+				Email:    parts[7],
+				MainPic:  parts[8],
+				ThumbPic: parts[9],
+				SPIntro:  parts[10],
+			}
+		*/
 		// MetaHeader를 context에 저장하여 핸들러에서 사용할 수 있도록 함
 		// c.Set("metaHeader", meta)
-		c.Header("x-meta", metaHeader)
+		c.Header("x-meta", string(metaBytes))
 
 		c.Next()
 	}
@@ -172,7 +181,6 @@ func (p *Router) JwtAuth() gin.HandlerFunc {
 
 		// JWT 토큰 유효성 검증 (HSET에서 조회)
 		userID, err := p.rdb.HGetJWTAccess(tokens[1])
-		logger.Info("userID", userID)
 		if err != nil {
 			p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid JWT")
 			return

@@ -321,16 +321,7 @@ func (p *FCMPusher) getTgtItem() {
 }
 
 func (p *FCMPusher) getMsgTitle(cate int, chain, amount string) (string, string, string) {
-	/* 	if strings.Contains(chain, p.cfg.Server.GuruChainID) {
-	   		chain = "GXN"
-	   	} else if strings.Contains(chain, p.cfg.Server.UsdxChainID) {
-	   		chain = "USGX"
-	   	}
-	   	/* if strings.Contains(chain, "3110") || strings.Contains(chain, "3111") {
-	   		chain = "Guru"
-	   	} else if strings.Contains(chain, "5110") || strings.Contains(chain, "5111") {
-	   		chain = "USDX"
-	   	} */
+
 	/*
 		amtEth := utils.ToEther(amount)
 		amtEth = amtEth.RoundFloor(6)

@@ -125,16 +125,46 @@ func (p *AccountController) CheckEmail(c *gin.Context) {
 //
 // @Summary Register a new user
 // @Description Calls /acc/v01/regist to register a new user. Returns "success" message on success.
+// @Description Required fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email
+// @Description Optional fields: did (device ID), dos (device OS)
+// @Description System generates: uid (unique user ID), nick (default nickname), main_pic (default profile image), thmb_pic (default thumbnail), sp_intro (default introduction)
 // @Tags user
 // @Accept json
 // @Produce json
-// @Param request body protocol.RegistReq true "register request data {id : xxx, pw : hash, name : xxx, gender : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}"
-// @Success 200 {string} string "success"
+// @Param request body protocol.RegistReq true "register request data"
+// @Success 200 {object} protocol.OkResp "result: success"
 // @Failure 400 {object} protocol.RespHeader "Bad request"
 // @Failure 102 {object} protocol.RespHeader "Parameter is missing"
 // @Failure 104 {object} protocol.RespHeader "Failed Register User"
 // @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
+// @Failure 14 {object} protocol.RespHeader "ID is duplicate"
+// @Failure 15 {object} protocol.RespHeader "Email is duplicate"
 // @Router /acc/v01/regist [post]
+// @Example request:
+//
+//	{
+//	  "id": "testuser123",
+//	  "pw": "hashedpassword123",
+//	  "name": "홍길동",
+//	  "email": "test@example.com",
+//	  "gender": 1,
+//	  "birth": "1990-01-01",
+//	  "area": "서울",
+//	  "did": "device_token_12345",
+//	  "dos": "android"
+//	}
+//
+// @Example response (success):
+// {"msg": "success" }
+//
+// @Example response (ID duplicate):
+// {"result": 14, "msg": "ID is already in use."}
+//
+// @Example response (Email duplicate):
+// {"result": 15,"msg": "Email is already in use."}
+//
+// @Example response (missing parameter):
+// {"result": 102, "msg": "all fields are required" }
 func (p *AccountController) RegistUserInfo(c *gin.Context) {
 	var req ptl.RegistReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -234,11 +264,7 @@ func (p *AccountController) getUid() uint64 {
 // }
 //
 // @Example response (failure):
-// {
-//   "result": 104,
-//   "resultString": "failed to login user",
-//   "data": null
-// }
+// {"result": 104,"resultString": "failed to login user","data": null}
 //
 // @Note x-meta header format:
 // uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro

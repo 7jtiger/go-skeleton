@@ -26,6 +26,7 @@ type Router struct {
 	wl   map[string]string
 	ctl  *ctl.Controller
 	acc  *ctl.AccountController
+	set  *ctl.SetController
 	pf   *ctl.ProfileController
 	hm   *ctl.HomeController
 	nt   *ctl.NotiController
@@ -48,6 +49,7 @@ func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
 		sig:  ct.Signaling,
 		chat: ct.ChatCtl,
 		st:   ct.StoryCtl,
+		set:  ct.SetCtl,
 		rdb:  ct.GetRedis(),
 		// hHealth: ct.GetHealthHandler(),
 	}
@@ -223,6 +225,8 @@ func (p *Router) Idx() *gin.Engine {
 		//보유금액, 즐겨찾기, 통화내역
 		user.GET("/myinfo")
 		user.GET("/wyinfo")
+		user.GET("/getset/:uid", p.JwtAuth(), p.set.GetSetting)
+		user.POST("/set/:cate/:value", p.JwtAuth(), p.set.SetSetting)
 	}
 
 	home := e.Group("home/v01", p.SecurityHeaders(), p.JwtAuth())

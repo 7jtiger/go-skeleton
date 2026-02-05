@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Firebase Email Login → DID from FCM → Update & Push</title>
+</head>
+<body>
+
+<h2>이메일 로그인 → FCM으로 DID 받아 업데이트</h2>
+
+<input id="email" placeholder="이메일" value="test@example.com"><br><br>
+<input id="password" type="password" placeholder="비밀번호" value="123456"><br><br>
+
+<button onclick="startFlow()">로그인 & DID FCM 흐름 시작</button>
+
+<pre id="result"></pre>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js";
+
+  const firebaseConfig = { /* 본인 Firebase config */ };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const messaging = getMessaging(app);
+
+  const VAPID_KEY = "BKagOny0KF_..."; // Firebase 콘솔 → Cloud Messaging → Web Push certificates
+
+  // Foreground 메시지 수신 (DID를 FCM으로부터 받아 처리)
+  onMessage(messaging, (payload) => {
+    console.log("FCM 메시지 수신 (foreground):", payload);
+    const receivedDID = payload.data?.did;
+    const type = payload.data?.type;
+
+    if (receivedDID && type === "did_info") {
+      document.getElementById("result").textContent += `\nDID 수신: ${receivedDID}\n백엔드에 업데이트 요청...`;
+      updateDIDFromFCM(receivedDID);
+    }
+  });
+
+  // Background 수신을 위해 firebase-messaging-sw.js 파일도 필요 (아래 주석 참조)
+
+  window.startFlow = async () => {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const idToken = await user.getIdToken(true);
+
+      // FCM 토큰 발급
+      await Notification.requestPermission();
+      const fcmToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+
+      document.getElementById("result").textContent = `로그인 성공\nUID: ${user.uid}\nFCM Token 등록 중...`;
+
+      // 1. FCM 토큰 등록
+      await fetch("http://localhost:8080/register-fcm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+        body: JSON.stringify({ fcmToken })
+      });
+
+      // 2. DID를 담은 FCM 푸시 요청 (백엔드가 DID를 생성해 푸시)
+      await fetch("http://localhost:8080/trigger-did-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` }
+      });
+
+      document.getElementById("result").textContent += `\nDID 푸시 요청 완료 → FCM 수신 대기`;
+
+    } catch (err) {
+      console.error(err);
+      alert("오류: " + err.message);
+    }
+  };
+
+  // DID 수신 후 백엔드에 업데이트 요청
+  async function updateDIDFromFCM(receivedDID) {
+    const idToken = localStorage.getItem("idToken"); // 로그인 후 저장해 둠
+    if (!idToken) return;
+
+    try {
+      const res = await fetch("http://localhost:8080/update-did-from-fcm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+        body: JSON.stringify({ did: receivedDID })
+      });
+      const data = await res.json();
+      document.getElementById("result").textContent += `\n업데이트 결과: ${JSON.stringify(data)}`;
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // 로그인 후 ID Token 저장 (updateDIDFromFCM에서 사용)
+  // startFlow 안에서 localStorage.setItem("idToken", idToken); 추가 추천
+</script>
+</body>
+</html>
