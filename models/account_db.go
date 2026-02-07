@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -219,9 +218,9 @@ func (p *AccountDB) RegistUser(req ptl.RegistReq, encpw []byte) error {
 	return nil
 }
 
-func (p *AccountDB) updatedLastest(sid string) error {
-	query := "UPDATE user_info SET at_upd = ? WHERE sid = ?"
-	_, err := p.conndb.Exec(query, time.Now(), sid)
+func (p *AccountDB) updatedLastest(uid uint64) error {
+	query := "UPDATE user_info SET at_upd = ? WHERE uid = ?"
+	_, err := p.conndb.Exec(query, time.Now(), uid)
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
 	}
@@ -231,7 +230,7 @@ func (p *AccountDB) updatedLastest(sid string) error {
 
 func (p *AccountDB) updatedDid(uid uint64, did, dos string) error {
 	query := "UPDATE user_info SET did = ?, dos = ?, at_upd = ? WHERE uid = ?"
-	_, err := p.conndb.Exec(query, did, dos, time.Now(), strconv.FormatUint(uid, 10))
+	_, err := p.conndb.Exec(query, did, dos, time.Now(), uid)
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
 	}
@@ -270,7 +269,7 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 	// 	return nil, fmt.Errorf("password does not match")
 	// }
 
-	err = p.updatedLastest(req.ID)
+	err = p.updatedLastest(uid)
 	if err != nil {
 		return nil, fmt.Errorf("error updating lastest: %v", err)
 	}
@@ -283,8 +282,8 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 	return &user, nil
 }
 
-func (p *AccountDB) LogoutUser(id string) error {
-	err := p.updatedLastest(id)
+func (p *AccountDB) LogoutUser(uid uint64) error {
+	err := p.updatedLastest(uid)
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
 	}

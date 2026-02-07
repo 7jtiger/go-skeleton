@@ -376,6 +376,7 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		Age:      user.Age,
 		NewStat:  false,
 	}
+
 	err = p.rdb.HSetJoinWTRoom(user.Uid, &wtRoomUser)
 	if err != nil {
 		log.Warn("Failed to set join WebRTC room:", err)
@@ -435,53 +436,74 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 	return acTok, refTok, nil
 }
 
-//todo
-/*
-logout
-1. delete jwt
-2. last update
-3. delete chat room
-*/
-
-// swagger:route POST /acc/v01/logout logout user
-// @Summary Logout a user
-// @Description Performs logout. Returns "success" message on success.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param id body string true "ID of the user to logout"
-// @Success 200 {string} string "success"
-// @Failure 400 {object} protocol.RespHeader
-// @Router /acc/v01/logout [post]
+// swagger:route POST /inserv/v01/logout Account LogoutUser
+// User Logout
+// Invalidates the JWT token and performs user logout processing.
+// The following operations are performed during logout:
+// - Delete JWT access token
+// - Remove user from waiting room (WTRoom)
+// - Update last access time
+// Security:
+//   - Bearer: []
+//
+// Responses:
+//
+//	200: LogoutResponse
+//	400: ErrorResponse
+//	401: UnauthorizedResponse
+//	500: InternalServerErrorResponse
+//
+// Example Request:
+//
+//	POST /inserv/v01/logout HTTP/1.1
+//	Host: localhost:8080
+//	Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+//	Content-Type: application/json
+//
+// Example Response (Success):
+//
+//	HTTP/1.1 200 OK
+//	Content-Type: application/json
+//	{ "msg": "success"}
 func (p *AccountController) LogoutUser(c *gin.Context) {
-	var req struct {
-		ID string `json:"id" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusInternalServerError, "%s", err.Error())
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
-	if req.ID == "" {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "id is required")
+	userInfo, ok := user.(*ptl.UserInfoResp)
+	if !ok {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Invalid user info")
 		return
 	}
 
-	// Authorization 헤더에서 토큰 추출
-	authHeader := c.GetHeader("Authorization")
-	if authHeader != "" {
-		tokens := strings.Split(authHeader, " ")
-		if len(tokens) == 2 {
-			// 현재 토큰만 삭제
-			err := p.rdb.DeleteJWTToken(tokens[1])
-			if err != nil {
-				log.Warn("Failed to delete JWT token:", err)
-			}
-		}
+	hd := c.GetHeader("Authorization")
+	if hd == "" {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Unauthorized")
+		return
 	}
 
-	err := p.adb.LogoutUser(req.ID)
+	tokens := strings.Split(hd, " ")
+	if len(tokens) != 2 {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid Bearer Type")
+		return
+	}
+
+	err := p.rdb.DeleteJWTToken(tokens[1])
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLogoutFailed, "failed to delete JWT token"), http.StatusBadRequest, err)
+		return
+	}
+	//
+	// delete chat room
+	err = p.rdb.HDeleteJoinWTRoom(userInfo.Uid)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLogoutFailed, "failed to delete chat room"), http.StatusBadRequest, err)
+		return
+	}
+
+	err = p.adb.LogoutUser(userInfo.Uid)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLogoutFailed, "failed to logout user"), http.StatusBadRequest, err)
 		return
