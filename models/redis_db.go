@@ -435,6 +435,38 @@ func (r *RedisDB) HSetJoinWTRoom(userID uint64, user *ptl.WTRoomUser) error {
 	return nil
 }
 
+func (r *RedisDB) HRefreshJoinWTRoom(userID uint64) error {
+	userIDStr := strconv.FormatUint(userID, 10)
+
+	// Check if the user exists in the hash
+	exists, err := r.client.HExists(r.ctx, "WTRoom:User", userIDStr).Result()
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return fmt.Errorf("user %d not found in WTRoom", userID)
+	}
+
+	// Get the current user data
+	userJSON, err := r.client.HGet(r.ctx, "WTRoom:User", userIDStr).Result()
+	if err != nil {
+		return err
+	}
+
+	// Re-set the field with new expiration time
+	options := &redis.HSetEXOptions{
+		ExpirationType: redis.HSetEXExpirationEX,
+		ExpirationVal:  86400 * 1, //sec //1day
+	}
+
+	if err := r.client.HSetEXWithArgs(r.ctx, "WTRoom:User", options, userIDStr, userJSON).Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *RedisDB) HGetWTRoomUser(userID uint64) (*ptl.WTRoomUser, error) {
 	userIDStr := strconv.FormatUint(userID, 10)
 	res, err := r.client.HGet(r.ctx, "WTRoom:User", userIDStr).Result()

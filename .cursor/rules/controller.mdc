@@ -1,12 +1,48 @@
 ---
-description: Controller-related business logic configuration and reference file for controller work, .cursor/mds/controller.md
-1. Reference file for Account and User information management: .cursor/mds/account.md
-2. Reference file for Content and Chat Room related information: .cursor/mds/content.md
-3. Reference file for History and History DB related information: .cursor/mds/history.md
-4. common folder related information: .cursor/mds/common.md
-5. Reference file for client communication protocol: .cursor/mds/protocol.md
-6. Reference file for high availability processing and server status checking: .cursor/mds/hachecker.md
-#description: When referring to the account and user information below, and if the code is modified, the referenced md files must also be updated.
+description: Controller-related business logic configuration and reference file for controller work
 globs:
 alwaysApply: true
 ---
+
+## Controller Package Overview
+Files that receive requests from router and process business logic in the controller folder.
+
+## Main Controllers
+1. **AccountController** (account.go): User authentication, registration, login/logout, profile management, WebRTC session
+2. **StoryController** (storyCtl.go): Story management, image upload to Cloudflare, comment management
+3. **ChatController** (chatCtl.go): WebSocket-based text chat, real-time messaging
+4. **SignalingController** (signaling.go): WebRTC P2P signaling for video/audio chat
+5. **HomeController** (home.go): Home screen data aggregation
+6. **NotiController** (noti.go): Notification and announcement management
+7. **ProfileController** (profile.go): User profile operations
+8. **ContentController** (content.go): Content management
+9. **HistoryController** (history.go): User activity tracking
+10. **ItemController** (item.go): Item/product management
+11. **SetController** (setting.go): User settings
+12. **CheckInController** (checkIn.go): Check-in functionality
+13. **CsCenterController** (csCenter.go): Customer service
+14. **ShopController** (shop.go): Shop functionality
+15. **VideoChatController** (videoChat.go): Video chat features
+16. **VoiceChatController** (voiceChat.go): Voice chat features
+17. **MarriageController** (marriage.go): Marriage feature
+18. **InboxController** (inbox.go): Inbox management
+
+## Reference Files
+1. Main controller documentation: .cursor/mds/controller.md
+2. Account and User information: .cursor/mds/account.md
+3. Content and Chat Room information: .cursor/mds/content.md
+4. History and History DB information: .cursor/mds/history.md
+5. Common utilities: .cursor/mds/common.md
+6. Client communication protocol: .cursor/mds/protocol.md
+7. High availability and health checking: .cursor/mds/hachecker.md
+
+## Key Features
+- **Authentication**: JWT-based authentication with access/refresh tokens
+- **Real-time Communication**: WebSocket for chat and WebRTC signaling
+- **File Upload**: Cloudflare Images integration for story pictures
+- **Encryption**: AES-GCM for request/response data protection
+- **Session Management**: Redis-based session storage
+- **Testing**: Comprehensive test suite in ctl_test.go
+
+## Important Notes
+When modifying controller code, update the corresponding reference files in .cursor/mds/ folder.

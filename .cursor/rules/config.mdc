@@ -1,8 +1,44 @@
 ---
-description: When referring to the following for settings and server information, and when the code is modified, the referenced md file must also be updated.
+description: Configuration management for server settings and environment
 globs:
 alwaysApply: true
 ---
 
-conf/config.toml
-conf/config.go
+## Configuration Package Overview
+Configuration files required for the project in the conf folder.
+
+## Configuration Files
+1. **config.toml**: Main configuration file with all settings
+2. **config.go**: Configuration loader and validator
+
+## Configuration Sections
+
+### Server Configuration
+- Mode (dev/prod)
+- Port (default: 8080)
+- BaseKey (AES encryption key)
+- CfId, CfToken (Cloudflare Images credentials)
+
+### Database Configuration
+- MySQL connections (adb, hdb, idb, sdb)
+  - host, user, pass, name for each database
+- Redis connection
+  - addr, pass, db index
+
+### WhiteList Configuration
+- IP whitelist for admin operations
+- OTP authentication settings
+
+### JWT Configuration
+- Secret key for token signing
+- Token expiration times
+
+### WebRTC Configuration
+- STUN/TURN server settings
+- ICE server configuration
+
+## Reference Files
+- Main configuration documentation: .cursor/mds/conf.md
+
+## Important Notes
+When modifying configuration, update both config.toml and corresponding code, then update .cursor/mds/conf.md

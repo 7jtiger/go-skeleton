@@ -127,6 +127,10 @@ definitions:
         type: string
       birth:
         type: string
+      did:
+        type: string
+      dos:
+        type: string
       email:
         type: string
       gender:
@@ -589,32 +593,6 @@ paths:
       summary: Leave a user
       tags:
       - user
-  /acc/v01/logout:
-    post:
-      consumes:
-      - application/json
-      description: Performs logout. Returns "success" message on success.
-      parameters:
-      - description: ID of the user to logout
-        in: body
-        name: id
-        required: true
-        schema:
-          type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: success
-          schema:
-            type: string
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Logout a user
-      tags:
-      - user
   /acc/v01/modify:
     post:
       consumes:
@@ -660,11 +638,13 @@ paths:
     post:
       consumes:
       - application/json
-      description: Calls /acc/v01/regist to register a new user. Returns "success"
-        message on success.
+      description: |-
+        Calls /acc/v01/regist to register a new user. Returns "success" message on success.
+        Required fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email
+        Optional fields: did (device ID), dos (device OS)
+        System generates: uid (unique user ID), nick (default nickname), main_pic (default profile image), thmb_pic (default thumbnail), sp_intro (default introduction)
       parameters:
-      - description: 'register request data {id : xxx, pw : hash, name : xxx, gender
-          : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}'
+      - description: register request data
         in: body
         name: request
         required: true
@@ -673,6 +653,14 @@ paths:
       produces:
       - application/json
       responses:
+        "14":
+          description: ID is duplicate
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "15":
+          description: Email is duplicate
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
         "102":
           description: Parameter is missing
           schema:
@@ -686,9 +674,9 @@ paths:
           schema:
             $ref: '#/definitions/protocol.RespHeader'
         "200":
-          description: success
+          description: 'result: success'
           schema:
-            type: string
+            $ref: '#/definitions/protocol.OkResp'
         "400":
           description: Bad request
           schema:
@@ -1416,6 +1404,104 @@ paths:
       summary: Upload story picture
       tags:
       - story
+  /user/v01/set:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Updates user settings based on category. Currently supports notification alert settings.
+        Alert settings use bit flags (0-15) with XOR operation to toggle:
+        - noti=1 (notification), call=2 (call), msg=4 (message), rvr=8 (reserve)
+        - 0 = all alerts enabled
+        - 15 = all alerts disabled
+        - Example: To toggle notification, send value "1"
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Setting request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            cate:
+              type: string
+            value:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Setting updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/protocol.RespHeader'
+            - properties:
+                data:
+                  properties:
+                    msg:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request - Missing or invalid parameters
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "401":
+          description: Authentication failed - No JWT token
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      security:
+      - BearerAuth: []
+      summary: Update user settings
+      tags:
+      - Setting
+  /user/v01/set/{uid}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Retrieves notification settings for authenticated users via JWT token.
+        Notification settings are managed using bit flags:
+      parameters:
+      - description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Notification setting value (0-15)
+          schema:
+            allOf:
+            - $ref: '#/definitions/protocol.RespHeader'
+            - properties:
+                data:
+                  type: integer
+              type: object
+        "401":
+          description: Authentication failed - No JWT token
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      security:
+      - BearerAuth: []
+      summary: Get user notification settings
+      tags:
+      - Setting
   /webrtc/v01/available-users:
     get:
       consumes:

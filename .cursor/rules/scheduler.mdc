@@ -1,6 +1,36 @@
 ---
-description: Reference file for batch processing and periodic task-related work, .cursor/mds/scheduler.md
+description: Batch processing and periodic task management
 globs:
 alwaysApply: false
 ---
+
+## Scheduler Package Overview
+Files that manage periodically executed tasks in the scheduler folder.
+
+## Scheduler Components
+1. **scheduler.go**: Task scheduler initialization and management
+2. **mailing.go**: Email sending tasks and templates
+3. **scd_test.go**: Scheduler testing functions
+
+## Key Features
+- **Periodic Tasks**: Cron-based task scheduling
+- **Email System**: Automated email notifications
+- **Background Jobs**: Asynchronous task processing
+
+## Common Use Cases
+- Daily/weekly report generation
+- Cleanup of expired data
+- Notification dispatching
+- Data aggregation tasks
+- Database maintenance
+
+## Reference Files
+- Main scheduler documentation: .cursor/mds/scheduler.md
+
+## Important Notes
+When adding new scheduled tasks:
+1. Define task function in appropriate file
+2. Register task in scheduler initialization
+3. Add test cases in scd_test.go
+4. Update .cursor/mds/scheduler.md
 

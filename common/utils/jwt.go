@@ -13,6 +13,21 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
+func GetJWTClaims(uidStr string) *JWTClaims {
+	return &JWTClaims{
+		UserID: uidStr,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "cupitok.com",
+			Subject:   "Authentication",
+			Audience:  jwt.ClaimStrings{uidStr},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			ID:        uidStr,
+		},
+	}
+}
+
 // CreateJWTTokenWithConfig 설정을 포함한 JWT 토큰 생성
 func CreateJWTToken(secret string, claims *JWTClaims, expiration time.Duration) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -59,4 +74,17 @@ func VerifyJWTTokenWithAudience(tokenString, secret, expectedAudience string) (*
 	}
 
 	return claims, nil
+}
+
+func IsTokenExpiringSoon(tokenString, secret string, threshold time.Duration) (bool, error) {
+	claims, err := VerifyJWTToken(tokenString, secret)
+	if err != nil {
+		return false, err
+	}
+
+	if claims.RegisteredClaims.ExpiresAt.Before(time.Now().Add(threshold)) {
+		return true, nil
+	} else {
+		return false, nil
+	}
 }

@@ -106,10 +106,17 @@
 - `GET /mission/v01/list`: Endpoint to retrieve mission list
 - `GET /mission/v01/detail/:id`: Endpoint to retrieve specific mission details
 
-### story/v01 - Story Feature (Lightweight Authentication Required)
-- `GET /story/v01/home/:id`: Endpoint to retrieve user's story home
-- `GET /story/v01/list/:stat/:id`: Endpoint to retrieve story list by status
-- `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details
+### story/v01 - Story Feature (Security Headers Applied)
+- `GET /story/v01/home/:id`: Endpoint to retrieve user's story home (placeholder)
+- `GET /story/v01/list/:uid`: Endpoint to retrieve user's public story list (stat=1 or 0)
+- `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details with comments
+- `POST /story/v01/upload`: Endpoint to upload story with images to Cloudflare (max 5 files, 5MB each, ValidateFileUpload middleware)
+- `POST /story/v01/updstat`: Endpoint to update story status (0=del, 1=pub, 2=private, 3=limit, 4=reserved)
+- `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
+- `POST /story/v01/delpic`: Endpoint to delete specific picture from story
+- `POST /story/v01/comment/create`: Endpoint to create new comment on story
+- `POST /story/v01/comment/updstat`: Endpoint to update comment status
+- `POST /story/v01/comment/updbody`: Endpoint to update comment body content
 
 ### upload/v01 - File Upload (Lightweight Authentication Required)
 - `POST /upload/v01/story/img`: Endpoint to upload images for stories
@@ -124,7 +131,12 @@
 - `GET /noti/v01/anc/list`: Endpoint to retrieve public announcement list
 - `GET /noti/v01/anc/detail/:idx`: Endpoint to retrieve specific announcement detail
 
-### chat/v01 - Chat Features (Security Headers)
+### chat/v01 - Text Chat Features (Security Headers)
+- `GET /chat/v01/ws`: WebSocket endpoint for real-time text chat (query param: userId)
+- `POST /chat/v01/room`: Endpoint to create new chat room
+- `GET /chat/v01/rooms`: Endpoint to retrieve user's chat room list
+- `GET /chat/v01/history/:roomId`: Endpoint to retrieve paginated chat history
+- `POST /chat/v01/message`: REST API endpoint to send message (alternative to WebSocket)
 - `GET /chat/v01/mlistvd`: Endpoint to retrieve male video chat list
 - `GET /chat/v01/wlistvd`: Endpoint to retrieve female video chat list
 - `GET /chat/v01/mlistvo`: Endpoint to retrieve male voice chat list
@@ -170,11 +182,11 @@
 
 ## WebSocket Endpoints
 
-### WebRTC Signaling WebSocket
+### 1. WebRTC Signaling WebSocket
 - **URL**: `ws://server:port/webrtc/v01/ws?userId={userId}`
 - **Protocol**: WebSocket
 - **Authentication**: No Auth (개발용, 프로덕션에서는 JWT 권장)
-- **Purpose**: Real-time P2P video chat signaling
+- **Purpose**: Real-time P2P video/audio chat signaling
 
 **Query Parameters:**
 - `userId` (required): User unique identifier
@@ -197,6 +209,41 @@
 - `user-list`: Connected users list update (server → client)
 - `error`: Error message (server → client)
 
+### 2. Text Chat WebSocket
+- **URL**: `ws://server:port/chat/v01/ws?userId={userId}`
+- **Protocol**: WebSocket
+- **Authentication**: No Auth (개발용, 프로덕션에서는 JWT 권장)
+- **Purpose**: Real-time text messaging
+
+**Query Parameters:**
+- `userId` (required): User unique identifier
+
+**Message Format:**
+```json
+{
+  "type": "text-message|typing|read-receipt|call-request|call-accept|call-reject",
+  "from": "sender ID",
+  "to": "receiver ID",
+  "roomId": "chat room ID",
+  "content": "message content",
+  "timestamp": 1234567890
+}
+```
+
+**Message Types:**
+- `text-message`: Text chat message
+- `typing`: Typing indicator
+- `read-receipt`: Message read confirmation
+- `call-request`: Call request notification
+- `call-accept`: Call acceptance notification
+- `call-reject`: Call rejection notification
+
+**Connection Features:**
+- **Ping/Pong**: 54s interval ping, 60s pong timeout
+- **Buffer Size**: 256 messages per client
+- **Max Message Size**: 64KB
+- **Message Batching**: Automatic batching of queued messages
+
 ---
-*Last Updated: 2025-11-05*
+*Last Updated: 2026-02-02*
 

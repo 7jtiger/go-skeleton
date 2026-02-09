@@ -118,6 +118,47 @@ func GetWithToken(host, relativePath string, keys []string, values []string, tok
 	}
 }
 
+func PostWithToken(host, relativePath string, keys []string, values []string, token string) (string, error) {
+	u := url.URL{Scheme: "http", Host: host, Path: relativePath}
+
+	// Create a map to hold the JSON data
+	jsonData := make(map[string]string)
+	for i, key := range keys {
+		jsonData[key] = values[i]
+	}
+
+	// Convert map to JSON
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return "", err
+	}
+
+	if request, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonBytes)); err != nil {
+		return "", err
+	} else {
+		request.Header.Set("Content-Type", "application/json")
+
+		// Set Authorization header with Bearer token
+		request.Header.Set("Authorization", "Bearer "+token)
+
+		client := http.Client{
+			//Timeout: 50e9,
+		}
+
+		if response, err := client.Do(request); err != nil {
+			return "", err
+		} else {
+			defer response.Body.Close()
+
+			if body, err := io.ReadAll(response.Body); err != nil {
+				return "", err
+			} else {
+				return string(body), nil
+			}
+		}
+	}
+}
+
 func PostJson(host, relativePath string, keys []string, values []string) (string, error) {
 	// if len(keys) != len(values) {
 	// 	return "", fmt.Errorf("mismatch length of keys and values")
@@ -491,6 +532,21 @@ func Test_FBlogin(t *testing.T) {
 		return
 	}
 
+	fmt.Println(res)
+}
+
+func Test_Logout(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/inserv/v01/logout"
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDczMDQ4NCwibmJmIjoxNzcwNjQ0MDg0LCJpYXQiOjE3NzA2NDQwODQsImp0aSI6Ijg2OTc0MTQwNjA3MzY4Mzk4MzcifQ.6nVD1doG4AkViunYrQ9CST6_fRda_xS9A38wqA-ROg0"
+
+	// var key = []string{"Authorization"}
+	// var value = []string{"Bearer " + token}
+
+	res, err := PostWithToken(*targetUrl, qurl, nil, nil, token)
+	if err != nil {
+		t.Errorf("Failed to logout: %v", err)
+	}
 	fmt.Println(res)
 }
 

@@ -452,46 +452,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/acc/v01/logout": {
-            "post": {
-                "description": "Performs logout. Returns \"success\" message on success.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Logout a user",
-                "parameters": [
-                    {
-                        "description": "ID of the user to logout",
-                        "name": "id",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "success",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
         "/acc/v01/modify": {
             "post": {
                 "description": "Modify user information. The 'cate' field should be one of \"pw, area, nick, email\" indicating the target to be changed, and the 'value' field should contain the new value for the target.",
@@ -552,7 +512,7 @@ const docTemplate = `{
         },
         "/acc/v01/regist": {
             "post": {
-                "description": "Calls /acc/v01/regist to register a new user. Returns \"success\" message on success.",
+                "description": "Calls /acc/v01/regist to register a new user. Returns \"success\" message on success.\nRequired fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email\nOptional fields: did (device ID), dos (device OS)\nSystem generates: uid (unique user ID), nick (default nickname), main_pic (default profile image), thmb_pic (default thumbnail), sp_intro (default introduction)",
                 "consumes": [
                     "application/json"
                 ],
@@ -565,7 +525,7 @@ const docTemplate = `{
                 "summary": "Register a new user",
                 "parameters": [
                     {
-                        "description": "register request data {id : xxx, pw : hash, name : xxx, gender : 1(men)/0(women), age : xxx, birth : 1990-01-01, area : xxx, email : xxx}",
+                        "description": "register request data",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -593,10 +553,22 @@ const docTemplate = `{
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "200": {
-                        "description": "success",
+                    "14": {
+                        "description": "ID is duplicate",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "15": {
+                        "description": "Email is duplicate",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "result: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
                         }
                     },
                     "400": {
@@ -1682,6 +1654,156 @@ const docTemplate = `{
                 }
             }
         },
+        "/user/v01/set": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates user settings based on category. Currently supports notification alert settings.\nAlert settings use bit flags (0-15) with XOR operation to toggle:\n- noti=1 (notification), call=2 (call), msg=4 (message), rvr=8 (reserve)\n- 0 = all alerts enabled\n- 15 = all alerts disabled\n- Example: To toggle notification, send value \"1\"",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Setting"
+                ],
+                "summary": "Update user settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Setting request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "cate": {
+                                    "type": "string"
+                                },
+                                "value": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Setting updated successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request - Missing or invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication failed - No JWT token",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/v01/set/{uid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves notification settings for authenticated users via JWT token.\nNotification settings are managed using bit flags:",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Setting"
+                ],
+                "summary": "Get user notification settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notification setting value (0-15)",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication failed - No JWT token",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/webrtc/v01/available-users": {
             "get": {
                 "description": "Get list of users available for video call",
@@ -2149,6 +2271,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "birth": {
+                    "type": "string"
+                },
+                "did": {
+                    "type": "string"
+                },
+                "dos": {
                     "type": "string"
                 },
                 "email": {

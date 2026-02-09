@@ -1,8 +1,60 @@
 ---
-description: Reference file for model, schema, and database-related work, .cursor/mds/models.md
-1. Reference file for Account and User information: .cursor/mds/account_db.md
-2. Reference file for History and History DB related information: .cursor/mds/history_db.md
-3. Reference file for Redis DB related information: .cursor/mds/redis_db.md
+description: Model, schema, and database-related work configuration
 globs:
 alwaysApply: true
 ---
+
+## Models Package Overview
+Service schema and database-related files in the models folder.
+
+## Main Repositories
+1. **AccountDB** (account_db.go): User authentication, registration, profile management
+2. **StoryDB** (story_db.go): Story and story comment management
+3. **HistoryDB** (history_db.go): Notification and announcement history
+4. **ItemDB** (item_db.go): Item/product data management
+5. **RedisDB** (redis_db.go): Session storage, WebRTC session, caching
+
+## Database Schema Summary
+
+### AccountDB (user_info, pf_info, acc_info)
+- User authentication and profile information
+- ChaCha20 encryption for sensitive data
+- Soft delete with status management
+
+### StoryDB (story, str_cmt)
+- Story table: idx, uid, nick, body, stat, str_img (JSON), str_imgbak (JSON), at_create, at_update
+- Story comment table: idx, str_idx, uid, nick, body, stat, at_create, at_update
+- Status: 0=deleted, 1=public, 2=private, 3=limited, 4=reserved
+
+### HistoryDB (noti_his, anuc_his, call_his, chat_his, etc.)
+- Personal notifications with read/unread status
+- Public announcements with time-based 'new' badge
+- Call and chat history tracking
+
+### RedisDB
+- JWT access/refresh token storage
+- WebRTC session management
+- User status and availability tracking
+
+## Repository Pattern
+- **IRepository Interface**: Common interface for all repositories (Start, Terminate, Close, Ping)
+- **Repositories Manager**: Centralized repository management with thread-safe access
+- **Connection Pooling**: 300 max connections, 30 idle connections, 3-minute lifetime
+- **Health Monitoring**: Automatic heartbeat every 2 minutes
+
+## Reference Files
+1. Main models documentation: .cursor/mds/models.md
+2. Account DB details: .cursor/mds/account_db.md
+3. Story DB details: .cursor/mds/story_db.md
+4. History DB details: .cursor/mds/history_db.md
+5. Redis DB details: .cursor/mds/redis_db.md
+
+## Key Features
+- **Type-Safe Access**: Reflection-based repository retrieval
+- **Dependency Injection**: Centralized creation and management
+- **Thread Safety**: Mutex-protected concurrent access
+- **Soft Delete**: Status-based deletion for data retention
+- **Encryption**: ChaCha20 for sensitive data
+
+## Important Notes
+When modifying model code, update the corresponding reference files in .cursor/mds/ folder.

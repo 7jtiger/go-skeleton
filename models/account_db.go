@@ -240,11 +240,14 @@ func (p *AccountDB) updatedDid(uid uint64, did, dos string) error {
 
 func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, error) {
 	query := "SELECT uid, pw_hash, nick, did, dos FROM user_info WHERE sid = ? LIMIT 1"
+	// log.Info("LoginUser: ", req)
 	row := p.conndb.QueryRow(query, req.ID)
-	var pwHash, nick, did, dos string
+	var pwHash, nick string
 	var uid uint64
 
-	err := row.Scan(&uid, &pwHash, &nick, &did, &dos)
+	var didNull, dosNull sql.NullString
+	err := row.Scan(&uid, &pwHash, &nick, &didNull, &dosNull)
+	// log.Info("LoginUser: ", uid, pwHash, nick, didNull.String, dosNull.String)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	} else if err != nil {
@@ -258,20 +261,18 @@ func (p *AccountDB) LoginUser(req ptl.LoginReq, pw []byte) (*ptl.UserInfoResp, e
 		return nil, fmt.Errorf("password does not match: %v", err)
 	}
 
-	if did != req.DID {
-		err = p.updatedDid(uid, req.DID, req.DOS)
-		if err != nil {
+	if didNull.Valid {
+		// if didNull.String == req.DID {
+		// }
+		if didNull.String != req.DID {
+			if err := p.updatedDid(uid, req.DID, req.DOS); err != nil {
+				return nil, fmt.Errorf("error updating did: %v", err)
+			}
+		}
+	} else {
+		if err := p.updatedDid(uid, req.DID, req.DOS); err != nil {
 			return nil, fmt.Errorf("error updating did: %v", err)
 		}
-	}
-
-	// if !bytes.Equal([]byte(pwHash), hsedPw) {
-	// 	return nil, fmt.Errorf("password does not match")
-	// }
-
-	err = p.updatedLastest(uid)
-	if err != nil {
-		return nil, fmt.Errorf("error updating lastest: %v", err)
 	}
 
 	user, err := p.GetUserInfo(req.ID)

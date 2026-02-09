@@ -4,52 +4,136 @@ globs:
 alwaysApply: true
 ---
 
-Project Overview
-This project supports video chat, text chat, and audio chat using webRTC, with user management capabilities and payment & user convenience features.
+# MS-Gateway Project Overview
 
-Directory:
-/home/jino/go/src/ms-gateway/
+## Project Description
+A comprehensive backend service supporting video chat, text chat, and audio chat using WebRTC, with user management, story sharing, notifications, and payment features.
 
-Most services receive requests from the router and process business logic in the controller folder, then query the database using service schemas and database-related files in the models folder to return responses according to protocols defined in the protocol files. For batch processing requirements, files in the scheduler folder handle batch processing.
+**Project Directory**: `/home/jino/go/src/ms-gateway/`
 
-Guidelines
-When adding features, follow this structure: add the corresponding URL to the router, define the corresponding function in the controller, call the corresponding function in the model to query data, and call the corresponding function in the protocol to return responses.
-When defining each function, check for duplicate content and verify if there are duplicates in the common folder. If duplicates exist, refer to the duplicate content when writing.
-Add test code to ctl_test.go that can test the corresponding functionality with debug functionality in mind for test execution, enabling end-to-end testing from router to controller to model with a single RESTful API call, written as a single function.
-functionality.
+## Architecture Flow
+```
+Router → Middleware → Controller → Model → Database
+                  ↓
+              Protocol (Response)
+```
 
+Most services follow this pattern:
+1. **Router** receives HTTP/WebSocket requests
+2. **Middleware** handles authentication, validation, encryption
+3. **Controller** processes business logic
+4. **Model** queries database using repository pattern
+5. **Protocol** formats and returns responses
 
-Common:
-Commonly used files
-/home/jino/go/src/ms-gateway/common/
-Reference file: .cursor/mds/common.md
+## Core Directories
 
-Conf:
-Configuration files required for the project
-/home/jino/go/src/ms-gateway/conf/
-Reference file: .cursor/mds/conf.md
+### 1. Common (`/common/`)
+Shared utilities and helper functions
+- **logger/**: Custom logging system with structured logging
+- **utils/**: JWT, encryption (AES-GCM, ChaCha20), HTTP client pool, time utilities
+- **maps/**: Thread-safe map implementations
+- **types/**: Common type definitions
 
-Controller: 
-Files that receive requests from the router and process business logic
-/home/jino/go/src/ms-gateway/controller/
-Reference file: .cursor/mds/controller.mdc
+**Reference**: `.cursor/mds/common.md`
 
-Models:
-Service schema and database-related files
-/home/jino/go/src/ms-gateway/models/
-Reference file: .cursor/mds/models.mdc
+### 2. Conf (`/conf/`)
+Configuration management
+- `config.toml`: Main configuration file (server, database, Redis, Cloudflare)
+- `config.go`: Configuration loader and validator
 
-Protocol:
-Protocol-related files for communication with clients
-/home/jino/go/src/ms-gateway/protocol/
-Reference file: .cursor/mds/protocol.md
+**Reference**: `.cursor/mds/conf.md`
 
-Router:
-Starting point of the service with router configuration files
-/home/jino/go/src/ms-gateway/router/
-Reference file: .cursor/mds/router.md
+### 3. Controller (`/controller/`)
+Business logic handlers (18+ controllers)
+- **account.go**: Authentication, user management, WebRTC session
+- **storyCtl.go**: Story upload/management, Cloudflare image integration
+- **chatCtl.go**: WebSocket text chat
+- **signaling.go**: WebRTC P2P signaling
+- **home.go**: Home screen data aggregation
+- **noti.go**: Notifications and announcements
+- **ctl_test.go**: Comprehensive test suite
 
-Scheduler:
-Files that manage periodically executed tasks
-/home/jino/go/src/ms-gateway/scheduler/
-Reference file: .cursor/mds/scheduler.mdc
+**Reference**: `.cursor/mds/controller.md`
+
+### 4. Models (`/models/`)
+Database repositories and schemas
+- **account_db.go**: User authentication and profiles (MySQL)
+- **story_db.go**: Stories and comments (MySQL)
+- **history_db.go**: Notifications, announcements, history (MySQL)
+- **item_db.go**: Items/products (MySQL)
+- **redis_db.go**: Session storage, caching (Redis)
+- **model.go**: Repository pattern implementation
+
+**Reference**: `.cursor/mds/models.md`
+
+### 5. Protocol (`/protocol/`)
+Client communication protocols
+- **types.go**: Common request/response structures
+- **userptl.go**: User-related protocols
+- **history.go**: History-related protocols
+- **home.go**: Home screen protocols
+- **result_code.go**: Standard result codes
+
+**Reference**: `.cursor/mds/protocol.md`
+
+### 6. Router (`/router/`)
+HTTP routing and middleware
+- **router.go**: Route definitions, authentication setup
+- **mdlware.go**: Middleware (JWT, CORS, rate limiting, AES encryption, file validation)
+
+**Reference**: `.cursor/mds/router.md`
+
+### 7. Scheduler (`/scheduler/`)
+Batch processing and periodic tasks
+- **scheduler.go**: Task scheduler initialization
+- **mailing.go**: Email sending tasks
+
+**Reference**: `.cursor/mds/scheduler.md`
+
+## Development Guidelines
+
+### Adding New Features
+1. **Define Route**: Add URL mapping in `router/router.go`
+2. **Create Handler**: Implement function in appropriate controller
+3. **Database Layer**: Add repository function in models
+4. **Protocol**: Define request/response structures in protocol
+5. **Test**: Add test case in `controller/ctl_test.go`
+
+### Code Reuse
+- Check `common/` folder for existing utilities before implementing
+- Use existing protocol structures for consistency
+- Follow repository pattern for database access
+
+### Testing Strategy
+- Write end-to-end tests in `ctl_test.go`
+- Each test should cover: router → controller → model → response
+- Use single function for complete feature testing
+- Include debug capabilities for easier troubleshooting
+
+### Security Practices
+- Use JWT authentication for protected endpoints
+- Apply AES-GCM encryption for sensitive data
+- Validate file uploads (type, size, count)
+- Implement rate limiting for API endpoints
+- Use prepared statements for SQL queries
+
+## Key Technologies
+- **Web Framework**: Gin (Go)
+- **Database**: MySQL (user data, history, stories)
+- **Cache/Session**: Redis
+- **Real-time**: WebSocket (chat, signaling)
+- **Video/Audio**: WebRTC
+- **File Storage**: Cloudflare Images
+- **Encryption**: AES-GCM, ChaCha20
+- **Authentication**: JWT tokens
+
+## Project Status
+**Version**: 0.9.1  
+**Last Updated**: 2026-02-02  
+**Active Features**: User auth, WebRTC calls, text chat, story sharing, notifications
+
+## Important Notes
+- When modifying code, update corresponding `.cursor/mds/*.md` files
+- Follow existing patterns for consistency
+- Add comprehensive test coverage
+- Document API changes in Swagger comments

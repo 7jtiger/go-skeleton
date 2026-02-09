@@ -138,16 +138,65 @@
 
 ---
 
+## story_db.go - Story Database Repository
+
+### Database Connection and Management
+- `NewStoryDB()`: Constructor that establishes MySQL story database connection
+- `Start()`: Initializes story database service
+- `Terminate()`: Safely closes database connection and cleanup resources
+- `Close()`: Closes database connection
+- `Ping()`: Checks database connection health
+- `heartbeat()`: Goroutine that periodically pings database every 2 minutes
+
+### Story Management Functions
+- `SetStory()`: Inserts new story with uid, nickname, body, status, and image JSON, returns lastInsertId
+- `GetStoryList()`: Retrieves user's public stories (stat=1 or 0) with idx, nick, str_img, at_create, ordered by creation time descending
+- `GetStory()`: Retrieves single story detail by index (nick, body, str_img, at_create)
+- `UpdateStoryStat()`: Updates story status and at_update timestamp
+- `UpdateStrBody()`: Updates story body content and at_update timestamp
+- `GetStrPicList()`: Retrieves str_img and str_imgbak JSON data for a story
+- `DeleteStrPic()`: Updates str_img and str_imgbak (moves deleted image to backup)
+
+### Story Comment Functions
+- `SetStrComment()`: Inserts new comment with str_idx, wuid, nick, body, stat, returns lastInsertId
+- `GetStrCmtDetail()`: Retrieves all comments for a story (stat=0 or 1) with idx, wuid, nick, body, at_create
+- `GetStrCommentList()`: Alternative function to retrieve comment list for a story
+- `UpdateStrStatComment()`: Updates comment status and at_update timestamp
+- `UpdateStrBodyComment()`: Updates comment body content and at_update timestamp
+
+### Database Schema
+- **story table**: 
+  - `idx` (PK, auto_increment), `uid` (bigint), `nick` (varchar 20), `body` (varchar 512)
+  - `stat` (tinyint: 0=del, 1=pub, 2=private, 3=limit, 4=reserved)
+  - `qt_good` (int), `qt_checked` (int - view count)
+  - `str_img` (JSON - active images), `str_imgbak` (JSON - deleted images backup)
+  - `at_create`, `at_update` (datetime)
+
+- **str_cmt table**:
+  - `idx` (PK, auto_increment), `str_idx` (int unsigned - foreign key to story)
+  - `uid` (bigint), `nick` (varchar 20), `body` (varchar 256)
+  - `stat` (tinyint: 0=default, 1=private, 2-3=reserved, 4=deleted)
+  - `at_create`, `at_update` (datetime with default CURRENT_TIMESTAMP)
+
+### Key Features
+- **JSON Storage**: Images stored as JSON with numeric indexes for flexible array management
+- **Backup System**: Deleted images preserved in str_imgbak instead of permanent deletion
+- **Status-based Queries**: Filters by status for soft delete and privacy control
+- **Connection Pooling**: 300 max connections, 30 idle connections, 3-minute lifetime
+- **Automatic Timestamps**: at_create and at_update managed automatically
+
+---
+
 ## Overall Structure Summary
 
 ### Repository Pattern Implementation
-- **4 Main Repositories**: AccountDB, HistoryDB, ItemDB, RedisDB
+- **5 Main Repositories**: AccountDB, HistoryDB, ItemDB, RedisDB, StoryDB ⭐ NEW
 - **Centralized Management**: Single Repositories manager for all database connections
 - **Type-Safe Access**: Reflection-based type-safe repository retrieval
 - **Health Monitoring**: Automatic connection health checks every 2 minutes
 
 ### Database Technologies
-- **MySQL**: Primary relational database for user, history, and item data
+- **MySQL**: Primary relational database for user, history, item, and story data
 - **Redis**: In-memory database for sessions and real-time status
 
 ### Design Principles
@@ -156,6 +205,7 @@
 - **Thread Safety**: Mutex-protected concurrent access
 - **Connection Pooling**: Optimized database connection management
 - **Soft Delete Pattern**: Status-based deletion for data retention
+- **JSON Flexibility**: JSON columns for flexible array/object storage
 
 ### Security Features
 - **ChaCha20 Encryption**: Encryption for sensitive user data
@@ -164,6 +214,7 @@
 
 ### Key Features by Category
 - **User Management**: Registration, authentication, profile management
+- **Story Sharing**: Story creation, image management, comment system ⭐ NEW
 - **Notification System**: Personal notifications and public announcements
 - **History Tracking**: Call, chat, payment, and purchase history
 - **Real-time Features**: WebRTC session management, user status tracking
@@ -171,6 +222,6 @@
 
 ---
 *Created: 2025-10-20*
-*Last Updated: 2025-11-05*
+*Last Updated: 2026-02-02*
 *File Location: /home/jino/go/src/ms-gateway/models/*
 

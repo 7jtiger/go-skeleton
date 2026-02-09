@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -249,19 +247,20 @@ func (p *AccountController) getUid() uint64 {
 // @Example request:// {//   "id": "test123",//   "pw": "mypassword123"// }
 //
 // @Example response (success):
-// {
-//   "msg": "success",
-//   "acTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-//   "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-//   "uid": "77665817",
-//   "wrtc": {
-//     "iceServers": [
-//       {
-//         "urls": ["stun:stun.l.google.com:19302"]
-//       }
-//     ]
-//   }
-// }
+//
+//	{
+//	  "msg": "success",
+//	  "acTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+//	  "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+//	  "uid": "77665817",
+//	  "wrtc": {
+//	    "iceServers": [
+//	      {
+//	        "urls": ["stun:stun.l.google.com:19302"]
+//	      }
+//	    ]
+//	  }
+//	}
 //
 // @Example response (failure):
 // {"result": 104,"resultString": "failed to login user","data": null}
@@ -269,7 +268,6 @@ func (p *AccountController) getUid() uint64 {
 // @Note x-meta header format:
 // uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro
 // Example: "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
-
 func (p *AccountController) LoginUser(c *gin.Context) {
 	var req ptl.LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -390,7 +388,8 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 
 func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, string, error) {
 	uidStr := strconv.FormatUint(user.Uid, 10)
-	claims := utils.JWTClaims{
+
+	/* 	claims := utils.JWTClaims{
 		UserID: uidStr,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "cupitok.com",
@@ -399,17 +398,19 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			ID:        uuid.New().String(), // JTI - 토큰 고유 식별자
+			ID:        uidStr,
 		},
-	}
+	} */
+
+	claims := utils.GetJWTClaims(uidStr)
 	// secret := "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"
-	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, &claims, 24*time.Hour)
+	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 24*time.Hour)
 	if err != nil {
 		log.Warn("Failed to create JWT token:", err)
 		return "", "", err
 	}
 
-	refTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, &claims, 14*24*time.Hour)
+	refTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 14*24*time.Hour)
 	if err != nil {
 		log.Warn("Failed to create JWT token:", err)
 		return "", "", err
@@ -471,7 +472,7 @@ func (p *AccountController) LogoutUser(c *gin.Context) {
 		p.ctl.SimpleError(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-
+	log.Info("LogoutUser: ", user)
 	userInfo, ok := user.(*ptl.UserInfoResp)
 	if !ok {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Invalid user info")

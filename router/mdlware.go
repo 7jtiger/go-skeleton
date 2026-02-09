@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -184,6 +185,52 @@ func (p *Router) JwtAuth() gin.HandlerFunc {
 		if err != nil {
 			p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid JWT")
 			return
+		}
+
+		// [신규] 토큰 만료 임박 체크 (30분 이내)
+		expiringSoon, err := utils.IsTokenExpiringSoon(
+			tokens[1],
+			p.cfg.Server.JWTSecret,
+			120*time.Minute,
+		)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check JWT token expiration")
+			return
+		}
+
+		if expiringSoon {
+			// [신규] 새 Access Token 발급
+			claims := utils.GetJWTClaims(strconv.FormatUint(userID.Uid, 10))
+			newToken, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 24*time.Hour)
+			if err != nil {
+				p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create new JWT access token")
+				return
+			}
+
+			err = p.rdb.DeleteJWTToken(tokens[1])
+			if err != nil {
+				logger.Error("Failed to delete old JWT access token", "error", err.Error())
+				p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to delete old JWT access token")
+				return
+			}
+
+			// [신규] Redis 업데이트
+			err = p.rdb.HSetJWTAccess(newToken, userID)
+			if err != nil {
+				logger.Error("Failed to set new JWT access token", "error", err.Error())
+				p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to set new JWT access token")
+				return
+			}
+
+			err = p.rdb.HRefreshJoinWTRoom(userID.Uid)
+			if err != nil {
+				logger.Error("Failed to refresh join WebRTC room", "error", err.Error())
+				p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to refresh join WebRTC room")
+				return
+			}
+
+			c.Header("X-New-Access-Token", newToken)
+			c.Header("Authorization", "Bearer "+newToken)
 		}
 
 		c.Set("user", userID)

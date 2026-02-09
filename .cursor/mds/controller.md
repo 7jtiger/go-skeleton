@@ -197,36 +197,116 @@
 
 ---
 
+## storyCtl.go - Story Management Controller
+
+### Story Controller Initialization
+- `NewStoryController()`: Creates StoryController instance with AccountDB, HistoryDB, and StoryDB connections
+
+### Story Management Functions
+- `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
+- `GetStoryList()`: Retrieves all public stories (stat=1 or 0) for a user, ordered by creation time descending
+- `GetStoryDetail()`: Retrieves detailed story information including all comments for a specific story index
+- `UploadStoryPic()`: Uploads story images to Cloudflare Images (max 5 files, 5MB each), saves story with body text, nickname, and status
+
+### Story Update Functions
+- `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
+- `UpdateStrBody()`: Updates story body content (max 512 characters)
+- `DeleteStrPic()`: Deletes specific picture from story and moves it to backup (str_imgbak)
+
+### Story Comment Functions
+- `CreateStrComment()`: Creates new comment on a story with writer uid, nickname, body (max 256 chars), and status
+- `UpdateStrStatComment()`: Updates comment status (0=default, 1=private, 2=reserved, 3=reserved, 4=deleted)
+- `UpdateStrBodyComment()`: Updates comment body content
+
+### Cloudflare Integration
+- **Image Upload**: Uses `utils.UploadCldFlr()` to upload images to Cloudflare Images
+- **Image Storage**: Stores image URLs as JSON array with indexed keys (1, 2, 3, ...)
+- **Configuration**: Uses `cfg.Server.CfId` and `cfg.Server.CfToken` for Cloudflare API authentication
+
+### Key Features
+- **Multiple File Upload**: Supports up to 5 images per story
+- **JSON Image Storage**: Images stored as JSON with numeric indexes
+- **Backup System**: Deleted images moved to str_imgbak instead of permanent deletion
+- **Status Management**: Flexible status system for stories and comments
+- **Validation**: Checks required fields (uid, nickname, body, status)
+
+---
+
+## chatCtl.go - Text Chat Controller
+
+### Chat Controller Initialization
+- `NewChatController()`: Creates ChatController instance with Redis connection for real-time messaging
+
+### WebSocket Connection Management
+- `HandleWebSocket()`: Handles WebSocket connection upgrade and client registration
+- `registerClient()`: Registers new client to active connections map, closes old connection if exists
+- `unregisterClient()`: Removes client from active connections and cleans up resources
+
+### Message Processing Functions
+- `readPump()`: Goroutine that reads messages from WebSocket connection with ping/pong timeout
+- `writePump()`: Goroutine that writes messages to WebSocket connection with batching
+- `handleMessage()`: Routes incoming messages by type (text-message, typing, read-receipt, call-request, etc.)
+- `sendToUser()`: Sends message to specific user by userID
+
+### Message Handler Functions
+- `handleTextMessage()`: Processes text messages and forwards to recipient
+- `handleTyping()`: Handles typing indicators and forwards to recipient
+- `handleReadReceipt()`: Handles read receipts for message delivery confirmation
+
+### Chat Room Management (HTTP API)
+- `CreateChatRoom()`: Creates new chat room with name, creator, and privacy settings
+- `GetChatRooms()`: Retrieves user's chat room list
+- `GetChatHistory()`: Retrieves paginated chat history for a room
+- `SendMessage()`: REST API endpoint for sending messages (alternative to WebSocket)
+
+### Call Integration
+- `SendCallNotification()`: Sends call-related notifications through chat WebSocket (called by SignalingController)
+- **Call Message Types**: call-request, call-accept, call-reject
+
+### Key Features
+- **WebSocket-based**: Real-time bidirectional communication
+- **Concurrent Connections**: Thread-safe multi-client connection handling
+- **Message Types**: text-message, typing, read-receipt, call notifications
+- **Ping/Pong**: 54s interval ping, 60s timeout for connection health
+- **Message Batching**: Efficient batch transmission of queued messages
+- **Buffer Management**: 256 message buffer per client with overflow protection
+
+---
+
 ## Overall Structure Summary
 
-### Main Controllers (10+ controllers)
+### Main Controllers (18+ controllers)
 - **Controller**: Core controller management (9 functions)
 - **AccountController**: User account operations (18 functions)
+- **StoryController**: Story and comment management (12 functions) ⭐ NEW
+- **ChatController**: WebSocket text chat (11 functions) ⭐ NEW
+- **SignalingController**: WebRTC P2P signaling (8 functions)
 - **ContentController**: Content management (1 function)
 - **HomeController**: Home screen data management (2 functions)
 - **NotiController**: Notification and announcement management (9 functions)
 - **ProfileController**: Profile management (1 function)
 - **ItemController**: Item management (1 function)
 - **HistoryController**: History tracking (1 function)
-- **CheckInController**: Check-in functionality (placeholder)
-- **CsCenterController**: Customer service center (placeholder)
-- **InboxController**: Inbox management (placeholder)
-- **MarriageController**: Marriage feature (placeholder)
-- **SettingController**: User settings (placeholder)
-- **ShopController**: Shop functionality (placeholder)
-- **StoryListController**: Story list management (placeholder)
-- **VideoChatController**: Video chat features (placeholder)
-- **VoiceChatController**: Voice chat features (placeholder)
+- **CheckInController**: Check-in functionality
+- **CsCenterController**: Customer service center
+- **InboxController**: Inbox management
+- **MarriageController**: Marriage feature
+- **SetController**: User settings
+- **ShopController**: Shop functionality
+- **VideoChatController**: Video chat features
+- **VoiceChatController**: Voice chat features
 
 ### Support Modules
 - **types.go**: Utility functions and constants (3 functions + constants)
-- **ctl_test.go**: Comprehensive testing suite (12+ functions)
+- **ctl_test.go**: Comprehensive testing suite (15+ functions including story upload tests)
 - **imgCtl**: Image processing and content moderation (4 functions)
 
 ### Key Features by Category
 - **Authentication**: JWT tokens, login/logout, password management
 - **User Management**: Registration, profile updates, account operations
-- **Real-time Communication**: WebRTC configuration, chat rooms, call status
+- **Real-time Communication**: WebRTC signaling, WebSocket chat, call status
+- **Story Sharing**: Image upload to Cloudflare, story management, comments ⭐ NEW
+- **Text Chat**: WebSocket messaging, typing indicators, read receipts ⭐ NEW
 - **Content Moderation**: NSFW detection, image processing
 - **Notification System**: User notifications, announcements, read status management
 - **Home Screen**: Integrated data delivery for video chat, voice chat, stories

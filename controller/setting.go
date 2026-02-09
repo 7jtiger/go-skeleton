@@ -54,9 +54,9 @@ func NewSetController(ctl *Controller, rep *models.Repositories) (*SetController
 // @Produce json
 // @Security BearerAuth
 // @Param Authorization header string true "Bearer {token}"
-// @Success 200 {object} protocol.Response{data=int} "Notification setting value (0-15)"
-// @Failure 401 {object} protocol.Response "Authentication failed - No JWT token"
-// @Failure 500 {object} protocol.Response "Internal server error"
+// @Success 200 {object} protocol.RespHeader{data=int} "Notification setting value (0-15)"
+// @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
 // @Router /user/v01/set/{uid} [get]
 // @Example request
 // GET /user/v01/set/8697414060736839837
@@ -104,10 +104,10 @@ func (p *SetController) GetSetting(c *gin.Context) {
 // @Security BearerAuth
 // @Param Authorization header string true "Bearer {token}"
 // @Param request body object{cate=string,value=string} true "Setting request"
-// @Success 200 {object} protocol.Response{data=object{msg=string}} "Setting updated successfully"
-// @Failure 400 {object} protocol.Response "Invalid request - Missing or invalid parameters"
-// @Failure 401 {object} protocol.Response "Authentication failed - No JWT token"
-// @Failure 500 {object} protocol.Response "Internal server error"
+// @Success 200 {object} protocol.RespHeader{data=object{msg=string}} "Setting updated successfully"
+// @Failure 400 {object} protocol.RespHeader "Invalid request - Missing or invalid parameters"
+// @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
 // @Router /user/v01/set [post]
 // @Example request
 // POST /user/v01/set
