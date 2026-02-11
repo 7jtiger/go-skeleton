@@ -1,0 +1,21 @@
+---
+description: Configuration management for server settings
+globs: ["conf/**/*.go", "conf/**/*.toml", "*.toml"]
+alwaysApply: true
+---
+
+## Configuration Package Overview
+Configuration management for go-skeleton.
+
+## Configuration Sections
+- Server: Mode, port, base keys
+- Database: MySQL connections
+- Cache: Redis configuration
+- Auth: JWT settings
+- WebRTC: STUN/TURN servers (if applicable)
+
+## Important Notes
+When modifying configuration:
+1. Update both TOML and Go code
+2. Validate all settings
+3. Document new configuration options

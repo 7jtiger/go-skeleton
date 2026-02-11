@@ -1,0 +1,91 @@
+---
+description: Project structure and reference files for Go API
+globs: ["**/*.go", "*.toml", "go.mod", "go.sum", "Makefile"]
+alwaysApply: true
+---
+
+# go-skeleton Project Overview
+
+## Project Description
+Go backend service following MVC architecture pattern with HTTP API endpoints.
+
+**Project Directory**: `/home/jino/go/src/go-skeleton/`
+
+## Architecture Flow
+```
+Router → Middleware → Controller → Model → Database
+                  ↓
+              Protocol (Response)
+```
+
+## Core Directories
+
+### 1. Controller (`/controller/`)
+Business logic handlers for HTTP requests
+- Receives requests from router
+- Processes business logic
+- Calls models/repositories
+- Returns responses via protocol
+
+### 2. Models (`/models/`)
+Database repositories and data access
+- Repository pattern implementation
+- Database connection management
+- Query execution and data transformation
+
+### 3. Router (`/router/`)
+HTTP routing and middleware
+- Route definitions
+- Authentication middleware
+- Request validation
+- CORS and rate limiting
+
+### 4. Protocol (`/protocol/`)
+Client communication protocols
+- Request/response structures
+- Data serialization
+- API contract definitions
+
+### 5. Conf (`/conf/`)
+Configuration management
+- config.toml: Main configuration file
+- config.go: Configuration loader
+
+## Development Guidelines
+
+### Adding New Features
+1. Define Route: Add URL mapping in `router/`
+2. Create Handler: Implement function in `controller/`
+3. Database Layer: Add repository function in `models/`
+4. Protocol: Define request/response structures in `protocol/`
+5. Test: Add test case
+
+### Testing Strategy
+- Write tests in dedicated test files
+- Cover: router → controller → model → response
+- Use end-to-end testing approach
+
+### Security Practices
+- Use JWT authentication for protected endpoints
+- Validate all external input
+- Implement prepared statements for SQL
+- Use proper error handling
+
+## Key Technologies
+- **Web Framework**: Gin (Go)
+- **Database**: MySQL
+- **Cache/Session**: Redis
+- **Authentication**: JWT tokens
+
+## Common Commands
+```bash
+make build        # Build project
+make run          # Run project
+make test         # Run tests
+go mod tidy       # Update dependencies
+```
+
+## Important Notes
+- Follow existing patterns for consistency
+- Add comprehensive test coverage
+- Document API changes

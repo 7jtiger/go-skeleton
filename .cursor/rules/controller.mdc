@@ -1,0 +1,27 @@
+---
+description: Controller business logic configuration
+globs: ["controller/**/*.go", "controller/**/*_test.go"]
+alwaysApply: true
+---
+
+## Controller Package Overview
+HTTP request handlers implementing business logic for go-skeleton.
+
+## Key Features
+- Receives HTTP requests from router
+- Implements business logic
+- Calls repository layer for data access
+- Returns responses via protocol
+
+## Common Patterns
+- Controller functions follow: `func (c *gin.Context)`
+- Use middleware for authentication, validation
+- Return standardized protocol responses
+- Log important operations
+
+## Important Notes
+When modifying controller code:
+1. Update corresponding test files
+2. Follow existing naming conventions
+3. Add error handling
+4. Use consistent response format

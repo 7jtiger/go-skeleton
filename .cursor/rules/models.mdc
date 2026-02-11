@@ -1,0 +1,27 @@
+---
+description: Model, schema, and database configuration
+globs: ["models/**/*.go", "models/**/*_test.go"]
+alwaysApply: true
+---
+
+## Models Package Overview
+Database access layer and repository pattern implementation for go-skeleton.
+
+## Repository Pattern
+- Interface-based repositories
+- Centralized connection management
+- Connection pooling
+- Health monitoring
+
+## Key Features
+- Type-safe data access
+- Dependency injection
+- Thread-safe concurrent access
+- Proper error handling
+
+## Important Notes
+When modifying model code:
+1. Update test files
+2. Follow repository pattern
+3. Add connection error handling
+4. Document schema changes
