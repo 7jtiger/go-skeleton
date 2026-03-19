@@ -1,11 +1,7 @@
-﻿package controller
+package controller
 
 import (
-
-	// "strconv"
-
 	"encoding/json"
-	"fmt"
 	"ms-gateway/hachecker"
 	"ms-gateway/models"
 	ptl "ms-gateway/protocol"
@@ -15,7 +11,6 @@ import (
 	"ms-gateway/conf"
 
 	log "ms-gateway/common/logger"
-	// "ms-gateway/hachecker"
 
 	"github.com/gin-gonic/gin"
 )
@@ -120,10 +115,6 @@ func (p *Controller) SimpleError(c *gin.Context, status int, err ...interface{})
 	c.Abort()
 }
 
-func (p *Controller) RespSuccess(c *gin.Context, resp interface{}) {
-	c.JSON(http.StatusOK, resp)
-}
-
 func (p *Controller) SendResponse(c *gin.Context, status int, data interface{}) {
 	dataStr, ok := data.(string)
 	if !ok {
@@ -160,31 +151,6 @@ func (p *Controller) GetPaging(num, limit string, tot int) (ptl.Pagination, erro
 	return pagination, nil
 }
 
-// GetController 특정 컨트롤러 인스턴스 반환
-func (p *Controller) GetController(target interface{}) error {
-	switch t := target.(type) {
-	case **AccountController:
-		*t = p.AccCtl
-	case **ProfileController:
-		*t = p.PfCtl
-	case **ChatController:
-		*t = p.ChatCtl
-	case **SetController:
-		*t = p.SetCtl
-	case **HomeController:
-		*t = p.HomeCtl
-	case **NotiController:
-		*t = p.NotiCtl
-	case **SignalingController:
-		*t = p.Signaling
-	case **StoryController:
-		*t = p.StoryCtl
-	default:
-		return fmt.Errorf("unknown controller type")
-	}
-	return nil
-}
-
 func (p *Controller) GetRedis() *models.RedisDB {
 	return p.Rdb
 }
@@ -192,84 +158,3 @@ func (p *Controller) GetRedis() *models.RedisDB {
 func (p *Controller) GetHAChecker() *hachecker.HAChecker {
 	return p.hchecker
 }
-
-/*
-1. 홈 화면 조회
-	1-1 상단 메뉴
-		a. 알림 아이콘 - 별도 페이지 - noti.go
-			: 신규 있는지 표기
-
-		b. 프로필 조회 - 별도 페이지 - profile.go
-			: 프로필 이미지, 닉네임, 나이, 지역, 성별
-
-		c. 상점 버튼 - 별도 페이지 - shop.go
-			: 상점 화면 이동
-
-		d. 햄버거바 메뉴 - 별도 페이지 - setting.go
-			: 메뉴 화면 이동
-2. 남자 홈
-	2-1 메인 메뉴
-		a. 로고 이미지 - 인앱 처리
-		b. 영상통화 - 별도 페이지 - videoChat.go
-			- 영상통화 화면 이동 : 리스트 출력
-
-		c. 음성통하 - 별도 페이지 - voiceChat.go
-			- 음성통화 화면 이동 : 리스트 출력
-
-		d. 스토리 - 별도 페이지 - storyList.go
-			- 스토리 화면 이동 : 리스트 출력
-
-		e. 쪽지함 - 별도 페이지 - inbox.go
-			- 쪽지함 화면 이동 : 리스트 출력
-
-		f. 결혼 재혼 - 별도 페이지 - marriage.go
-			- 결혼 재혼 화면 이동 : 리스트 출력
-
-		g. 출석체크 - 별도 페이지 - checkin.go
-			- 출석체크 화면 이동 : 리스트 출력
-			: 24시 기준 리셋
-	2-2 배너 - 링크
-		a. 구글 애드센스
-
-	2-3 영상통화 리스트 - 7개 리스트
-		전체보기
-		a. 최신 7개 리스트 - 레디스 조회 및 업데이트
-
-	2-4 음성통화 - 7개 리스트
-		전체보기
-		a. 최신 7개 리스트 - 레디스 조회 및 업데이트
-	2-5 스토리 - 6개 리스트
-		전체보기
-		a. 최신 6개 리스트 - 레디스 조회 및 업데이트
-3. 여자 홈
-	3-1 보유 금액
-	3-2 상단 메뉴
-		a. 로고 이미지 - 인앱 처리
-
-		b. 영상 통화 - 별도 페이지 - videoChat.go
-			- 영상통화 화면 이동 : 리스트 출력
-
-		c. 음성 통화 - 별도 페이지 - voiceChat.go
-			- 음성통화 화면 이동 : 리스트 출력
-
-		d. 스토리 - 별도 페이지 - storyList.go
-			- 스토리 화면 이동 : 리스트 출력
-
-		e. 쪽지함 - 별도 페이지 - inbox.go
-			- 쪽지함 화면 이동 : 리스트 출력
-
-	3-3 배너 - 링크
-		a. 구글 애드센스
-	3-4 미션
-		a. 미션 총 상금
-			- 레디스 조회, DB 업데이트
-		b. 미션 카드
-			- 레디스 조회, DB 업데이트
-	3-5 스토리 - 6개 리스트
-		전체보기 - 라우터 처리
-		a. 최신 6개 리스트 - 레디스 조회 및 업데이트
-4. 푸터
-	a. 이용약관 - 캐시 처리
-	b. 개인정보처리방침 - 캐시 처리
-	c. 고객센터	- 라우터 처리
-*/

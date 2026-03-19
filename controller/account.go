@@ -281,15 +281,6 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		return
 	}
 
-	/* 	hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
-	   	// hsedPw, err := bcrypt.GenerateFromPassword([]byte(req.PW), 11)
-	   	if err != nil {
-	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to hash password")
-	   		return
-	   	}
-	*/
-	// Register the user
-	// user, err := p.adb.LoginUser(req, []byte(strings.TrimSpace(req.PW)))
 	user, err := p.adb.LoginUser(req, []byte(req.PW))
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to login user"), http.StatusBadRequest, err)
@@ -304,17 +295,6 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 
 	mStr := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
 		user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
-	// 	UID:             parts[0],
-	// 	SID:		     parts[1],
-	// 	DID:		     parts[2],
-	// 	NICK: 		     parts[3],
-	// 	GENDER: 	     parts[4],
-	// 	AGE: 		     parts[5],
-	// 	AREA: 		     parts[6],
-	// 	EMAIL: 		     parts[7],
-	// 	MAIN_PIC: 		 parts[8],
-	// 	THMB_PIC: 		 parts[9],
-	// 	SP_INTRO:        parts[10],
 
 	// x-meta header에 저장
 	c.Header("x-meta", mStr)
@@ -328,28 +308,6 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to get WebRTC config"), http.StatusBadRequest, err)
 		return
 	}
-
-	/* 	// WebRTC 세션 초기화
-	   	webrtcSession := models.UserWebRTCSession{
-	   		UserID:          user.Uid,
-	   		SessionID:       utils.GenUuid(),
-	   		IsInCall:        false,
-	   		ConnectionState: "connected",
-	   		LastHeartbeat:   time.Now(),
-	   		DeviceInfo:      c.GetHeader("User-Agent"),
-	   		NetworkInfo:     c.ClientIP(),
-	   	}
-	*/
-
-	/* 	err = p.rdb.HSetJWTAccess(acTok, user)
-	   	if err != nil {
-	   		log.Warn("Failed to set WebRTC session:", err)
-	   	}
-
-	   	err = p.rdb.HSetJWTRefresh(refTok, user)
-	   	if err != nil {
-	   		log.Warn("Failed to set JWT refresh token:", err)
-	   	} */
 
 	uidStr := strconv.FormatUint(user.Uid, 10)
 	responseData := ptl.LoginUserResp{
@@ -383,27 +341,12 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 	}
 
 	p.ctl.SendDataResponse(c, http.StatusOK, responseData)
-	// p.ctl.RespSuccess(c, responseData)
 }
 
 func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, string, error) {
 	uidStr := strconv.FormatUint(user.Uid, 10)
 
-	/* 	claims := utils.JWTClaims{
-		UserID: uidStr,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "cupitok.com",
-			Subject:   "Authentication",
-			Audience:  jwt.ClaimStrings{uidStr},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			ID:        uidStr,
-		},
-	} */
-
 	claims := utils.GetJWTClaims(uidStr)
-	// secret := "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"
 	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 24*time.Hour)
 	if err != nil {
 		log.Warn("Failed to create JWT token:", err)
@@ -415,12 +358,6 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 		log.Warn("Failed to create JWT token:", err)
 		return "", "", err
 	}
-
-	/* userInfo, err := json.Marshal(user)
-	if err != nil {
-		log.Warn("Failed to marshal user info:", err)
-		return "", "", err
-	 } */
 
 	err = p.rdb.HSetJWTRefresh(refTok, user)
 	if err != nil {
@@ -1041,166 +978,6 @@ func (p *AccountController) GetWebRTCConfig(c *gin.Context) {
 	p.ctl.SendResponse(c, http.StatusOK, config)
 }
 
-// @Summary Get available users for call
-// @Description Get list of users available for video call
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Success 200 {object} []string "Available user IDs"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Unauthorized"
-// @Router /webrtc/v01/available-users [get]
-func (p *AccountController) GetAvailableUsers(c *gin.Context) {
-	// JWT에서 사용자 ID 추출
-	/* 	userID, exists := c.Get("user")
-	   	if !exists {
-	   		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
-	   		return
-	   	}
-
-	   	users, err := p.rdb.GetAvailableUsersForCall(userID.(string))
-	   	if err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get available users"), http.StatusInternalServerError, err)
-	   		return
-	   	}
-
-	   	p.ctl.SendDataResponse(c, http.StatusOK, users)
-	*/
-}
-
-// @Summary Update call status
-// @Description Update user's call status
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Param data body object true "Call status update {isInCall: bool, callWith: string}"
-// @Success 200 {object} protocol.OkResp "Status updated"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Unauthorized"
-// @Router /webrtc/v01/call-status [post]
-func (p *AccountController) UpdateCallStatus(c *gin.Context) {
-	// JWT에서 사용자 ID 추출
-	/* 	userID, exists := c.Get("user")
-	   	if !exists {
-	   		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
-	   		return
-	   	}
-
-	   	var req struct {
-	   		IsInCall bool   `json:"isInCall" binding:"required"`
-	   		CallWith string `json:"callWith"`
-	   	}
-
-	   	if err := c.ShouldBindJSON(&req); err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
-	   		return
-	   	}
-
-	   	err := p.rdb.UpdateUserCallStatus(userID.(string), req.IsInCall, req.CallWith)
-	   	if err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to update call status"), http.StatusInternalServerError, err)
-	   		return
-	   	} */
-
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "call status updated"})
-}
-
-// @Summary Update WebRTC session heartbeat
-// @Description Update WebRTC session heartbeat to keep session alive
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Param data body object true "Session update {deviceInfo: string, networkInfo: string}"
-// @Success 200 {object} protocol.OkResp "Heartbeat updated"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Unauthorized"
-// @Router /webrtc/v01/heartbeat [post]
-func (p *AccountController) UpdateWebRTCHeartbeat(c *gin.Context) {
-	/* 	// JWT에서 사용자 ID 추출
-	   	userID, exists := c.Get("user")
-	   	if !exists {
-	   		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
-	   		return
-	   	}
-
-	   	var req struct {
-	   		DeviceInfo  string `json:"deviceInfo"`
-	   		NetworkInfo string `json:"networkInfo"`
-	   	}
-
-	   	if err := c.ShouldBindJSON(&req); err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
-	   		return
-	   	}
-
-	   	// 기존 세션 조회 후 업데이트
-	   	session, err := p.rdb.GetUserWebRTCSession(userID.(string))
-	   	if err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "session not found"), http.StatusNotFound, err)
-	   		return
-	   	}
-
-	   	// 하트비트 업데이트
-	   	session.LastHeartbeat = time.Now()
-	   	if req.DeviceInfo != "" {
-	   		session.DeviceInfo = req.DeviceInfo
-	   	}
-	   	if req.NetworkInfo != "" {
-	   		session.NetworkInfo = req.NetworkInfo
-	   	}
-
-	   	err = p.rdb.SetUserWebRTCSession(*session)
-	   	if err != nil {
-	   		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to update session"), http.StatusInternalServerError, err)
-	   		return
-	   	}
-	*/
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "heartbeat updated"})
-}
-
-// @Summary Get WebRTC statistics
-// @Description Get WebRTC system statistics
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]interface{} "WebRTC statistics"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /webrtc/v01/stats [get]
-func (p *AccountController) GetWebRTCStats(c *gin.Context) {
-	/*
-		 	stats, err := p.rdb.GetWebRTCStats()
-			if err != nil {
-				p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get WebRTC stats"), http.StatusInternalServerError, err)
-				return
-			}
-
-			p.ctl.SendResponse(c, http.StatusOK, stats)
-	*/
-}
-
-/*
-// @Summary Test STUN server connectivity
-// @Description Test STUN server connectivity and get public IP
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]interface{} "STUN test results"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /webrtc/v01/test-stun [get]
-func (p *AccountController) TestStunServers(c *gin.Context) {
-	// 기본 STUN 서버들 가져오기
-	stunServers := GetRecommendedStunServers()
-
-	// 테스트 보고서 생성
-	report, err := CreateStunTestReport(c.Request.Context(), stunServers)
-	if err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to test STUN servers"), http.StatusInternalServerError, err)
-		return
-	}
-
-	p.ctl.SendResponse(c, http.StatusOK, report)
-}
-*/
 // @Summary Test specific STUN server
 // @Description Test connectivity to a specific STUN server
 // @Tags webrtc

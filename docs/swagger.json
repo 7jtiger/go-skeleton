@@ -441,6 +441,76 @@
                 }
             }
         },
+        "/acc/v01/login": {
+            "post": {
+                "description": "Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success. Also sets x-meta header with user metadata.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Login a user",
+                "parameters": [
+                    {
+                        "description": "Login request data {id : xxx, pw : hash}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.LoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "102": {
+                        "description": "Parameter is missing",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "104": {
+                        "description": "Failed to login user",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "106": {
+                        "description": "Failed to parse JSON",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "Login success with token, uid, and webrtc config",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.LoginUserResp"
+                        },
+                        "headers": {
+                            "x-meta": {
+                                "type": "string",
+                                "description": "User metadata in format: uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/acc/v01/modify": {
             "post": {
                 "description": "Modify user information. The 'cate' field should be one of \"pw, area, nick, email\" indicating the target to be changed, and the 'value' field should contain the new value for the target.",
@@ -2208,6 +2278,46 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "protocol.LoginReq": {
+            "type": "object",
+            "properties": {
+                "did": {
+                    "type": "string"
+                },
+                "dos": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "pw": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.LoginUserResp": {
+            "type": "object",
+            "properties": {
+                "acTok": {
+                    "type": "string"
+                },
+                "meta": {
+                    "type": "string"
+                },
+                "msg": {
+                    "type": "string"
+                },
+                "refTok": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "string"
+                },
+                "wrtc": {
+                    "$ref": "#/definitions/protocol.WebRTCConfig"
                 }
             }
         },

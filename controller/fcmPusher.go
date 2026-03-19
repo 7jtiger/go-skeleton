@@ -180,7 +180,7 @@ func (p *FCMPusher) sendFCM(notiTitle, notiBody, cate, did string) {
 			"click_action": "OPEN_ACTIVITY_1",
 			"type":         "test",
 			"id":           "1",
-			"sum":          "send by Gurufin",
+			"sum":          "send by MS-Gateway",
 		},
 		Token: did, // 단일 디바이스 토큰
 	}

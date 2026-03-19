@@ -40,7 +40,7 @@ func main() {
 		ID:      "testuser123",
 		PW:      "testpassword",
 		Name:    "테스트 사용자",
-		Gender:  1, // 1: 남성, 0: 여성
+		Gender:  "1", // 1: 남성, 0: 여성
 		Age:     "25",
 		Birth:   "1998-01-01",
 		Area:    "서울",

@@ -94,6 +94,32 @@ definitions:
           type: string
         type: array
     type: object
+  protocol.LoginReq:
+    properties:
+      did:
+        type: string
+      dos:
+        type: string
+      id:
+        type: string
+      pw:
+        type: string
+    type: object
+  protocol.LoginUserResp:
+    properties:
+      acTok:
+        type: string
+      meta:
+        type: string
+      msg:
+        type: string
+      refTok:
+        type: string
+      uid:
+        type: string
+      wrtc:
+        $ref: '#/definitions/protocol.WebRTCConfig'
+    type: object
   protocol.MediaConfig:
     properties:
       audio:
@@ -591,6 +617,53 @@ paths:
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Leave a user
+      tags:
+      - user
+  /acc/v01/login:
+    post:
+      consumes:
+      - application/json
+      description: Calls /acc/v01/login to login a user. Returns JWT token, user ID,
+        and WebRTC config on success. Also sets x-meta header with user metadata.
+      parameters:
+      - description: 'Login request data {id : xxx, pw : hash}'
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.LoginReq'
+      produces:
+      - application/json
+      responses:
+        "102":
+          description: Parameter is missing
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "104":
+          description: Failed to login user
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "106":
+          description: Failed to parse JSON
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "200":
+          description: Login success with token, uid, and webrtc config
+          headers:
+            x-meta:
+              description: 'User metadata in format: uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro'
+              type: string
+          schema:
+            $ref: '#/definitions/protocol.LoginUserResp'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Login a user
       tags:
       - user
   /acc/v01/modify:

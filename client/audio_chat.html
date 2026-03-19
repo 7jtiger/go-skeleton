@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .container {
+            background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 900px; width: 100%; padding: 30px;
+        }
+        h1 { text-align: center; color: #f5576c; margin-bottom: 30px; font-size: 2em; }
+        .login-section { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 30px; }
+        .input-group { display: flex; gap: 10px; width: 100%; max-width: 600px; }
+        input {
+            flex: 1; padding: 12px 20px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px;
+        }
+        input:focus { outline: none; border-color: #f5576c; }
+        button {
+            padding: 12px 30px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white; border: none; border-radius: 10px; font-size: 16px; cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(245,87,108,0.4); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .hidden { display: none !important; }
+
+        .waiting-room { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 15px; }
+        .waiting-room h2 { color: #f5576c; margin-bottom: 20px; }
+        .user-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .user-item {
+            padding: 15px; background: white; border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: pointer; text-align: center;
+            transition: transform 0.2s;
+        }
+        .user-item:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(245,87,108,0.3); }
+        .user-item .user-name { font-weight: bold; color: #f5576c; margin-bottom: 5px; }
+        .user-item .user-id { font-size: 0.9em; color: #666; }
+
+        /* 음성 표시 영역 */
+        .audio-section { margin-top: 20px; text-align: center; padding: 30px; background: #f8f9fa; border-radius: 15px; }
+        .audio-indicator {
+            width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #f093fb, #f5576c);
+            margin: 0 auto 15px; display: flex; align-items: center; justify-content: center;
+            font-size: 3em; color: white; animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245,87,108,0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 20px 10px rgba(245,87,108,0.2); }
+        }
+        .audio-status { font-size: 1.2em; color: #666; margin-bottom: 15px; }
+        .controls { display: flex; justify-content: center; gap: 15px; margin-top: 15px; }
+        .controls button.danger { background: #dc3545; }
+
+        .chat-panel { margin-top: 20px; background: #f8f9fa; border-radius: 15px; padding: 20px; }
+        .chat-header { font-size: 1.2em; font-weight: bold; color: #f5576c; margin-bottom: 10px; }
+        .chat-messages {
+            height: 300px; overflow-y: auto; background: white; border-radius: 10px; padding: 10px;
+            display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+        }
+        .chat-message {
+            padding: 8px 14px; border-radius: 15px; max-width: 70%; word-wrap: break-word;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .chat-message.sent { align-self: flex-end; background: linear-gradient(135deg, #f093fb, #f5576c); color: white; }
+        .chat-message.received { align-self: flex-start; background: #e9ecef; color: #333; }
+        .chat-message.present-msg { align-self: center; background: #fff3cd; color: #856404; text-align: center; max-width: 90%; }
+        .chat-message.system-msg { align-self: center; background: #d4edda; color: #155724; text-align: center; font-size: 0.9em; }
+        .chat-message .sender { font-weight: bold; font-size: 0.85em; margin-bottom: 3px; opacity: 0.8; }
+        .chat-input-group { display: flex; gap: 10px; }
+        .chat-input { flex: 1; padding: 10px 18px; border: 2px solid #e0e0e0; border-radius: 25px; font-size: 15px; }
+        .chat-input:focus { outline: none; border-color: #f5576c; }
+
+        .present-section { margin-top: 15px; padding: 15px; background: white; border-radius: 10px; }
+        .present-section h3 { color: #f5576c; margin-bottom: 10px; }
+        .present-items { display: flex; gap: 10px; flex-wrap: wrap; }
+        .present-item {
+            padding: 10px 18px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px;
+            cursor: pointer; font-size: 14px; transition: transform 0.2s;
+        }
+        .present-item:hover { transform: scale(1.05); }
+
+        .notification {
+            position: fixed; top: 20px; right: 20px; background: white; padding: 20px;
+            border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); z-index: 1000; min-width: 300px;
+        }
+        .notification-header { font-weight: bold; color: #f5576c; margin-bottom: 10px; }
+        .notification-buttons { display: flex; gap: 10px; margin-top: 10px; }
+        .notification-buttons button { flex: 1; padding: 10px; }
+        .notification-buttons .accept { background: #28a745; }
+        .notification-buttons .reject { background: #dc3545; }
+
+        .status { text-align: center; padding: 12px; border-radius: 10px; margin-top: 15px; font-weight: bold; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.waiting { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Audio Chat (음성+텍스트+선물)</h1>
+
+    <div class="login-section" id="loginSection">
+        <div class="input-group">
+            <input type="text" id="serverInput" placeholder="서버 주소" value="localhost:3000" />
+            <input type="text" id="userIDInput" placeholder="사용자 ID" />
+            <input type="text" id="nameInput" placeholder="이름" />
+            <button onclick="joinWaitingRoom()">접속</button>
+        </div>
+    </div>
+
+    <div class="waiting-room hidden" id="waitingRoom">
+        <h2>대기방</h2>
+        <div class="user-list" id="userList"><p>대기 중인 사용자가 없습니다.</p></div>
+    </div>
+
+    <div class="hidden" id="chatRoom">
+        <div class="audio-section">
+            <div class="audio-indicator" id="audioIndicator">MIC</div>
+            <div class="audio-status" id="audioStatus">음성 통화 중...</div>
+            <audio id="remoteAudio" autoplay></audio>
+        </div>
+        <div class="controls">
+            <button onclick="toggleAudio()">마이크 ON/OFF</button>
+            <button class="danger" onclick="leaveRoom()">나가기</button>
+        </div>
+        <div class="chat-panel">
+            <div class="chat-header">채팅</div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-group">
+                <input type="text" class="chat-input" id="chatInput" placeholder="메시지 입력..." onkeypress="if(event.key==='Enter')sendChat()" />
+                <button onclick="sendChat()">전송</button>
+            </div>
+            <div class="present-section">
+                <h3>선물 보내기</h3>
+                <div class="present-items">
+                    <div class="present-item" onclick="sendPresent('rose', 1)">장미 x1</div>
+                    <div class="present-item" onclick="sendPresent('cake', 1)">케이크 x1</div>
+                    <div class="present-item" onclick="sendPresent('diamond', 1)">다이아몬드 x1</div>
+                    <div class="present-item" onclick="sendPresent('heart', 5)">하트 x5</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status disconnected" id="status">서버에 연결되지 않음</div>
+</div>
+
+<div class="notification hidden" id="notification">
+    <div class="notification-header" id="notiTitle">알림</div>
+    <div id="notiMessage"></div>
+    <div class="notification-buttons" id="notiButtons"></div>
+</div>
+
+<script>
+    const CHAT_MODE = 'audio';
+    let socket, localStream, peerConnection;
+    let userID, userName;
+    let isAudioEnabled = true;
+    let isReady = false, pendingStart = false;
+
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    };
+
+    function updateStatus(msg, type) {
+        const s = document.getElementById('status');
+        s.textContent = msg; s.className = 'status ' + type;
+    }
+
+    function buildWsUrl(addr) {
+        let a = addr.trim();
+        if (!a.startsWith('ws://') && !a.startsWith('wss://'))
+            a = (a.includes('localhost') || a.includes('127.0.0.1')) ? 'ws://' + a : 'wss://' + a;
+        if (!a.includes('/webrtc/v01/ws')) a += '/webrtc/v01/ws';
+        return a;
+    }
+
+    function joinWaitingRoom() {
+        const server = document.getElementById('serverInput').value.trim();
+        userID = document.getElementById('userIDInput').value.trim();
+        userName = document.getElementById('nameInput').value.trim();
+        if (!server || !userID || !userName) { alert('모든 필드를 입력하세요.'); return; }
+
+        socket = new WebSocket(buildWsUrl(server));
+        socket.onopen = () => {
+            socket.send(JSON.stringify({ type: 'join-waiting', data: { user_id: userID, name: userName } }));
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('waitingRoom').classList.remove('hidden');
+            updateStatus('대기방에 입장했습니다.', 'connected');
+        };
+        socket.onmessage = (e) => handleMessage(JSON.parse(e.data));
+        socket.onerror = () => updateStatus('연결 오류', 'disconnected');
+        socket.onclose = () => updateStatus('연결 끊김', 'disconnected');
+    }
+
+    function handleMessage(msg) {
+        switch (msg.type) {
+            case 'user-list': updateUserList(msg.data.users || []); break;
+            case 'user-joined': addUser(msg.data.user_id, msg.data.name); break;
+            case 'user-left': removeUser(msg.data.user_id); break;
+            case 'call-request': showCallRequest(msg.data); break;
+            case 'call-accept': updateStatus('수락됨. 연결 중...', 'waiting'); break;
+            case 'call-reject': updateStatus(msg.data.from + '님이 거절했습니다.', 'waiting'); break;
+            case 'call-error': alert(msg.data.message); break;
+            case 'room-joined': enterRoom(msg.data); break;
+            case 'start':
+                if (isReady) createOffer();
+                else pendingStart = true;
+                break;
+            case 'offer': handleOffer(msg.data); break;
+            case 'answer': handleAnswer(msg.data); break;
+            case 'ice_candidate': handleIce(msg.data); break;
+            case 'chat': displayMsg(msg.data.sender, msg.data.message, false); break;
+            case 'present': displayPresent(msg.data); break;
+            case 'partner-left': addSystemMsg('상대방이 나갔습니다.'); break;
+            case 'returned-to-waiting': returnToWaiting(); break;
+        }
+    }
+
+    function updateUserList(users) {
+        const ul = document.getElementById('userList'); ul.innerHTML = '';
+        if (!users.length) { ul.innerHTML = '<p>대기 중인 사용자가 없습니다.</p>'; return; }
+        users.forEach(u => addUser(u.user_id, u.name));
+    }
+    function addUser(id, name) {
+        const ul = document.getElementById('userList');
+        if (ul.querySelector('p')) ul.innerHTML = '';
+        if (document.getElementById('user-' + id)) return;
+        const d = document.createElement('div');
+        d.className = 'user-item'; d.id = 'user-' + id;
+        d.onclick = () => requestCall(id);
+        d.innerHTML = '<div class="user-name">' + (name || id) + '</div><div class="user-id">ID: ' + id + '</div>';
+        ul.appendChild(d);
+    }
+    function removeUser(id) {
+        const el = document.getElementById('user-' + id);
+        if (el) el.remove();
+        const ul = document.getElementById('userList');
+        if (!ul.children.length) ul.innerHTML = '<p>대기 중인 사용자가 없습니다.</p>';
+    }
+
+    function requestCall(targetID) {
+        const roomID = [userID, targetID].sort().join('_');
+        socket.send(JSON.stringify({ type: 'call-request', data: { from: userID, to: targetID, room_id: roomID, mode: CHAT_MODE } }));
+        updateStatus(targetID + '님에게 요청 전송...', 'waiting');
+    }
+
+    function showCallRequest(data) {
+        const n = document.getElementById('notification');
+        document.getElementById('notiTitle').textContent = '음성채팅 요청';
+        document.getElementById('notiMessage').textContent = data.from + '님이 음성채팅을 요청했습니다.';
+        const btns = document.getElementById('notiButtons');
+        btns.innerHTML = '';
+        const acceptBtn = document.createElement('button');
+        acceptBtn.textContent = '수락'; acceptBtn.className = 'accept';
+        acceptBtn.onclick = () => { respondCall(data, true); n.classList.add('hidden'); };
+        const rejectBtn = document.createElement('button');
+        rejectBtn.textContent = '거절'; rejectBtn.className = 'reject';
+        rejectBtn.onclick = () => { respondCall(data, false); n.classList.add('hidden'); };
+        btns.appendChild(acceptBtn); btns.appendChild(rejectBtn);
+        n.classList.remove('hidden');
+    }
+
+    function respondCall(data, accept) {
+        socket.send(JSON.stringify({
+            type: 'call-response',
+            data: { from: userID, to: data.from, room_id: data.room_id, accept: accept, mode: data.mode || CHAT_MODE }
+        }));
+    }
+
+    async function enterRoom() {
+        isReady = false;
+        document.getElementById('waitingRoom').classList.add('hidden');
+        document.getElementById('chatRoom').classList.remove('hidden');
+        document.getElementById('chatMessages').innerHTML = '';
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            isReady = true;
+            updateStatus('음성채팅 방에 입장했습니다.', 'connected');
+            if (pendingStart) { pendingStart = false; createOffer(); }
+        } catch (e) {
+            alert('마이크 접근 오류: ' + e.message);
+        }
+    }
+
+    function returnToWaiting() {
+        cleanupMedia();
+        document.getElementById('chatRoom').classList.add('hidden');
+        document.getElementById('waitingRoom').classList.remove('hidden');
+        updateStatus('대기방으로 복귀했습니다.', 'connected');
+    }
+
+    function cleanupMedia() {
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        document.getElementById('remoteAudio').srcObject = null;
+        isReady = false; pendingStart = false;
+    }
+
+    function leaveRoom() {
+        socket.send(JSON.stringify({ type: 'leave-room' }));
+    }
+
+    // === WebRTC (audio only) ===
+    function createPC() {
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        if (localStream) localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+        peerConnection.ontrack = (e) => {
+            if (e.streams && e.streams[0]) {
+                document.getElementById('remoteAudio').srcObject = e.streams[0];
+                updateStatus('음성 통화 중...', 'connected');
+            }
+        };
+        peerConnection.onicecandidate = (e) => {
+            if (e.candidate) {
+                socket.send(JSON.stringify({ type: 'ice_candidate', data: { candidate: e.candidate } }));
+            }
+        };
+    }
+
+    async function createOffer() {
+        createPC();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.send(JSON.stringify({ type: 'offer', data: { sdp: offer } }));
+    }
+
+    async function handleOffer(data) {
+        createPC();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.send(JSON.stringify({ type: 'answer', data: { sdp: answer } }));
+    }
+
+    async function handleAnswer(data) {
+        if (peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    }
+
+    async function handleIce(data) {
+        if (peerConnection && data.candidate) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+    }
+
+    function toggleAudio() {
+        if (!localStream) return;
+        isAudioEnabled = !isAudioEnabled;
+        localStream.getAudioTracks().forEach(t => t.enabled = isAudioEnabled);
+        document.getElementById('audioIndicator').style.opacity = isAudioEnabled ? '1' : '0.4';
+    }
+
+    // === 채팅 ===
+    function sendChat() {
+        const input = document.getElementById('chatInput');
+        const msg = input.value.trim();
+        if (!msg) return;
+        socket.send(JSON.stringify({ type: 'chat', data: { message: msg } }));
+        displayMsg(userName, msg, true);
+        input.value = '';
+    }
+
+    function displayMsg(sender, text, isSent) {
+        const div = document.createElement('div');
+        div.className = 'chat-message ' + (isSent ? 'sent' : 'received');
+        div.innerHTML = '<div class="sender">' + sender + '</div><div>' + escapeHtml(text) + '</div>';
+        const msgs = document.getElementById('chatMessages');
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function addSystemMsg(text) {
+        const div = document.createElement('div');
+        div.className = 'chat-message system-msg';
+        div.textContent = text;
+        const msgs = document.getElementById('chatMessages');
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function sendPresent(item, amount) {
+        socket.send(JSON.stringify({ type: 'present', data: { item: item, amount: amount } }));
+        displayPresent({ sender: userName, item: item, amount: amount });
+    }
+
+    function displayPresent(data) {
+        const div = document.createElement('div');
+        div.className = 'chat-message present-msg';
+        div.textContent = data.sender + '님이 ' + data.item + ' x' + data.amount + ' 선물!';
+        const msgs = document.getElementById('chatMessages');
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+</script>
+</body>
+</html>

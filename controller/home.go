@@ -123,9 +123,9 @@ func (p *HomeController) GetHomeMenInfo(c *gin.Context) {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to get new vd chat list"), http.StatusBadRequest, err)
 		return
 	}
+
 	// 음성통화 최신 7개 리스트 출력
 	// vo_his
-
 	voChatList, err := p.rdb.HGetJoinWTRoomPre7List()
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserLoginFailed, "failed to get new vo chat list"), http.StatusBadRequest, err)
@@ -159,5 +159,5 @@ func (p *HomeController) GetHomeMenInfo(c *gin.Context) {
 		PolicyLink: privacyUrl,
 	}
 
-	p.ctl.RespSuccess(c, homeData)
+	p.ctl.SimpleRespOK(c, homeData)
 }

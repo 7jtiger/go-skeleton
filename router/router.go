@@ -34,7 +34,6 @@ type Router struct {
 	st   *ctl.StoryController
 	chat *ctl.ChatController
 	rdb  *models.RedisDB
-	// hHealth *ctl.Health
 }
 
 func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
@@ -51,7 +50,6 @@ func NewRouter(cf *conf.Config, ct *ctl.Controller) (*Router, error) {
 		st:   ct.StoryCtl,
 		set:  ct.SetCtl,
 		rdb:  ct.GetRedis(),
-		// hHealth: ct.GetHealthHandler(),
 	}
 
 	return r, nil
@@ -66,21 +64,6 @@ func convertWhiteList(wl []string) map[string]string {
 	return converted
 }
 
-/*
-	 func CORS() gin.HandlerFunc {
-		return func(c *gin.Context) {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, X-Forwarded-For, Authorization, accept, origin, Cache-Control, X-Requested-With, OTP-Auth")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
-			if c.Request.Method == "OPTIONS" {
-				c.AbortWithStatus(204)
-				return
-			}
-			c.Next()
-		}
-	}
-*/
 func validateOTP(otp string) bool {
 	secret := "123456"
 	if otp == "" {
@@ -97,17 +80,7 @@ func validateOTP(otp string) bool {
 
 func liteAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c == nil {
-			c.Abort()
-			return
-		}
-
 		auth := c.GetHeader("X-Totp")
-		// if !validateOTP(auth) {
-		// 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP"})
-		// 	return
-		// }
-
 		logger.Info("auth : ", auth)
 		c.Next()
 	}
@@ -115,11 +88,6 @@ func liteAuth() gin.HandlerFunc {
 
 func (p *Router) otpAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c == nil {
-			c.Abort()
-			return
-		}
-
 		// Check if the request IP is in the allowed IP list from the config
 		requestIP := c.ClientIP()
 		if _, ok := p.wl[requestIP]; !ok {
@@ -128,10 +96,6 @@ func (p *Router) otpAuth() gin.HandlerFunc {
 		}
 
 		auth := c.GetHeader("X-Otp")
-		// if !validateOTP(auth) {
-		// 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP"})
-		// 	return
-		// }
 		logger.Info("auth : ", auth)
 		c.Next()
 	}
@@ -160,7 +124,8 @@ func (p *Router) Idx() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
 
-	//metadata : uid/성별/지역/나이/did/로그인타입(01234)/
+	// 클라이언트 테스트 페이지 서빙
+	e.Static("/client", "./client")
 
 	server := e.Group("serv/v01", p.SecurityHeaders())
 	{
@@ -177,7 +142,6 @@ func (p *Router) Idx() *gin.Engine {
 		account.GET("/ckemail/:email", p.acc.CheckEmail)
 
 		// 회원가입
-		// account.POST("/regist/:id/:pw/:area/:name/:age/:birth/:gender")
 		account.POST("/regist", p.AesDecrypt(), p.acc.RegistUserInfo)
 
 		// 로그인
@@ -203,7 +167,6 @@ func (p *Router) Idx() *gin.Engine {
 		//cate : pw / area / nick / email
 		pfset.POST("/modify", p.acc.ModifyUserInfo)
 
-		// pfset.POST("/upd/mpic", p.AesDecrypt(), p.ValidateFileUpload(1, 5), p.acc.ModifyMainPic)
 		pfset.POST("/upd/mpic", p.EncParamFileUpload(1, 5), p.acc.ModifyMainPic)
 
 		// 로그아웃
@@ -212,11 +175,9 @@ func (p *Router) Idx() *gin.Engine {
 		// 회원 탈퇴
 		pfset.POST("/leave", p.acc.LeaveUser)
 		// 회원 정보 조회
-		//todo : 토큰 확인 필요
 		pfset.GET("/info/:id", p.acc.GetUserInfo)
 
 		// 회원 정보 삭제
-		//todo : 토큰 확인 필요
 		pfset.POST("/delete/:id", p.acc.DeleteUser)
 	}
 
@@ -255,7 +216,6 @@ func (p *Router) Idx() *gin.Engine {
 	present := e.Group("present/v01", p.SecurityHeaders(), liteAuth())
 	{
 		present.PUT("/target")
-		// present.GET("/wavlist", )
 	}
 
 	mission := e.Group("mission/v01", p.SecurityHeaders(), liteAuth())
@@ -264,8 +224,6 @@ func (p *Router) Idx() *gin.Engine {
 		mission.GET("/detail/:id")
 	}
 
-	// story := e.Group("story/v01", p.SecurityHeaders(), p.JwtAuth())
-	// story := e.Group("story/v01", p.SecurityHeaders(), liteAuth())
 	story := e.Group("story/v01", p.SecurityHeaders())
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
@@ -280,11 +238,9 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/delpic", p.st.DeleteStrPic)
 
 		// ------------- comment -------------
-		// story.GET("/comment/list", p.st.GetStrCommentList)
 		story.POST("/comment/create", p.st.CreateStrComment)
 		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
 		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)
-		// story.POST("/comment/delete", p.st.DeleteStrStatPic)
 	}
 
 	//누드, 음모 확인 기능
@@ -305,38 +261,8 @@ func (p *Router) Idx() *gin.Engine {
 		// WebRTC 설정 정보 조회
 		webrtc.GET("/config", p.acc.GetWebRTCConfig)
 
-		// 통화 가능한 사용자 목록 조회
-		webrtc.GET("/available-users", p.acc.GetAvailableUsers)
-
-		// 통화 상태 업데이트
-		webrtc.POST("/call-status", p.acc.UpdateCallStatus)
-
-		// WebRTC 세션 하트비트 업데이트
-		webrtc.POST("/heartbeat", p.acc.UpdateWebRTCHeartbeat)
-
-		// WebRTC 통계 조회 (선택적 - 관리자용)
-		webrtc.GET("/stats", p.acc.GetWebRTCStats)
-
-		// STUN 서버 연결성 테스트 (인증 없이 접근 가능)
-		// webrtc.GET("/test-stun", p.acc.TestStunServers)
-
-		// 특정 STUN 서버 테스트
-		//webrtc.POST("/test-stun-server", p.acc.TestSpecificStunServer)
-
-		// WebSocket 시그널링 엔드포인트 (인증 없음 - 개발용)
+		// WebSocket 시그널링 엔드포인트
 		webrtc.GET("/ws", p.sig.HandleConnection)
-		/*
-			// 연결된 사용자 목록 조회
-			webrtc.GET("/connected-users", p.sig.GetConnectedUsers)
-
-			// 통화 요청
-			webrtc.POST("/call-request", p.sig.CallRequest)
-
-			// 통화 수락
-			webrtc.POST("/call-accept", p.sig.CallAccept)
-
-			// 통화 거절
-			webrtc.POST("/call-reject", p.sig.CallReject) */
 	}
 
 	// 텍스트 채팅 인터페이스
@@ -364,65 +290,5 @@ func (p *Router) Idx() *gin.Engine {
 		chat.GET("/wlistvo")
 	}
 
-	// 기존 vdchat 엔드포인트 (하위 호환성 유지)
-	vdchat := e.Group("vdchat/v01")
-	{
-		vdchat.GET("/config", p.acc.GetWebRTCConfig)
-		vdchat.GET("/available-users", p.acc.GetAvailableUsers)
-		vdchat.POST("/call-status", p.acc.UpdateCallStatus)
-		vdchat.POST("/heartbeat", p.acc.UpdateWebRTCHeartbeat)
-		vdchat.GET("/stats", p.acc.GetWebRTCStats)
-		// vdchat.GET("/test-stun", p.acc.TestStunServers)
-		vdchat.POST("/test-stun-server", p.acc.TestSpecificStunServer)
-		// vdchat.GET("/ws", p.sig.HandleWebSocket)
-		// vdchat.GET("/connected-users", p.sig.GetConnectedUsers)
-	}
-
-	/*
-		// 채팅 관련 엔드포인트 추가
-		chat := e.Group("chat/v01", p.SecurityHeaders())
-		{
-			// 채팅방 생성
-			chat.POST("/room", p.chat.CreateChatRoomHandler)
-
-			// 사용자의 채팅방 목록 조회
-			chat.GET("/rooms", p.chat.GetChatRooms)
-
-			// 채팅 기록 조회
-			chat.GET("/history/:roomId", p.chat.GetChatHistory)
-
-			// WebSocket 연결 엔드포인트
-			chat.GET("/ws", p.chat.HandleWebsocket)
-
-			// P2P 연결 상태 조회
-			chat.GET("/p2p/:userId", p.chat.GetActivePeerConnections)
-		}
-
-		// WebRTC 시그널링 서버 엔드포인트
-		rtc := e.Group("rtc/v01", p.SecurityHeaders())
-		{
-			// WebSocket 연결 엔드포인트 (시그널링 서버)
-			rtc.GET("/signal", p.chat.HandleWebsocket)
-		}
-	*/
-	/*
-		e.GET("/health", p.hHealth.Check)
-
-		// e.GET("/swagger/:any", ginSwg.WrapHandler())
-		// ginSwagger.WrapHandler(swaggerFiles.Handler,
-		// 	ginSwagger.URL("http://localhost:8080/swagger/doc.json"),
-		// 	ginSwagger.DefaultModelsExpandDepth(-1))
-
-		account := e.Group("acc/v01", liteAuth())
-		{
-			account.GET("/ok", p.hHealth.Check)
-		}
-
-		wd := e.Group("wd/v01", p.otpAuth())
-		{
-			wd.POST("/req", p.hHealth.Check)
-			wd.GET("/myinfo/:id", p.hHealth.Check)
-		}
-	*/
 	return e
 }

@@ -121,11 +121,9 @@ func (s *Schedule) Scheduler(it *item) {
 				}
 
 				s.task(it)
-				// break
 			case <-it.quit:
 				fmt.Println("item ticker stopped!!")
 				s.close(it)
-				// break
 			}
 		}
 
@@ -139,20 +137,9 @@ func (s *Schedule) close(item *item) {
 func (s *Schedule) task(it *item) {
 	tname := strings.ToLower(it.name)
 	t := time.Now()
-	//lower cast
 	if tname == "depositcheck" {
 		logs.Info("task", "Store", t)
-		// go s.FirstChecker()
 	} else if tname == "makeexceldaily" {
 		logs.Info("task", "SchduleMakeExcel", t)
-		go tmp("test")
-	} else if tname == "1min" {
-		go tmp(it.desc)
-	} else {
-		go tmp(it.desc)
 	}
-}
-
-func tmp(sz string) {
-	//fmt.Println("tmp work -- ", sz)
 }

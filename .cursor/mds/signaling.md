@@ -99,6 +99,7 @@
 - JSON 메시지 파싱
 - 메시지를 워커 큐(wrkQueue)에 추가
 - 연결 종료 시 대기방 또는 방에서 제거
+- 연결 종료 시 `forceReturnToWaitingRoom(room, disconnectedClient)` 형태로 호출하여, 종료된 클라이언트를 강제 복귀 대상에서 제외
 
 ### writePump(client *WSClient)
 - WebSocket으로 메시지 쓰기 (고루틴)
@@ -138,6 +139,11 @@
   - 클라이언트 해제 처리
   - 브로드캐스트 메시지 처리 (brcQueue에 추가)
   - PING_PERIOD마다 Ping 메시지 전송
+
+### 대기실 복귀 안전 처리 (2026-03 hotfix + refactor)
+- `trySend(client, data)` 추가: 닫힌 채널 전송 시 발생하는 `send on closed channel` panic을 recover로 흡수하고 경고 로그로 전환
+- `forceReturnToWaitingRoom(room, skipClient)`로 시그니처 변경: 연결 종료된 클라이언트를 제외하고 남은 사용자만 복귀 처리
+- `returnToWaitingRoom()` 및 `forceReturnToWaitingRoom()` 내부 직접 전송(`client.send <- ...`)을 `trySend()`로 통일하여 크래시 방지
 
 ### 방 정리 함수
 - `roomCleaner()`: 주기적으로 비어있고 비활성인 방 정리 (1분마다)
