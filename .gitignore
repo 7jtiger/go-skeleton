@@ -9,6 +9,8 @@ logs/
 logs/*
 
 main
+fcm-admsdk.json
+conf/fcm-admsdk.json
 
 .boost/
 .boost*
