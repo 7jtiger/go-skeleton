@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
 	"ms-gateway/hachecker"
@@ -132,6 +133,32 @@ func (p *FCMPusher) WriteSender(notiTitle, notiBody, cate, did string) {
 		Cate:      cate,
 		Did:       did,
 	}
+}
+
+// SendCallPush 통화 요청 푸시 전송
+func (p *FCMPusher) SendCallPush(callerNick, callerPic, callMode, did string) {
+	if did == "" {
+		return
+	}
+	title := "통화 요청"
+	body := fmt.Sprintf("%s님의 %s 통화 요청", callerNick, callMode)
+	if callerPic != "" {
+		body = fmt.Sprintf("%s님의 %s 통화 요청 (%s)", callerNick, callMode, callerPic)
+	}
+	p.WriteSender(title, body, "CALL", did)
+}
+
+// SendDMPush DM 메시지 푸시 전송
+func (p *FCMPusher) SendDMPush(senderNick, content, did string) {
+	if did == "" {
+		return
+	}
+	title := fmt.Sprintf("%s님의 새 쪽지", senderNick)
+	body := content
+	if body == "" {
+		body = "새 메시지가 도착했습니다."
+	}
+	p.WriteSender(title, body, "DM", did)
 }
 
 /*

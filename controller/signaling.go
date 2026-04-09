@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +13,7 @@ import (
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
 	"ms-gateway/models"
+	ptl "ms-gateway/protocol"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -29,7 +31,7 @@ const (
 
 	NUM_BRC_WORKERS = 15
 
-	MAX_CONN_ROOM = 3
+	MAX_CONN_ROOM        = 3
 	NUM_WORKERS          = 50
 	WORKER_QUEUE_SIZE    = 1000
 	BROADCAST_QUEUE_SIZE = 10000
@@ -134,9 +136,10 @@ type WaitingRoom struct {
 
 // SignalingController WebRTC 시그널링 컨트롤러
 type SignalingController struct {
-	ctl *Controller
-	cfg *conf.Config
-	rep *models.Repositories
+	ctl       *Controller
+	cfg       *conf.Config
+	rep       *models.Repositories
+	accountDB *models.AccountDB
 
 	rooms       map[string]*VDRoom // roomId -> VDRoom
 	roomsMu     sync.RWMutex
@@ -145,19 +148,25 @@ type SignalingController struct {
 
 	messagePool sync.Pool // 메시지 재사용을 위한 풀
 	totalConn   int64     // 전체 연결 수 (atomic)
-	wrkQueue chan WorkItem
-	brcQueue chan *BroadcastJob
-	ctx      context.Context
-	cancel   context.CancelFunc
+	wrkQueue    chan WorkItem
+	brcQueue    chan *BroadcastJob
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 // NewSignalingController 시그널링 컨트롤러 생성
 func NewSignalingController(ctl *Controller, rep *models.Repositories) (*SignalingController, error) {
+	var accountDB *models.AccountDB
+	if err := rep.Get(&accountDB); err != nil {
+		return nil, err
+	}
+
 	r := &SignalingController{
-		ctl:   ctl,
-		rep:   rep,
-		cfg:   ctl.cfg,
-		rooms: make(map[string]*VDRoom),
+		ctl:       ctl,
+		rep:       rep,
+		cfg:       ctl.cfg,
+		accountDB: accountDB,
+		rooms:     make(map[string]*VDRoom),
 		waitingRoom: &WaitingRoom{
 			Clients:      make(map[string]*WSClient),
 			createdAt:    time.Now(),
@@ -319,6 +328,10 @@ func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 	case "call-response":
 		// 연결 응답 (수락/거절)
 		p.handleCallResponse(client, msg)
+
+	case "call-cancel":
+		// 대기실 통화 취소
+		p.handleCallCancel(client, msg)
 	}
 }
 
@@ -540,7 +553,46 @@ func (p *SignalingController) handleCallRequest(client *WSClient, msg *Message) 
 
 	if !exists {
 		log.Warn("Target user %s not found in waiting room", reqData.To)
-		// 요청자에게 오류 메시지 전송
+
+		if p.ctl != nil && p.ctl.ChatCtl != nil && p.ctl.ChatCtl.IsUserOnline(reqData.To) {
+			p.ctl.ChatCtl.SendCallNotification(&ptl.ChatMessage{
+				Type:      "call-incoming",
+				From:      reqData.From,
+				To:        reqData.To,
+				RoomID:    reqData.RoomID,
+				CallMode:  reqData.Mode,
+				Timestamp: time.Now().Unix(),
+			})
+			infoMsg := Message{
+				Type: "call-info",
+				Data: map[string]interface{}{
+					"message": "상대방이 대기실에 없어 채팅 채널로 통화 알림을 전달했습니다.",
+				},
+			}
+			infoData, _ := json.Marshal(infoMsg)
+			p.trySend(client, infoData)
+			return
+		}
+
+		toUID, toErr := strconv.ParseUint(reqData.To, 10, 64)
+		fromUID, fromErr := strconv.ParseUint(reqData.From, 10, 64)
+		if toErr == nil && fromErr == nil && p.ctl != nil && p.ctl.FCMPusher != nil && p.accountDB != nil {
+			caller, cErr := p.accountDB.GetUserInfoByUID(fromUID)
+			target, tErr := p.accountDB.GetUserInfoByUID(toUID)
+			if cErr == nil && tErr == nil {
+				p.ctl.FCMPusher.SendCallPush(caller.Nick, caller.MainPic, reqData.Mode, target.Did)
+				infoMsg := Message{
+					Type: "call-info",
+					Data: map[string]interface{}{
+						"message": "상대방이 오프라인 상태여서 푸시 알림을 전송했습니다.",
+					},
+				}
+				infoData, _ := json.Marshal(infoMsg)
+				p.trySend(client, infoData)
+				return
+			}
+		}
+
 		errorMsg := Message{
 			Type: "call-error",
 			Data: map[string]interface{}{
@@ -548,10 +600,7 @@ func (p *SignalingController) handleCallRequest(client *WSClient, msg *Message) 
 			},
 		}
 		data, _ := json.Marshal(errorMsg)
-		select {
-		case client.send <- data:
-		default:
-		}
+		p.trySend(client, data)
 		return
 	}
 
@@ -611,6 +660,12 @@ func (p *SignalingController) handleCallResponse(client *WSClient, msg *Message)
 			"mode":    respData.Mode,
 		},
 	}
+	if respData.Accept {
+		partner, err := p.buildPartnerInfoByUserID(respData.From)
+		if err == nil {
+			responseMsg.Data["partner"] = partner
+		}
+	}
 
 	data, _ := json.Marshal(responseMsg)
 	select {
@@ -624,6 +679,53 @@ func (p *SignalingController) handleCallResponse(client *WSClient, msg *Message)
 	if respData.Accept {
 		go p.moveToRoom(respData.RoomID, client, requesterClient, respData.Mode)
 	}
+}
+
+func (p *SignalingController) handleCallCancel(client *WSClient, msg *Message) {
+	dataBytes, _ := json.Marshal(msg.Data)
+	var reqData CallRequestData
+	if err := json.Unmarshal(dataBytes, &reqData); err != nil {
+		log.Error("Error parsing call cancel: %v", err)
+		return
+	}
+
+	cancelMsg := Message{
+		Type: "call-cancel",
+		Data: map[string]interface{}{
+			"from":    reqData.From,
+			"to":      reqData.To,
+			"room_id": reqData.RoomID,
+			"mode":    reqData.Mode,
+		},
+	}
+	cancelData, _ := json.Marshal(cancelMsg)
+
+	p.waitingRoom.mu.RLock()
+	targetClient, exists := p.waitingRoom.Clients[reqData.To]
+	p.waitingRoom.mu.RUnlock()
+	if exists {
+		p.trySend(targetClient, cancelData)
+	}
+
+	if p.ctl != nil && p.ctl.ChatCtl != nil {
+		p.ctl.ChatCtl.SendCallNotification(&ptl.ChatMessage{
+			Type:      "call-cancel",
+			From:      reqData.From,
+			To:        reqData.To,
+			RoomID:    reqData.RoomID,
+			CallMode:  reqData.Mode,
+			Timestamp: time.Now().Unix(),
+		})
+	}
+
+	ack := Message{
+		Type: "call-info",
+		Data: map[string]interface{}{
+			"message": "통화 요청을 취소했습니다.",
+		},
+	}
+	ackData, _ := json.Marshal(ack)
+	p.trySend(client, ackData)
 }
 
 // broadcastUserList 사용자 목록 브로드캐스트
@@ -715,6 +817,70 @@ func (p *SignalingController) broadcastUserLeft(leftClient *WSClient) {
 		}
 	}
 	p.waitingRoom.mu.RUnlock()
+}
+
+// IsUserInWaitingRoom 특정 사용자가 대기실에 있는지 확인
+func (p *SignalingController) IsUserInWaitingRoom(userID string) bool {
+	p.waitingRoom.mu.RLock()
+	_, exists := p.waitingRoom.Clients[userID]
+	p.waitingRoom.mu.RUnlock()
+	return exists
+}
+
+// ForwardCallRequest ChatController -> SignalingController 브릿지
+func (p *SignalingController) ForwardCallRequest(msg *ptl.ChatMessage) {
+	if msg == nil {
+		return
+	}
+
+	p.waitingRoom.mu.RLock()
+	targetClient, exists := p.waitingRoom.Clients[msg.To]
+	p.waitingRoom.mu.RUnlock()
+	if !exists {
+		return
+	}
+
+	mode := msg.CallMode
+	if mode == "" {
+		mode = "video"
+	}
+	requestMsg := Message{
+		Type: "call-request",
+		Data: map[string]interface{}{
+			"from":    msg.From,
+			"to":      msg.To,
+			"room_id": msg.RoomID,
+			"mode":    mode,
+		},
+	}
+	data, _ := json.Marshal(requestMsg)
+	p.trySend(targetClient, data)
+}
+
+func (p *SignalingController) buildPartnerInfoByUserID(userID string) (map[string]interface{}, error) {
+	if p.accountDB == nil {
+		return nil, fmt.Errorf("account db unavailable")
+	}
+	uid, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := p.accountDB.GetUserInfoByUID(uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"uid":      user.Uid,
+		"nick":     user.Nick,
+		"mainPic":  user.MainPic,
+		"thumbPic": user.ThumbPic,
+		"spIntro":  user.SPIntro,
+		"gender":   user.Gender,
+		"age":      user.Age,
+		"area":     user.Area,
+	}, nil
 }
 
 // getRoom 방을 가져오거나 새로 생성

@@ -145,6 +145,18 @@
 - `forceReturnToWaitingRoom(room, skipClient)`로 시그니처 변경: 연결 종료된 클라이언트를 제외하고 남은 사용자만 복귀 처리
 - `returnToWaitingRoom()` 및 `forceReturnToWaitingRoom()` 내부 직접 전송(`client.send <- ...`)을 `trySend()`로 통일하여 크래시 방지
 
+### DM/통화 브릿지 확장 (2026-03)
+- 대기실 메시지 타입에 `call-cancel` 추가
+- `handleCallCancel()` 추가: 대기실 상대에게 취소 전달 + Chat WS 브릿지 통보
+- `handleCallRequest()` 오프라인 처리 확장:
+  - 대기실 부재 시 Chat WS `call-incoming` 전달 시도
+  - 완전 오프라인 시 FCM 통화 푸시 전송
+  - 요청자에게 `call-info` 안내 반환
+- `handleCallResponse()` 수락 시 `partner` 데이터 포함
+- 공개 메서드 추가:
+  - `IsUserInWaitingRoom(userID string) bool`
+  - `ForwardCallRequest(msg *ptl.ChatMessage)`
+
 ### 방 정리 함수
 - `roomCleaner()`: 주기적으로 비어있고 비활성인 방 정리 (1분마다)
 - `cleanEmptyRooms()`: 5분 이상 비활성인 빈 방 삭제

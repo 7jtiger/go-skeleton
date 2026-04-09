@@ -1575,61 +1575,6 @@ paths:
       summary: Get user notification settings
       tags:
       - Setting
-  /webrtc/v01/available-users:
-    get:
-      consumes:
-      - application/json
-      description: Get list of users available for video call
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Available user IDs
-          schema:
-            items:
-              type: string
-            type: array
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Get available users for call
-      tags:
-      - webrtc
-  /webrtc/v01/call-status:
-    post:
-      consumes:
-      - application/json
-      description: Update user's call status
-      parameters:
-      - description: 'Call status update {isInCall: bool, callWith: string}'
-        in: body
-        name: data
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Status updated
-          schema:
-            $ref: '#/definitions/protocol.OkResp'
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Update call status
-      tags:
-      - webrtc
   /webrtc/v01/config:
     get:
       consumes:
@@ -1651,56 +1596,6 @@ paths:
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Get WebRTC configuration
-      tags:
-      - webrtc
-  /webrtc/v01/heartbeat:
-    post:
-      consumes:
-      - application/json
-      description: Update WebRTC session heartbeat to keep session alive
-      parameters:
-      - description: 'Session update {deviceInfo: string, networkInfo: string}'
-        in: body
-        name: data
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Heartbeat updated
-          schema:
-            $ref: '#/definitions/protocol.OkResp'
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Update WebRTC session heartbeat
-      tags:
-      - webrtc
-  /webrtc/v01/stats:
-    get:
-      consumes:
-      - application/json
-      description: Get WebRTC system statistics
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: WebRTC statistics
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Get WebRTC statistics
       tags:
       - webrtc
   /webrtc/v01/test-stun-server:

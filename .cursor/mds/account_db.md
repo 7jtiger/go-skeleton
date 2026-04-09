@@ -29,6 +29,7 @@
 ## User Information Management Functions
 - `ModifyUserInfo()`: Function to modify user information (nickname, area, email) by category
 - `GetUserInfo()`: Function to query encrypted user information by user ID and return decrypted data
+- `GetUserInfoByUID()`: Function to query encrypted user information by numeric UID and return decrypted data
 
 ## Utility Functions
 - `updatedLastest()`: Internal function to update user's last update time to current time

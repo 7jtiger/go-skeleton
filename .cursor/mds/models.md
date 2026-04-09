@@ -51,6 +51,7 @@
 ### User Information Management
 - `ModifyUserInfo()`: Updates user information by category (nickname, area, email)
 - `GetUserInfo()`: Retrieves user information with decryption of sensitive fields
+- `GetUserInfoByUID()`: Numeric UID 기반 사용자 정보 조회 (복호화 포함)
 
 ### Database Schema
 - **user_info**: Main user table with 25 fields including authentication, profile, and status information
@@ -86,6 +87,10 @@
 - `GetAnnouncementList()`: Retrieves latest 20 announcements with automatic 'new' badge (stat=1) for items within 7 days
 - `GetAnnouncementDetail()`: Retrieves specific announcement detail with automatic 'new' badge calculation
 
+### DM Room Management Functions (2026-03)
+- `CreateDMRoom()`, `GetDMRoom()`, `GetDMRoomByPair()`, `GetDMRoomsByUser()`
+- `SoftDeleteDMRoom()`, `SoftDeleteDMRoomsByUser()`, `ActivateDMRoomByPair()`
+
 ### Database Schema
 - **buy_his**: Purchase history table
 - **by_flw**: Follower flow tracking table
@@ -96,6 +101,7 @@
 - **pay_his**: Payment history table
 - **noti_his**: Personal notification history with 9 fields
 - **anuc_his**: Public announcement history with 5 fields
+- **dm_room**: 1:1 DM room metadata (pair unique, soft delete)
 
 ### Key Features
 - **Notification System**: Personal user notifications with read/unread status
@@ -127,6 +133,7 @@
 - **Session Storage**: JWT token and WebRTC session management
 - **Real-time Status**: User availability and call status tracking
 - **Cache Layer**: High-performance data caching for frequently accessed data
+- **DM Presence/Unread**: `DM:ONLINE:*`, `DM:UNREAD:*` 키 기반 DM 상태/미읽음 관리
 
 ---
 

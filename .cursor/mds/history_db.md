@@ -140,6 +140,29 @@ CREATE TABLE `anuc_his` (
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
+---
+
+## DM Room 추가 (2026-03)
+
+### 신규 구조체
+- `DMRoomRow`: `dm_room` 테이블 로우 매핑 구조체
+
+### 신규 함수
+- `CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp)`: DM 방 생성 (room_id는 uid 정렬로 자동 생성)
+- `GetDMRoom(ridx int64)`: idx 기준 단건 조회
+- `GetDMRoomByPair(uid, tid uint64)`: 사용자 쌍 **양방향** 조회 (`(uid=A AND tid=B) OR (uid=B AND tid=A)`)
+- `GetDMRoomByRid(rid string)`: room_id 문자열 기준 단건 조회
+- `GetDMRoomsByUser(uid uint64)`: 사용자 참여 DM 방 목록 조회 (uid 또는 tid로 참여한 방 UNION, 최신 업데이트순)
+- `SoftDeleteDMRoom(ridx int64)`: idx 기준 soft delete(`st_chat=0`)
+- `SoftDeleteDMRoomsByUser(uid, tid uint64)`: room_id 기준 soft delete
+- `ActivateDMRoomByPair(uid, tid uint64)`: 기존 soft-deleted DM 방 **양방향** 재활성화(`st_chat=1`)
+- `UdtDMPaid(ridx int64, point float64)`: DM 방 paid_point 누적 업데이트
+
+### 구현 규칙
+- `room_id` 생성 시 `min(uid,tid)_max(uid,tid)` 정규화 적용 (`getRoomID`)
+- 삭제는 hard delete가 아닌 `st_chat` 기반 soft delete 사용
+- **양방향 조회**: `GetDMRoomByPair`, `ActivateDMRoomByPair`는 A→B, B→A 양방향 검색 지원
+
 CREATE TABLE `app_push` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `msg` varchar(256) NOT NULL,

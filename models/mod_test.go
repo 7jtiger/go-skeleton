@@ -29,6 +29,7 @@ import (
 	"time"
 
 	// "github.com/go-redis/redis/v8"
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 	// "github.com/hashicorp/vault/shamir"
@@ -738,4 +739,92 @@ func Test_GetAnnouncementDetail(t *testing.T) {
 	}
 	fmt.Println(a)
 	fmt.Println("공지사항 상세 조회 성공")
+}
+
+// ===============DM Room db test===============================================
+func Test_CreateDMRoom(t *testing.T) {
+	// HistoryDB의 CreateDMRoom 메서드 테스트 코드 구현 (chat_his 테이블 사용)
+	hdb := ConnectDB("hdb")
+	if hdb == nil {
+		fmt.Println("데이터베이스 연결 실패")
+		return
+	}
+	defer hdb.Close()
+
+	// 임시 ptl.UserInfoResp 생성
+	tUser := &ptl.UserInfoResp{
+		Uid:      123,
+		Nick:     "상대방닉네임",
+		Area:     "서울",
+		Age:      "25",
+		Gender:   "1",
+		ThumbPic: "https://example.com/thumb.jpg",
+	}
+
+	uid := uint64(234) // 내 uid
+
+	// HistoryDB 초기화 (mock root, conf nil 허용)
+	historyDB := &HistoryDB{
+		conndb: hdb,
+	}
+
+	roomID, err := historyDB.CreateDMRoom(uid, tUser)
+	if err != nil {
+		fmt.Println(err)
+		if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1062 {
+			fmt.Println("already room", roomID)
+			return
+		}
+		fmt.Println("CreateDMRoom 실패:", err)
+		return
+	}
+	fmt.Printf("DM Room 생성 성공 (chat_his idx): %d\n", roomID)
+}
+
+func Test_GetDMRoom(t *testing.T) {
+	// HistoryDB의 GetDMRoom 메서드 테스트 코드 구현 (chat_his 테이블 사용)
+	hdb := ConnectDB("hdb")
+	if hdb == nil {
+		fmt.Println("데이터베이스 연결 실패")
+		return
+	}
+	defer hdb.Close()
+
+	roomID := int64(1) // 조회할 DM Room ID
+
+	// HistoryDB 초기화 (mock root, conf nil 허용)
+	historyDB := &HistoryDB{
+		conndb: hdb,
+	}
+
+	room, err := historyDB.GetDMRoom(roomID)
+	if err != nil {
+		fmt.Println("CreateDMRoom 실패:", err)
+		return
+	}
+	fmt.Printf("DM Room 생성 성공 (chat_his idx): %+v\n", room)
+}
+
+func Test_GetDMRoomByUser(t *testing.T) {
+	hdb := ConnectDB("hdb")
+	if hdb == nil {
+		fmt.Println("데이터베이스 연결 실패")
+		return
+	}
+	defer hdb.Close()
+
+	uid := uint64(123) // 조회할 DM Room ID
+
+	// HistoryDB 초기화 (mock root, conf nil 허용)
+	historyDB := &HistoryDB{
+		conndb: hdb,
+	}
+
+	rooms, err := historyDB.GetDMRoomsByUser(uid)
+	if err != nil {
+		fmt.Println("CreateDMRoom 실패:", err)
+		return
+	}
+	fmt.Printf("DM Room 생성 성공 (chat_his idx): %+v\n", rooms)
+
 }

@@ -137,6 +137,15 @@
 - **Utility Types**: Pagination, encryption, custom writer (4 structures)
 - **Configuration**: Language support mapping (1 data map)
 
+### DM/통화 확장 구조체 (2026-03)
+- `PartnerInfo`: 통화/DM 상대 프로필 정보(UID, Nick, MainPic, ThumbPic, SPIntro, Gender, Age, Area)
+- `DMRoomResp`: 쪽지함 방 응답 포맷(roomId, partner, unread, atCreate, atUpdate)
+- `ChatMessage` 확장 필드:
+  - `callMode`: `video|audio|text`
+  - `msgId`: 클라이언트 메시지 식별자
+  - `partner`: 통화 수락 시 상대방 정보 포함
+  - `unread`: 서버 ack 시 unread 수 전달
+
 ### result_code.go (1 type + 1 function + 25 constants)
 - **Type Definition**: Custom result code type (1 type)
 - **Translation**: Code to string conversion (1 function)

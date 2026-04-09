@@ -4,6 +4,7 @@
 
 ### Controller Initialization
 - `NewCTL()`: Creates main controller instance, initializes sub-controllers (Account, Profile), and sets up repository connections
+- `NewCTL()`: FCMPusher 활성화 포함(초기화 실패 시 부팅 에러 반환)
 
 ### Response Management Functions
 - `SimpleRespOK()`: Sends simple HTTP 200 OK response with JSON payload
@@ -358,3 +359,55 @@
 *Created: 2025-09-15*
 *Last Updated: 2025-11-30*
 *File Location: /home/jino/go/src/ms-gateway/controller/*
+
+---
+
+## Chat/Signaling 확장 (2026-03)
+
+### 운영 정책 (Step A~D)
+
+#### Step A: 송신자 정책
+- **현재(테스트)**: `HandleWebSocket`에서 `userId` 쿼리 파라미터를 신뢰
+- **서버 강제**: `handleMessage()`에서 `msg.From = client.userID`로 클라이언트 위변조 차단
+- **JWT 전환 예정**: `HandleWebSocket` 상단 TODO 블록 활성화 시 토큰에서 uid 강제 추출
+
+#### Step B: 수신 라우팅 정책
+- **실시간**: 수신자가 Chat WS 연결 중이면 `sendToUser()` → 즉시 전달
+- **오프라인**: `sendToUser()` 실패 시 → `IncrUnread()` 증가 + `FCMPusher.SendDMPush()` 발송
+- **재접속**: `GetTotalUnread()` / `GetAllUnreadForUser()`로 unread 조회, `ResetUnread()`로 초기화
+
+#### Step C: 룸 정책
+- **DM 룸**: `ensureDMRoom()` → MySQL `dm_room` 테이블로 영구 관리
+- **waitingRoom**: signaling 통화 대기 전용 (TTL 있음), DM 룸과 **절대 혼용 금지**
+- chatCtl에서 `waitingRoom`/`WTRoom` 참조 0건으로 검증 완료
+
+#### Step D: 통화 연계
+- **DM 중 통화 요청** (`handleCallRequestFromDM`):
+  1. 수신자가 signaling `waitingRoom`에 있으면 → `ForwardCallRequest()`로 즉시 전달
+  2. Chat WS 온라인이면 → `call-incoming` DM 알림
+  3. 완전 오프라인 → `FCMPusher.SendCallPush()` fallback
+- **통화 취소** (`handleCallCancel`): 수신자 오프라인 시 FCM push fallback 포함
+
+### ChatController (`chatCtl.go`)
+- `ChatClient`에 `uid uint64` 필드 추가
+- 연결/해제 시 Redis 온라인 상태 반영 (`SetOnline` / `DeleteOnline`)
+- `handleTextMessage()`에서 DM 방 자동 확보, unread 증가, 오프라인 FCM fallback, `msg-ack` 전송
+- `handleReadReceipt()`에서 unread 초기화(`ResetUnread`) 후 상대에게 전달
+- 신규 통화 브릿지: `handleCallRequestFromDM`, `handleCallAcceptFromDM`, `handleCallCancel`
+- 신규 공개 메서드: `IsUserOnline`, `SendDMNotification`, `GetTotalUnread`
+
+### SignalingController (`signaling.go`)
+- 대기실 메시지 타입에 `call-cancel` 추가
+- `handleCallRequest()` 오프라인 fallback: Chat WS(`call-incoming`) -> FCM 순서 처리
+- `handleCallResponse()` 수락 시 `partner` 정보 포함
+- 신규 공개 메서드: `IsUserInWaitingRoom`, `ForwardCallRequest`
+
+### FCMPusher (`fcmPusher.go`)
+- `SendCallPush(callerNick, callerPic, callMode, did)`
+- `SendDMPush(senderNick, content, did)`
+
+### 클라이언트 테스트 페이지 (`client/dm_chat.html`)
+- WS: `GET /chat/v01/ws?userId=` — 서버 `writePump`가 여러 JSON을 `\n`으로 묶어 보내므로, 수신 시 줄 단위로 분리 후 `JSON.parse`
+- 방 준비: `POST /chat/v01/room`이 라우터에 등록되어 있으면 JWT와 함께 시도하고, 없거나 실패 시 `ensureDMRoom`과 동일한 `min(uid)_max(uid)` 규칙으로 `roomId` 계산
+- REST: `GET /chat/v01/rooms`, `GET /inbox/v01/unread`는 Redis 등록 JWT 필수; 기본 서버 주소 예시는 `localhost:8080` (`conf/config.toml`의 `port`와 맞출 것)
+- **쪽지함 API**: `GetChatRooms` → MySQL `dm_room` 행만 조회하므로, 상대 WS 접속만으로는 목록이 비어 있을 수 있음(첫 `text-message`로 `ensureDMRoom` 실행 후 DB 반영). 테스트 페이지는 DB 미등록 시 로컬 준비 방을 점선으로 합쳐 표시하고, `msg-ack` 후 목록을 다시 불러옴

@@ -131,19 +131,20 @@
 - `GET /noti/v01/anc/list`: Endpoint to retrieve public announcement list
 - `GET /noti/v01/anc/detail/:idx`: Endpoint to retrieve specific announcement detail
 
-### chat/v01 - Text Chat Features (Security Headers)
-- `GET /chat/v01/ws`: WebSocket endpoint for real-time text chat (query param: userId)
-- `POST /chat/v01/room`: Endpoint to create new chat room
-- `GET /chat/v01/rooms`: Endpoint to retrieve user's chat room list
-- `GET /chat/v01/history/:roomId`: Endpoint to retrieve paginated chat history
-- `POST /chat/v01/message`: REST API endpoint to send message (alternative to WebSocket)
-- `GET /chat/v01/mlistvd`: Endpoint to retrieve male video chat list
-- `GET /chat/v01/wlistvd`: Endpoint to retrieve female video chat list
-- `GET /chat/v01/mlistvo`: Endpoint to retrieve male voice chat list
-- `GET /chat/v01/wlistvo`: Endpoint to retrieve female voice chat list
+### dm/v01 - Text Chat Features (Security Headers)
+- `GET /dm/v01/ws`: WebSocket endpoint for real-time text chat (query param: userId)
+- `POST /dm/v01/create`: Endpoint to create/reuse DM room (`CreateChatRoom`, request body: `uid`, `tid`)
+- `GET /dm/v01/rooms`: Endpoint to retrieve user's DM room list (**JWT required**)
+- `GET /dm/v01/history/:roomId`: Endpoint to retrieve paginated chat history
+- `POST /dm/v01/message`: REST API endpoint to send message (alternative to WebSocket)
+- `GET /dm/v01/mlistvd`: Endpoint to retrieve male video chat list
+- `GET /dm/v01/wlistvd`: Endpoint to retrieve female video chat list
+- `GET /dm/v01/mlistvo`: Endpoint to retrieve male voice chat list
+- `GET /dm/v01/wlistvo`: Endpoint to retrieve female voice chat list
 
-### inbox/v01 - Inbox Management (Security Headers)
-- `GET /inbox/v01/list`: Endpoint to retrieve inbox message list
+### inbox/v01 - Inbox Management (Security Headers + JWT)
+- `GET /inbox/v01/list`: DM 방 목록 조회 (`chat.GetChatRooms` 재사용)
+- `GET /inbox/v01/unread`: 전체 unread 합계 조회
 
 ### webrtc/v01 - WebRTC Features (JWT Authentication Required)
 - `GET /webrtc/v01/config`: Endpoint to retrieve WebRTC configuration information
@@ -210,7 +211,7 @@
 - `error`: Error message (server → client)
 
 ### 2. Text Chat WebSocket
-- **URL**: `ws://server:port/chat/v01/ws?userId={userId}`
+- **URL**: `ws://server:port/dm/v01/ws?userId={userId}`
 - **Protocol**: WebSocket
 - **Authentication**: No Auth (개발용, 프로덕션에서는 JWT 권장)
 - **Purpose**: Real-time text messaging

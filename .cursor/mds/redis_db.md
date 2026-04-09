@@ -79,6 +79,15 @@
 - `GetUnreadTotalCount()`: Function to retrieve user's total unread message count
 - `CleanupInactiveRooms()`: Function to clean up chat rooms inactive for certain period
 
+## DM Unread / Online State Functions (2026-03)
+- `IncrUnread(uid, roomID)`: `DM:UNREAD:{uid}:{roomId}` 카운터 증가
+- `GetUnread(uid, roomID)`: 단일 방 unread 조회 (키 미존재 시 0)
+- `ResetUnread(uid, roomID)`: 단일 방 unread 초기화(DEL)
+- `GetAllUnreadForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` 기반 전체 unread 맵 조회
+- `SetOnline(uid)`: `DM:ONLINE:{uid}` 키를 90초 TTL로 설정
+- `IsOnline(uid)`: 온라인 키 존재 여부로 상태 판별
+- `DeleteOnline(uid)`: 온라인 키 제거
+
 ## WebRTC Management Functions (STUN only)
 - `GetWebRTCConfig()`: Function to return WebRTC configuration with Google STUN servers only (no TURN) - **ACTIVE**
 - `SetUserWebRTCSession()`: Function to save user WebRTC session information and update active user list - **COMMENTED OUT** (but used in account.go)

@@ -656,6 +656,97 @@ func (r *RedisDB) GetUnreadTotalCount(userID string) (int, error) {
 	return totalUnread, nil
 }
 
+func dmUnreadKey(uid uint64, roomID int64) string {
+	return fmt.Sprintf("DM:UNREAD:%d:%d", uid, roomID)
+}
+
+func dmOnlineKey(uid uint64) string {
+	return fmt.Sprintf("DM:ONLINE:%d", uid)
+}
+
+// IncrUnread 읽지 않은 메시지 수 증가
+func (r *RedisDB) IncrUnread(uid uint64, roomID int64) (int64, error) {
+	return r.client.Incr(r.ctx, dmUnreadKey(uid, roomID)).Result()
+}
+
+// GetUnread 읽지 않은 메시지 수 조회
+func (r *RedisDB) GetUnread(uid uint64, roomID int64) (int64, error) {
+	val, err := r.client.Get(r.ctx, dmUnreadKey(uid, roomID)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return strconv.ParseInt(val, 10, 64)
+}
+
+// ResetUnread 읽지 않은 메시지 수 초기화
+func (r *RedisDB) ResetUnread(uid uint64, roomID int64) error {
+	return r.client.Del(r.ctx, dmUnreadKey(uid, roomID)).Err()
+}
+
+// GetAllUnreadForUser 사용자의 전체 unread 맵 조회
+func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
+	pattern := fmt.Sprintf("DM:UNREAD:%d:*", uid)
+	cursor := uint64(0)
+	result := make(map[string]int64)
+
+	for {
+		keys, nextCursor, err := r.client.Scan(r.ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, key := range keys {
+			val, getErr := r.client.Get(r.ctx, key).Result()
+			if getErr != nil {
+				if errors.Is(getErr, redis.Nil) {
+					continue
+				}
+				return nil, getErr
+			}
+
+			cnt, parseErr := strconv.ParseInt(val, 10, 64)
+			if parseErr != nil {
+				continue
+			}
+
+			prefix := fmt.Sprintf("DM:UNREAD:%d:", uid)
+			roomID := strings.TrimPrefix(key, prefix)
+			if roomID != "" {
+				result[roomID] = cnt
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
+// SetOnline DM 온라인 상태 설정
+func (r *RedisDB) SetOnline(uid uint64) error {
+	return r.client.Set(r.ctx, dmOnlineKey(uid), "1", 90*time.Second).Err()
+}
+
+// IsOnline DM 온라인 상태 조회
+func (r *RedisDB) IsOnline(uid uint64) (bool, error) {
+	exists, err := r.client.Exists(r.ctx, dmOnlineKey(uid)).Result()
+	if err != nil {
+		return false, err
+	}
+	return exists > 0, nil
+}
+
+// DeleteOnline DM 온라인 상태 삭제
+func (r *RedisDB) DeleteOnline(uid uint64) error {
+	return r.client.Del(r.ctx, dmOnlineKey(uid)).Err()
+}
+
 // GetWebRTCConfig 사용자 로그인 시 WebRTC 설정 정보 반환
 func (r *RedisDB) GetWebRTCConfig(userID uint64) (*ptl.WebRTCConfig, error) {
 	// TODO: 실제 구현에서는 conf.Config를 받아와야 함

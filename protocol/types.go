@@ -77,14 +77,35 @@ type NotiItem struct {
 	Cate  int
 }
 
+type PartnerInfo struct {
+	PID      uint64 `json:"pid"`
+	Nick     string `json:"nick"`
+	ThumbPic string `json:"thumbPic"`
+	Gender   string `json:"gender"`
+	Age      string `json:"age"`
+	Area     string `json:"area"`
+}
+
+type DMRoomResp struct {
+	RoomID   int64        `json:"rid"`
+	Partner  *PartnerInfo `json:"partner"`
+	Unread   int          `json:"unread"`
+	AtCreate string       `json:"atCreate"`
+	AtUpdate string       `json:"atUpdate"`
+}
+
 // ChatMessage 텍스트 채팅 메시지 구조체
 type ChatMessage struct {
-	Type      string `json:"type"`      // text-message, typing, read-receipt
-	From      string `json:"from"`      // 발신자 ID
-	To        string `json:"to"`        // 수신자 ID
-	RoomID    string `json:"roomId"`    // 채팅방 ID
-	Content   string `json:"content"`   // 메시지 내용
-	Timestamp int64  `json:"timestamp"` // 타임스탬프
+	Type      string       `json:"type"`               // text-message, typing, read-receipt, call-*
+	From      string       `json:"from"`               // 발신자 ID
+	To        string       `json:"to"`                 // 수신자 ID
+	RoomID    string       `json:"roomId"`             // 채팅방 ID
+	Content   string       `json:"content,omitempty"`  // 메시지 내용
+	Timestamp int64        `json:"timestamp"`          // 타임스탬프
+	CallMode  string       `json:"callMode,omitempty"` // video | audio | text
+	MsgID     string       `json:"msgId,omitempty"`    // 클라이언트 메시지 식별자
+	Partner   *PartnerInfo `json:"partner,omitempty"`  // 상대방 정보
+	Unread    int          `json:"unread,omitempty"`   // 읽지 않은 메시지 수
 }
 
 // CallRequest 통화 요청 구조체

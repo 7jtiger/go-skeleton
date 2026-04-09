@@ -119,6 +119,9 @@
     <div class="waiting-room hidden" id="waitingRoom">
         <h2>대기방</h2>
         <div class="user-list" id="userList"><p>대기 중인 사용자가 없습니다.</p></div>
+        <div style="margin-top:12px; text-align:center;">
+            <button id="cancelCallBtn" class="hidden" onclick="cancelCall()">통화 요청 취소</button>
+        </div>
     </div>
 
     <div class="hidden" id="chatRoom">
@@ -164,6 +167,7 @@
     let socket, localStream, peerConnection;
     let userID, userName;
     let isAudioEnabled = true;
+    let pendingCallTarget = '';
     let isReady = false, pendingStart = false;
 
     const rtcConfig = {
@@ -210,8 +214,17 @@
             case 'user-joined': addUser(msg.data.user_id, msg.data.name); break;
             case 'user-left': removeUser(msg.data.user_id); break;
             case 'call-request': showCallRequest(msg.data); break;
-            case 'call-accept': updateStatus('수락됨. 연결 중...', 'waiting'); break;
+            case 'call-accept':
+                updateStatus(((msg.data && msg.data.partner && msg.data.partner.nick) ? (msg.data.partner.nick + '님 ') : '') + '수락됨. 연결 중...', 'waiting');
+                pendingCallTarget = '';
+                document.getElementById('cancelCallBtn').classList.add('hidden');
+                break;
             case 'call-reject': updateStatus(msg.data.from + '님이 거절했습니다.', 'waiting'); break;
+            case 'call-cancel':
+                addSystemMsg('상대방이 통화를 취소했습니다.');
+                pendingCallTarget = '';
+                document.getElementById('cancelCallBtn').classList.add('hidden');
+                break;
             case 'call-error': alert(msg.data.message); break;
             case 'room-joined': enterRoom(msg.data); break;
             case 'start':
@@ -254,6 +267,18 @@
         const roomID = [userID, targetID].sort().join('_');
         socket.send(JSON.stringify({ type: 'call-request', data: { from: userID, to: targetID, room_id: roomID, mode: CHAT_MODE } }));
         updateStatus(targetID + '님에게 요청 전송...', 'waiting');
+        pendingCallTarget = targetID;
+        document.getElementById('cancelCallBtn').classList.remove('hidden');
+    }
+
+    function cancelCall() {
+        if (!pendingCallTarget) return;
+        const roomID = [userID, pendingCallTarget].sort().join('_');
+        socket.send(JSON.stringify({ type: 'call-cancel', data: { from: userID, to: pendingCallTarget, room_id: roomID, mode: CHAT_MODE } }));
+        addSystemMsg('통화 요청을 취소했습니다.');
+        updateStatus('통화 요청 취소', 'connected');
+        pendingCallTarget = '';
+        document.getElementById('cancelCallBtn').classList.add('hidden');
     }
 
     function showCallRequest(data) {
@@ -298,6 +323,8 @@
         cleanupMedia();
         document.getElementById('chatRoom').classList.add('hidden');
         document.getElementById('waitingRoom').classList.remove('hidden');
+        pendingCallTarget = '';
+        document.getElementById('cancelCallBtn').classList.add('hidden');
         updateStatus('대기방으로 복귀했습니다.', 'connected');
     }
 

@@ -62,10 +62,9 @@ func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories)
 	if r.SetCtl, err = NewSetController(r, rep); err != nil {
 		return nil, err
 	}
-	/* 	if r.FCMPusher, err = NewFCMPusher(r, hch, rep); err != nil {
-	   		return nil, err
-	   	}
-	*/
+	if r.FCMPusher, err = NewFCMPusher(r, hch, rep); err != nil {
+		return nil, err
+	}
 	// Signaling 컨트롤러 생성
 	if r.Signaling, err = NewSignalingController(r, rep); err != nil {
 		return nil, err

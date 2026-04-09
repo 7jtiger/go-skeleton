@@ -32,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("=== API 클라이언트 테스트 시작 ===\n")
+	fmt.Println("=== API 클라이언트 테스트 시작 ===")
 
 	// 1. 회원가입
 	fmt.Println("1. 회원가입 시도...")
@@ -51,9 +51,9 @@ func main() {
 	err = apiClient.RegistUser(registReq)
 	if err != nil {
 		fmt.Printf("   회원가입 실패: %v\n", err)
-		fmt.Println("   (이미 존재하는 사용자일 수 있습니다. 계속 진행합니다.)\n")
+		fmt.Println("   (이미 존재하는 사용자일 수 있습니다. 계속 진행합니다.)")
 	} else {
-		fmt.Println("   회원가입 성공!\n")
+		fmt.Println("   회원가입 성공!")
 	}
 
 	// 2. 로그인

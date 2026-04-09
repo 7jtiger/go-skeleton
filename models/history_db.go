@@ -2,6 +2,8 @@ package models
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +24,45 @@ type HistoryDB struct {
 	quit     chan struct{}
 	quitWait sync.WaitGroup
 }
+
+// DMRoomRow dm_room 정보 테이블 로우 구조체
+type DMRoomRow struct {
+	Idx       int64     `json:"idx"`     //roomID
+	RoomID    string    `json:"room_id"` //roomID
+	UID       uint64    `json:"uid"`
+	TID       uint64    `json:"tid"`
+	TNick     string    `json:"tnick"`
+	TArea     string    `json:"tarea"`
+	TAge      int       `json:"tage"`
+	TGender   int       `json:"tgender"`
+	TThumbUrl string    `json:"tthumb_url"`
+	STChat    int       `json:"st_chat"`
+	AtCrtCHAT time.Time `json:"at_crtchat"`
+	PaidPoint float64   `json:"paid_point"`
+	AtUpdate  time.Time `json:"at_update"`
+}
+
+/*
+CREATE TABLE `chat_his` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` bigint unsigned NOT NULL,
+  `tid` bigint unsigned NOT NULL,
+  `tnick` varchar(45) DEFAULT NULL,
+  `tarea` varchar(45) DEFAULT NULL,
+  `tage` int DEFAULT NULL,
+  `tgender` tinyint(1) DEFAULT NULL,
+  `tthumb_url` varchar(300) DEFAULT NULL,
+  `st_chat` tinyint(1) DEFAULT NULL,
+  `at_crtchat` datetime DEFAULT NULL,
+  `paid_point` double DEFAULT NULL,
+  `at_update` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`,`uid`,`tid`),
+  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  KEY `idx_chat_his_uid` (`uid`),
+  KEY `idx_chat_his_tid` (`tid`),
+  KEY `idx_chat_his_at_update` (`at_update`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+*/
 
 func NewHistoryDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 	r := &HistoryDB{
@@ -231,4 +272,208 @@ func (p *HistoryDB) GetNewMsgCount(uid uint64) (int, error) {
 	}
 
 	return count, nil
+}
+
+/*
+	Idx       int       `json:"idx"` //roomID
+	UID       uint64    `json:"uid"`	// myUID
+	TID       uint64    `json:"tid"`	// targetUID
+	TNick     string    `json:"tnick"`	// targetNick
+	TArea     string    `json:"tarea"`	// targetArea
+	TAge    int       `json:"tage"`	// targetAgent
+	TGender   int       `json:"tgender"`
+	TThumbUrl string    `json:"tthumb_url"`
+	STChat    int       `json:"st_chat"`	// status chat(1: active, 0: inactive)
+	AtCrtCHAT time.Time `json:"at_crtchat"`
+	PaidPoint float64   `json:"paid_point"`	// paid point
+	AtUpdate time.Time `json:"at_update"`	// update time
+
+*/
+
+func getRoomID(uid, tid uint64) string {
+	if uid < tid {
+		return fmt.Sprintf("%d_%d", uid, tid)
+	}
+
+	return fmt.Sprintf("%d_%d", tid, uid)
+}
+
+func getIdByRoomID(roomID string) (uint64, uint64) {
+	parts := strings.Split(roomID, "_")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+
+	uid, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return 0, 0
+	}
+	tid, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil {
+		return 0, 0
+	}
+	return uid, tid
+}
+
+// CreateDMRoom dm_room 생성
+func (p *HistoryDB) CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp) (int64, error) {
+	roomID := getRoomID(uid, tUser.Uid)
+	res, err := p.conndb.Exec(
+		"INSERT INTO chat_his (uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		uid, tUser.Uid, roomID, tUser.Nick, tUser.Area, tUser.Age, tUser.Gender, tUser.ThumbPic, 1, time.Now(), 0, time.Now(),
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	lastID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return lastID, nil
+}
+
+// GetDMRoom room_id 기준 조회
+func (p *HistoryDB) GetDMRoom(ridx int64) (*DMRoomRow, error) {
+	row := p.conndb.QueryRow(
+		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE idx = ? LIMIT 1", ridx,
+	)
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		return nil, err
+	}
+	return &dm, nil
+}
+
+/*
+// GetDMRoom room_id 기준 조회
+func (p *HistoryDB) GetDMRoomByRid(rid string) (*DMRoomRow, error) {
+	row := p.conndb.QueryRow(
+		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1", rid,
+	)
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		return nil, err
+	}
+	return &dm, nil
+}
+*/
+// GetDMRoom By uid Pair 기준 조회
+func (p *HistoryDB) GetDMRoomByPair(uid, tid uint64) (*DMRoomRow, error) {
+	rid := getRoomID(uid, tid)
+	row := p.conndb.QueryRow(
+		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1",
+		rid,
+	)
+	if row.Err() != nil {
+		return nil, row.Err()
+	}
+
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		return nil, err
+	}
+
+	return &dm, nil
+}
+
+// GetDMRoom By uid Pair 기준 조회
+func (p *HistoryDB) GetDMRoomByRid(rid string) (*DMRoomRow, error) {
+	row := p.conndb.QueryRow(
+		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1",
+		rid,
+	)
+	if row.Err() != nil {
+		return nil, row.Err()
+	}
+
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		return nil, err
+	}
+
+	return &dm, nil
+}
+
+func (p *HistoryDB) SoftDeleteDMRoom(ridx int64) error {
+	row := p.conndb.QueryRow(
+		"UPDATE chat_his SET st_chat = 0 WHERE idx = ?", ridx,
+	)
+
+	if row.Err() != nil {
+		return row.Err()
+	}
+
+	return nil
+}
+
+// SoftDeleteDMRoomsByUser 사용자 기준 soft delete
+func (p *HistoryDB) SoftDeleteDMRoomsByUser(uid, tid uint64) error {
+	rid := getRoomID(uid, tid)
+	row := p.conndb.QueryRow(
+		"UPDATE chat_his SET st_chat = 0 WHERE room_id = ?", rid,
+	)
+
+	if row.Err() != nil {
+		return row.Err()
+	}
+
+	return nil
+}
+
+// ActivateDMRoomByPair 사용자 쌍 DM 방 재활성화
+func (p *HistoryDB) ActivateDMRoomByPair(uid, tid uint64) error {
+	rid := getRoomID(uid, tid)
+	_, err := p.conndb.Exec("UPDATE chat_his SET st_chat = 1 WHERE room_id = ?", rid)
+	return err
+}
+
+func (p *HistoryDB) UdtDMPaid(ridx int64, point float64) error {
+	row := p.conndb.QueryRow(
+		"UPDATE chat_his SET paid_point = paid_point + ? WHERE idx = ?",
+		point, ridx,
+	)
+
+	if row.Err() != nil {
+		return row.Err()
+	}
+
+	return nil
+}
+
+/* // GetDMRoomByPair 상대방 uid로 조회
+func (p *HistoryDB) GetDMRoomByUID(tid uint64) (*DMRoomRow, error) {
+	row := p.conndb.QueryRow(
+		"SELECT idx, uid, tid, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE tid = ? LIMIT 1",
+		tid,
+	)
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		return nil, err
+	}
+	return &dm, nil
+}
+*/
+// GetDMRoomsByUser 사용자 기준 DM 방 목록 조회
+func (p *HistoryDB) GetDMRoomsByUser(uid uint64) (*[]DMRoomRow, error) {
+	rows, err := p.conndb.Query(
+		"(SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE st_chat = 1 AND uid = ? ORDER BY at_update DESC) "+
+			"UNION "+
+			"(SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE st_chat = 1 AND tid = ? ORDER BY at_update DESC)",
+		uid, uid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rooms := make([]DMRoomRow, 0)
+	for rows.Next() {
+		var dm DMRoomRow
+		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+			return nil, err
+		}
+		rooms = append(rooms, dm)
+	}
+	return &rooms, nil
 }

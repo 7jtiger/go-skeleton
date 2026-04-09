@@ -208,9 +208,10 @@ func (p *Router) Idx() *gin.Engine {
 		noti.GET("/anc/detail/:idx", p.nt.GetAnnouncementDetail)
 	}
 
-	inbox := e.Group("inbox/v01", p.SecurityHeaders())
+	inbox := e.Group("inbox/v01", p.SecurityHeaders(), p.JwtAuth())
 	{
-		inbox.GET("/list")
+		inbox.GET("/list", p.chat.GetChatRooms)
+		inbox.GET("/unread", p.chat.GetTotalUnread)
 	}
 
 	present := e.Group("present/v01", p.SecurityHeaders(), liteAuth())
@@ -266,15 +267,19 @@ func (p *Router) Idx() *gin.Engine {
 	}
 
 	// 텍스트 채팅 인터페이스
-	chat := e.Group("chat/v01", p.SecurityHeaders())
+	// chat := e.Group("chat/v01", p.SecurityHeaders(), p.JwtAuth())
+	chat := e.Group("dm/v01", p.SecurityHeaders())
 	{
 		// WebSocket 메시징 엔드포인트
 		chat.GET("/ws", p.chat.HandleWebSocket)
 
 		// 채팅방 생성
-		chat.POST("/room", p.chat.CreateChatRoom)
+		//Todo: JWT Auth 처리
+		// chat.POST("/create", p.JwtAuth(), p.chat.CreateChatRoom)
+		chat.POST("/create", p.chat.CreateChatRoom)
 
 		// 사용자의 채팅방 목록 조회
+		// chat.GET("/rooms", p.JwtAuth(), p.chat.GetChatRooms)
 		chat.GET("/rooms", p.chat.GetChatRooms)
 
 		// 채팅 기록 조회

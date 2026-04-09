@@ -467,6 +467,45 @@ func (p *AccountDB) GetUserInfo(id string) (ptl.UserInfoResp, error) {
 	return user, nil
 }
 
+// GetUserInfoByUID uid 기반 사용자 조회
+func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptl.UserInfoResp, error) {
+	query := "SELECT sid, uid, did, email, name, nick, gender, age, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE uid = ? LIMIT 1"
+	row := p.conndb.QueryRow(query, uid)
+	var user ptl.UserInfoResp
+	var encEmail, encName string
+	var did sql.NullString
+
+	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Age, &user.Birth, &user.Area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
+	if err != nil {
+		return ptl.UserInfoResp{}, err
+	}
+
+	if did.Valid {
+		user.Did = did.String
+	} else {
+		user.Did = ""
+	}
+
+	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
+	if encEmail != "" {
+		decEmail, decErr := utils.DecryptChaCha20(encEmail, key)
+		if decErr != nil {
+			return ptl.UserInfoResp{}, fmt.Errorf("error decrypting email: %v", decErr)
+		}
+		user.Email = decEmail
+	}
+
+	if encName != "" {
+		decName, decErr := utils.DecryptChaCha20(encName, key)
+		if decErr != nil {
+			return ptl.UserInfoResp{}, fmt.Errorf("error decrypting name: %v", decErr)
+		}
+		user.Name = decName
+	}
+
+	return user, nil
+}
+
 func (p *AccountDB) GetSetAlert(uid uint64) (int, error) {
 	query := "SELECT set_alert FROM user_info WHERE uid = ?"
 	row := p.conndb.QueryRow(query, uid)
