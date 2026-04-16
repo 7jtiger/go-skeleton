@@ -403,13 +403,13 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 // @xample 응답 예시
 // HTTP/1.1 200 OK
 // Content-Type: application/json
-// {
-//     "msg": "success",
-//     "acTok": "new-access-token-here",
-//     "refTok": "new-refresh-token-here",
-//     "uid": "12345"
-// }
-
+//
+//	{
+//	    "msg": "success",
+//	    "acTok": "new-access-token-here",
+//	    "refTok": "new-refresh-token-here",
+//	    "uid": "12345"
+//	}
 func (p *AccountController) RefreshToken(c *gin.Context) {
 	refTok := extractRefreshToken(c)
 	if refTok == "" {

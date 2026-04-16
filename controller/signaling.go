@@ -352,6 +352,221 @@ func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 // @Success 101 {object} Message "Switching Protocols - WebSocket connection successful"
 // @Router /webrtc/v01/ws [get]
 // @Param userId query string false "UID"
+//
+// @Summary: WebRTC 시그널링/통화 WebSocket 엔드포인트
+// @Description: |
+//   ### 단계 1: WebSocket 접속 및 join-waiting 전송
+//   **Client → Server**
+//   ```json
+//   {
+//     "type": "join-waiting",
+//     "data": {
+//       "userID": "user123",
+//       "name": "홍길동"
+//     }
+//   }
+//   ```
+//
+//   ### 단계 2: 서버의 입장 broadcast 및 user-list 요청/응답
+//   **Server → 모든 대기방 사용자** (누군가 입장하면 broadcast)
+//   ```json
+//   {
+//     "type": "waiting-user-joined",
+//     "data": {
+//       "userID": "user123",
+//       "name": "홍길동"
+//     }
+//   }
+//   ```
+//
+//   **Client → Server** (리스트 요청)
+//   ```json
+//   {
+//     "type": "get-user-list"
+//   }
+//   ```
+////   **Server → Client** (user-list 응답)
+//   ```json
+//   {
+//     "type": "waiting-user-list",
+//     "data": [
+//       { "uid": "user123", "nick": "홍길동" },
+//       { "uid": "user456", "nick": "김철수" }
+//     ]
+//   }
+//   ```
+//
+//   ### 단계 3: 통화 제안 시 call-request
+//   **Client → Server**
+//   ```json
+//   {
+//     "type": "call-request",
+//     "data": {
+//       "target_uid": "user456",
+//       "media": { "video": {}, "audio": {} }
+//     }
+//   }
+//   ```
+//
+//   **Server → 대상자** (call-incoming)
+//   ```json
+//   {
+//     "type": "call-incoming",
+//     "data": {
+//       "from_uid": "user123",
+//       "media": { "video": {}, "audio": {} }
+//     }
+//   }
+//   ```
+//
+//   ### 단계 4: 통화 수락/거절 응답
+//   **상대방 Client → Server**
+//   ```json
+//   {
+//     "type": "call-response",
+//     "data": {
+//       "from_uid": "user456",
+//       "accept": true
+//     }
+//   }
+//   ```
+////   **Server → 발신자** (call-result)
+//   ```json
+//   {
+//     "type": "call-result",
+//     "data": {
+//       "accept": true,
+//       "responder_uid": "user456"
+//     }
+//   }
+//   ```
+//
+//   ### 단계 5: 통화 취소
+//   **Client → Server**
+//   ```json
+//   {
+//     "type": "call-cancel",
+//     "data": { "target_uid": "user456" }
+//   }
+//   ```
+//
+//   **Server → 대상자**
+//   ```json
+//   {
+//     "type": "call-canceled",
+//     "data": { "target_uid": "user456" }
+//   }
+//   ```
+//
+//   ### 에러 예시
+//   **Server → Client**
+//   ```json
+//   {
+//     "type": "error",
+//     "data": { "msg": "방이 가득 찼습니다", "code": 4001 }
+//   }
+//   ```
+//
+// @Messages:
+//   - name: join-waiting
+//     description: 클라이언트가 최초 입장 시 전송
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: join-waiting }
+//         data: { type: object }
+//     responses:
+//       - name: waiting-user-joined
+//         description: 전체 대기방에 새로운 유저 입장 broadcast
+//
+//   - name: get-user-list
+//     description: 대기방 사용자 목록 요청
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: get-user-list }
+//     responses:
+//       - name: waiting-user-list
+//         description: 대기방 사용자 목록 응답
+//
+//   - name: call-request
+//     description: 특정 대상에게 화상/음성 통화 제안시 사용
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: call-request }
+//         data:
+//           type: object
+//           properties:
+//             target_uid: { type: string }
+//             media: { $ref: '#/components/schemas/MediaConfig' }
+//     responses:
+//       - name: call-incoming
+//         description: 상대방에게 콜 제안 알림 메시지
+//
+//   - name: call-response
+//     description: 통화 요청('call-request')에 대한 응답 (accept/deny)
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: call-response }
+//         data:
+//           type: object
+//           properties:
+//             from_uid: { type: string }
+//             accept: { type: boolean }
+//     responses:
+//       - name: call-result
+//         description: "콜 요청 발신자에게 전달되는 응답 (수락, 거절, 기타상황)"
+//
+//   - name: call-cancel
+//     description: 통화 요청/진행 중 취소
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: call-cancel }
+//         data:
+//           type: object
+//           properties:
+//             target_uid: { type: string }
+//     responses:
+//       - name: call-canceled
+//         description: 상대방에게 통화가 취소되었음을 알림
+//
+//   - name: error
+//     description: 서버에서 발생한 에러 메시지
+//     payload:
+//       type: object
+//       properties:
+//         type: { type: string, example: error }
+//         data:
+//           type: object
+//           properties:
+//             msg: { type: string }
+//             code: { type: integer, nullable: true }
+//
+// components:
+//   schemas:
+//     WTRoomUser:
+//       type: object
+//       properties:
+//         uid: { type: string }
+//         sid: { type: string }
+//         did: { type: string }
+//         mainPic: { type: string }
+//         thumbPic: { type: string }
+//         intro: { type: string }
+//         gender: { type: string }
+//         nick: { type: string }
+//         area: { type: string }
+//         age: { type: string }
+//         newStat: { type: boolean }
+//     MediaConfig:
+//       type: object
+//       properties:
+//         video: { type: object }
+//         audio: { type: object }
+
 func (p *SignalingController) HandleConnection(c *gin.Context) {
 	// 연결 수 제한 확인
 	if atomic.LoadInt64(&p.totalConn) >= MAX_VDWS_CONNECT {
