@@ -522,6 +522,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/acc/v01/logout": {
+            "post": {
+                "description": "Logout user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Logout user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access_token",
+                        "name": "Authorization",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "msg: success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.OkResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/acc/v01/modify": {
             "post": {
                 "description": "Modify user information. The 'cate' field should be one of \"pw, area, nick, email\" indicating the target to be changed, and the 'value' field should contain the new value for the target.",
@@ -573,6 +622,69 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/acc/v01/refresh": {
+            "post": {
+                "description": "Reissues access and refresh token using a valid refresh token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Refresh access token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer refresh_token",
+                        "name": "Authorization",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Refresh token payload { refTok: xxx }",
+                        "name": "data",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RefreshTokenReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/protocol.RefreshTokenResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid refresh token",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -766,9 +878,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/chatroom/v01/event": {
-            "post": {
-                "description": "Move chatroom to top based on event type (message, mention, urgent, read)",
+        "/dm/v01/list/{roomId}": {
+            "get": {
+                "description": "특정 채팅방의 메시지 기록을 조회합니다",
                 "consumes": [
                     "application/json"
                 ],
@@ -776,126 +888,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chatroom"
+                    "chat"
                 ],
-                "summary": "Handle chatroom event",
+                "summary": "채팅 기록 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "{roomId: string, eventType: string, lastMessage: string}",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/chatroom/v01/join": {
-            "post": {
-                "description": "Add a chatroom to user's list (when login or first access)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "chatroom"
-                ],
-                "summary": "Join a chatroom",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "{roomId: string, roomName: string}",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/chatroom/v01/leave/{roomId}": {
-            "delete": {
-                "description": "Remove chatroom from user's list",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "chatroom"
-                ],
-                "summary": "Leave a chatroom",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Room ID",
+                        "description": "Chat Room ID",
                         "name": "roomId",
                         "in": "path",
                         "required": true
@@ -905,100 +904,36 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/protocol.ChatMessage"
+                            }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "roomId required",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
             }
         },
-        "/chatroom/v01/list": {
-            "get": {
-                "description": "Get user's chatroom list sorted by last activity and priority",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "chatroom"
-                ],
-                "summary": "Get user's chatroom list",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Offset for pagination",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Limit for pagination",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/protocol.RespDataHeader"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/models.ChatRoomListItem"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/chatroom/v01/read": {
+        "/dm/v01/message": {
             "post": {
-                "description": "Update unread count to 0 for specific chatroom",
+                "description": "REST API를 통해 특정 채팅방에 메시지를 전송합니다",
                 "consumes": [
                     "application/json"
                 ],
@@ -1006,117 +941,54 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chatroom"
+                    "chat"
                 ],
-                "summary": "Mark chatroom as read",
+                "summary": "REST API 메시지 전송",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "{roomId: string}",
+                        "description": "Message request body",
                         "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "content": {
+                                    "type": "string"
+                                },
+                                "roomId": {
+                                    "type": "string"
+                                },
+                                "userId": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Message sent",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "500": {
+                        "description": "Failed to save message",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/chatroom/v01/stats": {
-            "get": {
-                "description": "Get total chatroom count and unread message count",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "chatroom"
-                ],
-                "summary": "Get chatroom statistics",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer {token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/protocol.RespDataHeader"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/content/v01/test": {
-            "get": {
-                "description": "Test endpoint for content controller",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "content"
-                ],
-                "summary": "Content test endpoint",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -1397,6 +1269,170 @@ const docTemplate = `{
                 }
             }
         },
+        "/noti/v01/anc/detail/{idx}": {
+            "get": {
+                "description": "공지사항 상세 정보를 조회합니다",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Noti"
+                ],
+                "summary": "공지사항 상세 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Announcement index",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.Announcement"
+                        }
+                    },
+                    "400": {
+                        "description": "idx is required",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "Announcement not found",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get announcement detail",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/noti/v01/anc/list": {
+            "get": {
+                "description": "공지사항 목록을 조회합니다 (일주일 이내 공지는 new 표시)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Noti"
+                ],
+                "summary": "공지사항 목록 조회",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/protocol.Announcement"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get announcement list",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/noti/v01/detail/{idx}": {
+            "get": {
+                "description": "알림 상세 정보를 조회하고 읽음 처리합니다",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Noti"
+                ],
+                "summary": "알림 상세 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Noti index",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.Noti"
+                        }
+                    },
+                    "400": {
+                        "description": "idx is required",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get noti detail",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/noti/v01/list/{id}": {
+            "get": {
+                "description": "사용자의 알림 목록을 조회합니다",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Noti"
+                ],
+                "summary": "알림 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "id is required",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/story/v01/comment/create": {
             "post": {
                 "description": "Create a new comment for a story",
@@ -1407,7 +1443,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Create a story comment",
                 "parameters": [
@@ -1579,6 +1615,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/story/v01/comment/{idx}/{page}": {
+            "get": {
+                "description": "Retrieve a paginated list of comments for a specific story. Each comment includes idx, wuid, nick, body, at_create, etc.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "Get story comment details (list)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Story Index",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Page number (starting from 1)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved story comments - returns an array of comments with idx, wuid, nick, body, at_create, etc.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid or missing idx/page",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error - failed to get story comments",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
         "/story/v01/delpic": {
             "post": {
                 "description": "Delete a picture from a story and move it to backup",
@@ -1589,7 +1676,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Delete a story picture",
                 "parameters": [
@@ -1638,7 +1725,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Get story detail by story index",
                 "parameters": [
@@ -1682,7 +1769,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Get story list by user ID",
                 "parameters": [
@@ -1726,7 +1813,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Update story body",
                 "parameters": [
@@ -1775,7 +1862,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Update story status",
                 "parameters": [
@@ -1829,7 +1916,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "story"
+                    "Story"
                 ],
                 "summary": "Upload story picture",
                 "parameters": [
@@ -2127,37 +2214,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/webrtc/v01/ws": {
-            "get": {
-                "description": "Handles WebSocket connection and upgrades it to WebSocket protocol and puts the client into the waiting room or chat room",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Signaling"
-                ],
-                "summary": "Handles WebSocket connection and upgrades it to WebSocket protocol",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "UID",
-                        "name": "userId",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "101": {
-                        "description": "Switching Protocols - WebSocket connection successful",
-                        "schema": {
-                            "$ref": "#/definitions/controller.Message"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -2199,18 +2255,6 @@ const docTemplate = `{
                 }
             }
         },
-        "controller.Message": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
         "controller.STUNTestResult": {
             "type": "object",
             "properties": {
@@ -2235,26 +2279,25 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ChatRoomListItem": {
+        "protocol.Announcement": {
             "type": "object",
             "properties": {
-                "lastActivity": {
+                "an_body": {
                     "type": "string"
                 },
-                "lastMessage": {
+                "an_title": {
                     "type": "string"
                 },
-                "priority": {
-                    "description": "0: 일반, 1: 중요, 2: 긴급",
+                "an_url": {
+                    "type": "string"
+                },
+                "at_msg": {
+                    "type": "string"
+                },
+                "idx": {
                     "type": "integer"
                 },
-                "roomId": {
-                    "type": "string"
-                },
-                "roomName": {
-                    "type": "string"
-                },
-                "unreadCount": {
+                "stat": {
                     "type": "integer"
                 }
             }
@@ -2276,6 +2319,55 @@ const docTemplate = `{
                 },
                 "noiseSuppression": {
                     "type": "boolean"
+                }
+            }
+        },
+        "protocol.ChatMessage": {
+            "type": "object",
+            "properties": {
+                "callMode": {
+                    "description": "video | audio | text",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "메시지 내용",
+                    "type": "string"
+                },
+                "from": {
+                    "description": "발신자 ID",
+                    "type": "string"
+                },
+                "msgId": {
+                    "description": "클라이언트 메시지 식별자",
+                    "type": "string"
+                },
+                "partner": {
+                    "description": "상대방 정보",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/protocol.PartnerInfo"
+                        }
+                    ]
+                },
+                "roomId": {
+                    "description": "채팅방 ID",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "타임스탬프",
+                    "type": "integer"
+                },
+                "to": {
+                    "description": "수신자 ID",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "text-message, typing, read-receipt, call-*",
+                    "type": "string"
+                },
+                "unread": {
+                    "description": "읽지 않은 메시지 수",
+                    "type": "integer"
                 }
             }
         },
@@ -2376,6 +2468,38 @@ const docTemplate = `{
                 }
             }
         },
+        "protocol.Noti": {
+            "type": "object",
+            "properties": {
+                "at_noti": {
+                    "type": "string"
+                },
+                "frm_nick": {
+                    "type": "string"
+                },
+                "frm_uid": {
+                    "type": "integer"
+                },
+                "frm_url": {
+                    "type": "string"
+                },
+                "idx": {
+                    "type": "integer"
+                },
+                "nt_msg": {
+                    "type": "string"
+                },
+                "nt_title": {
+                    "type": "string"
+                },
+                "nt_type": {
+                    "type": "integer"
+                },
+                "stat": {
+                    "type": "integer"
+                }
+            }
+        },
         "protocol.OkResp": {
             "type": "object",
             "properties": {
@@ -2423,6 +2547,31 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pic1": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.RefreshTokenReq": {
+            "type": "object",
+            "properties": {
+                "refTok": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.RefreshTokenResp": {
+            "type": "object",
+            "properties": {
+                "acTok": {
+                    "type": "string"
+                },
+                "msg": {
+                    "type": "string"
+                },
+                "refTok": {
+                    "type": "string"
+                },
+                "uid": {
                     "type": "string"
                 }
             }

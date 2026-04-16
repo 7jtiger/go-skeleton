@@ -1,4 +1,6 @@
 #!/bin/bash
+make
+make swg
 rsync -av --delete \
 	--exclude '.cursor/' \
 	--exclude '.git/'	\

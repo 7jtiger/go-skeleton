@@ -70,7 +70,7 @@ func (p *StoryController) GetStoryHomeList(c *gin.Context) {
 // GetStoryList godoc
 // @Summary Get story list by user ID
 // @Description Retrieve list of stories for a specific user
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param uid path string true "User ID"
@@ -105,7 +105,7 @@ func (p *StoryController) GetStoryList(c *gin.Context) {
 // GetStoryDetail godoc
 // @Summary Get story detail by story index
 // @Description Retrieve detailed information of a specific story including comments
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param idx path string true "Story Index"
@@ -140,7 +140,7 @@ func (p *StoryController) GetStoryDetail(c *gin.Context) {
 // GetStrCmtDetail godoc
 // @Summary Get story comment details (list)
 // @Description Retrieve a paginated list of comments for a specific story. Each comment includes idx, wuid, nick, body, at_create, etc.
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param idx path string true "Story Index"
@@ -178,7 +178,7 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 // UploadStoryPic godoc
 // @Summary Upload story picture
 // @Description Upload story picture to Cloudflare Images
-// @Tags story
+// @Tags Story
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
@@ -373,7 +373,7 @@ func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[stri
 // UpdateStoryStat godoc
 // @Summary Update story status
 // @Description Update the status of a story
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param request body protocol.UpdateStrStatReq true "Update story status request stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 :resv"
@@ -420,7 +420,7 @@ func (p *StoryController) UpdateStoryStat(c *gin.Context) {
 // UpdateStrBody godoc
 // @Summary Update story body
 // @Description Update the body content of a story
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param request body protocol.UpdateStrBodyReq true "Update story body request"
@@ -461,7 +461,7 @@ func (p *StoryController) UpdateStrBody(c *gin.Context) {
 // DeleteStrPic godoc
 // @Summary Delete a story picture
 // @Description Delete a picture from a story and move it to backup
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param request body protocol.DeleteStrPicReq true "Delete story picture request"
@@ -535,11 +535,12 @@ func (p *StoryController) DeleteStrPic(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str pic comment", "affected": affected})
 }
 
-// ------------- comment -------------
+/* ------------- comment -------------*/
+
 // CreateStrComment godoc
 // @Summary Create a story comment
 // @Description Create a new comment for a story
-// @Tags story
+// @Tags Story
 // @Accept json
 // @Produce json
 // @Param str_idx query string true "Story index"

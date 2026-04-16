@@ -287,7 +287,7 @@ func (p *Router) Idx() *gin.Engine {
 		chat.GET("/rooms", p.chat.GetChatRooms)
 
 		// 채팅 기록 조회
-		chat.GET("/history/:roomId", p.chat.GetChatHistory)
+		// chat.GET("/list/:roomId", p.chat.GetChatList)
 
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)

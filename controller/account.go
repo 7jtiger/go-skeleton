@@ -49,24 +49,12 @@ func NewAccountController(ctl *Controller, rep *models.Repositories) (*AccountCo
 	return r, nil
 }
 
-// swagger:route GET /serv/v01/version get version
-// get version
-// responses:
-//
-//	200: {object} protocol.OkResp "version: 0.9.1"
-//
 // @Summary get version
 // @Description get version
 func (p *AccountController) GetVersion(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"version": "0.9.1"})
 }
 
-// swagger:route GET /acc/v01/check/:id check user id
-// check user id
-// responses:
-//
-//	200:
-//
 // @Summary check user id
 // @Description When /acc/v01/check/:id is called, it returns "ok" on success and a message on failure.
 // @Description id : user id
@@ -92,12 +80,6 @@ func (p *AccountController) CheckID(c *gin.Context) {
 	}
 }
 
-// swagger:route GET /acc/v01/ckemail/:email check user email
-// check user email
-// responses:
-//
-//	200:
-//
 // @Summary check user email
 // @Description When /acc/v01/ckemail/:email is called, it returns "ok" on success and a message on failure.
 // @Description email : user email
@@ -122,10 +104,6 @@ func (p *AccountController) CheckEmail(c *gin.Context) {
 	}
 }
 
-// swagger:route POST /acc/v01/regist register user
-// register user
-// responses: 200:
-//
 // @Summary Register a new user
 // @Description Calls /acc/v01/regist to register a new user. Returns "success" message on success.
 // @Description Required fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email
@@ -232,9 +210,6 @@ func (p *AccountController) getUid() uint64 {
 	}
 }
 
-// swagger:route POST /acc/v01/login login user
-// login user
-// responses:200:
 // @Summary Login a user
 // @Description Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success. Also sets x-meta header with user metadata.
 // @Tags user
@@ -394,12 +369,15 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 // @xample 요청 예시
 // POST /acc/v01/refresh
 // Header:
-//   Authorization: Bearer <refresh_token>
+//
+//	Authorization: Bearer <refresh_token>
+//
 // Body:
-// {
-//     "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2ODg4ODg4ODgsInVzZXJpZCI6IjEyMzQ1In0.sM4wL5WOEV2TqtW06R1vGuFsxWXhYMrh6oZ7PWnykJc"
-// }
-
+//
+//	{
+//	    "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2ODg4ODg4ODgsInVzZXJpZCI6IjEyMzQ1In0.sM4wL5WOEV2TqtW06R1vGuFsxWXhYMrh6oZ7PWnykJc"
+//	}
+//
 // @xample 응답 예시
 // HTTP/1.1 200 OK
 // Content-Type: application/json
@@ -490,35 +468,17 @@ func extractRefreshToken(c *gin.Context) string {
 	return ""
 }
 
-// swagger:route POST /inserv/v01/logout Account LogoutUser
-// User Logout
-// Invalidates the JWT token and performs user logout processing.
-// The following operations are performed during logout:
-// - Delete JWT access token
-// - Remove user from waiting room (WTRoom)
-// - Update last access time
-// Security:
-//   - Bearer: []
-//
-// Responses:
-//
-//	200: LogoutResponse
-//	400: ErrorResponse
-//	401: UnauthorizedResponse
-//	500: InternalServerErrorResponse
-//
-// Example Request:
-//
-//	POST /inserv/v01/logout HTTP/1.1
-//	Host: localhost:8080
-//	Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-//	Content-Type: application/json
-//
-// Example Response (Success):
-//
-//	HTTP/1.1 200 OK
-//	Content-Type: application/json
-//	{ "msg": "success"}
+// @Summary Logout user
+// @Description Logout user
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param Authorization header string false "Bearer access_token"
+// @Success 200 {object} protocol.OkResp "msg: success"
+// @Failure 400 {object} protocol.RespHeader "Bad request"
+// @Failure 401 {object} protocol.RespHeader "Unauthorized"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
+// @Router /acc/v01/logout [post]
 func (p *AccountController) LogoutUser(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -566,7 +526,6 @@ func (p *AccountController) LogoutUser(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// swagger:route POST /acc/v01/leave leave user
 // @Summary Leave a user
 // @Description Performs user leave. Returns "success" message on success.
 // @Tags user
@@ -610,7 +569,6 @@ func (p *AccountController) LeaveUser(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// 아이디 찾기, 여러개 일수 있음
 // @Summary Find user ID
 // @Description Find user ID by name and birth date
 // @Tags user
@@ -650,7 +608,6 @@ func (p *AccountController) FindID(c *gin.Context) {
 	p.ctl.SendDataResponse(c, http.StatusOK, ids)
 }
 
-// 비번 변경전 확인 절차, 이후 이메일 인증 번호 전송
 // @Summary Find user PW
 // @Description Find user password by id and birth date
 // @Tags user
@@ -734,9 +691,6 @@ func (p *AccountController) sendEmailOtpCode(email, nick, otp string) bool {
 	return true
 }
 
-// otp key 발급, 레디스 저장, 이메일 주소 전달, 이메일
-
-// ReqAuthOTP godoc
 // @Summary Request OTP authentication code
 // @Description Generate and send OTP code to user's email for authentication
 // @Tags user
@@ -788,7 +742,6 @@ func (p *AccountController) ReqAuthOTP(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// email, otp 입력값을 받아 레디스에서 조회, 검증 확인
 // @Summary Verify OTP authentication code
 // @Description Verify OTP code for authentication
 // @Tags user
@@ -833,7 +786,6 @@ func (p *AccountController) VerifyOTP(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// ChangePW godoc
 // @Summary Change user password
 // @Description Change the password of a user
 // @Tags user
@@ -876,7 +828,6 @@ func (p *AccountController) ChangePW(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// ModifyUserInfo godoc
 // @Summary Modify user information
 // @Description Modify user information. The 'cate' field should be one of "pw, area, nick, email" indicating the target to be changed, and the 'value' field should contain the new value for the target.
 // @Tags user
@@ -919,7 +870,6 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// GetUserInfo godoc
 // @Summary Get user information
 // @Description Get user information
 // @Tags user
@@ -946,7 +896,6 @@ func (p *AccountController) GetUserInfo(c *gin.Context) {
 	p.ctl.SendResponse(c, http.StatusOK, user)
 }
 
-// DeleteUser godoc
 // @Summary Delete user
 // @Description Delete user, but just update user status to 4
 // @Tags user
@@ -983,7 +932,6 @@ func (p *AccountController) DeleteUser(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
-// ModifyMainPic godoc
 // @Summary Modify main picture
 // @Description Upload and modify user's main profile picture to Cloudflare Images
 // @Tags user

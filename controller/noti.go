@@ -38,6 +38,16 @@ func NewNotiController(ctl *Controller, rep *models.Repositories) (*NotiControll
 	return r, nil
 }
 
+// GetNotiList godoc
+// @Summary      알림 목록 조회
+// @Description  사용자의 알림 목록을 조회합니다
+// @Tags         Noti
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "User ID"
+// @Success      200  {object}  protocol.RespHeader
+// @Failure      400  {object}  protocol.RespHeader "id is required"
+// @Router       /noti/v01/list/{id} [get]
 func (p *NotiController) GetNotiList(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -68,7 +78,17 @@ func (p *NotiController) GetNotiNewCount(uid uint64) (int, error) {
 	//return p.ctl.Rdb.Get(p.ctl.Rdb.Key(fmt.Sprintf("noti:%s", id)))
 }
 
-// 디테일 조회시 읽음 처리
+// GetNotiDetail godoc
+// @Summary      알림 상세 조회
+// @Description  알림 상세 정보를 조회하고 읽음 처리합니다
+// @Tags         Noti
+// @Accept       json
+// @Produce      json
+// @Param        idx  path      string  true  "Noti index"
+// @Success      200  {object}  protocol.Noti
+// @Failure      400  {object}  protocol.RespHeader "idx is required"
+// @Failure      500  {object}  protocol.RespHeader "Failed to get noti detail"
+// @Router       /noti/v01/detail/{idx} [get]
 func (p *NotiController) GetNotiDetail(c *gin.Context) {
 	idx := c.Param("idx")
 	if idx == "" {
@@ -96,7 +116,15 @@ func (p *NotiController) GetNotiDetail(c *gin.Context) {
 	p.ctl.SendDataResponse(c, http.StatusOK, noti)
 }
 
-// 공지 일주일동안은 new  /noti/v01/anc/list
+// GetAnnouncement godoc
+// @Summary      공지사항 목록 조회
+// @Description  공지사항 목록을 조회합니다 (일주일 이내 공지는 new 표시)
+// @Tags         Noti
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   protocol.Announcement
+// @Failure      500  {object}  protocol.RespHeader "Failed to get announcement list"
+// @Router       /noti/v01/anc/list [get]
 func (p *NotiController) GetAnnouncement(c *gin.Context) {
 	announcementList, err := p.hdb.GetAnnouncementList()
 	if err != nil {
@@ -136,6 +164,18 @@ func (p *NotiController) SetAnnouncement(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
 }
 
+// GetAnnouncementDetail godoc
+// @Summary      공지사항 상세 조회
+// @Description  공지사항 상세 정보를 조회합니다
+// @Tags         Noti
+// @Accept       json
+// @Produce      json
+// @Param        idx  path      string  true  "Announcement index"
+// @Success      200  {object}  protocol.Announcement
+// @Failure      400  {object}  protocol.RespHeader "idx is required"
+// @Failure      404  {object}  protocol.RespHeader "Announcement not found"
+// @Failure      500  {object}  protocol.RespHeader "Failed to get announcement detail"
+// @Router       /noti/v01/anc/detail/{idx} [get]
 func (p *NotiController) GetAnnouncementDetail(c *gin.Context) {
 	idx := c.Param("idx")
 	if idx == "" {

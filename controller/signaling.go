@@ -353,8 +353,8 @@ func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 // @Router /webrtc/v01/ws [get]
 // @Param userId query string false "UID"
 //
-// @Summary: WebRTC 시그널링/통화 WebSocket 엔드포인트
-// @Description: |
+// [WebSocket Protocol] WebRTC 시그널링/통화 WebSocket 엔드포인트
+// 상세 프로토콜 설명:
 //   ### 단계 1: WebSocket 접속 및 join-waiting 전송
 //   **Client → Server**
 //   ```json
@@ -467,7 +467,7 @@ func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 //   }
 //   ```
 //
-// @Messages:
+// Messages:
 //   - name: join-waiting
 //     description: 클라이언트가 최초 입장 시 전송
 //     payload:

@@ -74,18 +74,20 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 	return r, nil
 }
 
-// HandleWebSocket 텍스트 채팅 WebSocket 연결 핸들러
-//
-// [송신자 정책] 현재: userId 쿼리 파라미터 기반 (테스트용)
-// TODO: JWT 적용 시 아래 주석 블록을 활성화하여 토큰에서 uid를 강제 추출하고,
-//
-//	userId 파라미터는 무시하도록 전환할 것.
-//
-// [수신자 정책] 수신자는 로그인 여부와 무관하게 메시지를 수신할 수 있어야 함:
-//   - Chat WS 연결 중이면 실시간 전달
-//   - 미연결(로그아웃/오프라인)이면 FCM Push로 전달
-// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
-// Sec-WebSocket-Version: 13
+/*
+HandleWebSocket 텍스트 채팅 WebSocket 연결 핸들러
+
+[송신자 정책] 현재: userId 쿼리 파라미터 기반 (테스트용)
+TODO: JWT 적용 시 아래 주석 블록을 활성화하여 토큰에서 uid를 강제 추출하고,
+
+	userId 파라미터는 무시하도록 전환할 것.
+
+[수신자 정책] 수신자는 로그인 여부와 무관하게 메시지를 수신할 수 있어야 함:
+  - Chat WS 연결 중이면 실시간 전달
+  - 미연결(로그아웃/오프라인)이면 FCM Push로 전달
+Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+Sec-WebSocket-Version: 13
+*/
 
 // HandleWebSocket
 //
@@ -655,7 +657,7 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 // ]
 
 func (cc *ChatController) GetChatRooms(c *gin.Context) {
-	//Todo: JWT Auth 처리
+	//Todo: JWT Auth 처리, 페이징 처리리
 	/*
 		user, exists := c.Get("user")
 		if !exists {
@@ -763,8 +765,18 @@ func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 	})
 }
 
-// GetChatHistory 채팅 기록 조회
-func (cc *ChatController) GetChatHistory(c *gin.Context) {
+// GetChatList godoc
+// @Summary      채팅 기록 조회
+// @Description  특정 채팅방의 메시지 기록을 조회합니다
+// @Tags         chat
+// @Accept       json
+// @Produce      json
+// @Param        roomId  path      string  true  "Chat Room ID"
+// @Success      200  {array}   protocol.ChatMessage
+// @Failure      400  {object}  map[string]string "roomId required"
+// @Failure      500  {object}  map[string]string "Internal Server Error"
+// @Router       /dm/v01/list/{roomId} [get]
+func (cc *ChatController) GetChatList(c *gin.Context) {
 	roomID := c.Param("roomId")
 	if roomID == "" {
 		cc.ctl.SimpleError(c, http.StatusBadRequest, "roomId required")
@@ -798,6 +810,17 @@ func (cc *ChatController) GetChatHistory(c *gin.Context) {
 	*/
 }
 
+// SendMessage godoc
+// @Summary      REST API 메시지 전송
+// @Description  REST API를 통해 특정 채팅방에 메시지를 전송합니다
+// @Tags         chat
+// @Accept       json
+// @Produce      json
+// @Param        data  body      object{roomId=string,userId=string,content=string}  true  "Message request body"
+// @Success      200  {object}  protocol.RespHeader "Message sent"
+// @Failure      400  {object}  map[string]string "Invalid request"
+// @Failure      500  {object}  map[string]string "Failed to save message"
+// @Router       /dm/v01/message [post]
 // SendMessage REST API를 통한 메시지 전송
 func (cc *ChatController) SendMessage(c *gin.Context) {
 	var req struct {
