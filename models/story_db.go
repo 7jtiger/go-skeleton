@@ -34,15 +34,19 @@ CREATE TABLE `story` (
 CREATE TABLE `str_cmt` (
   `idx` int unsigned NOT NULL AUTO_INCREMENT,
   `str_idx` int unsigned NOT NULL,
-  `uid` bigint NOT NULL,
+  `wuid` bigint NOT NULL,
   `nick` varchar(20) DEFAULT NULL,
+  `thumb_url` varchar(256) DEFAULT NULL,
+  `wgender` varchar(2) DEFAULT NULL,
+  `wage` varchar(45) DEFAULT NULL,
+  `warea` varchar(45) DEFAULT NULL,
   `body` varchar(256) DEFAULT NULL,
-  `stat` tinyint DEFAULT NULL,
+  `stat` tinyint DEFAULT NULL COMMENT 'stat=0:default, stat=1:private, stat=2::rerv, stat=3:rerv,stat=4:del',
   `at_create` datetime DEFAULT CURRENT_TIMESTAMP,
   `at_update` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `idx_UNIQUE` (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 */
 
@@ -207,19 +211,38 @@ func (p *StoryDB) UpdateStrBody(strIdx int, body string) (int64, error) {
 }
 
 func (p *StoryDB) SetStrComment(cmt *ptl.StrComment) (int64, error) {
-	query := `INSERT INTO str_cmt (str_idx, wuid, nick, body, stat, at_create, at_update) 
-				VALUES (?, ?, ?, ?, ?, NOW(), NOW())`
-	result, err := p.conndb.Exec(query, cmt.StrIdx, cmt.Wuid, cmt.Nick, cmt.Body, cmt.Stat)
+	query := `INSERT INTO str_cmt (str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update) 
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
+	result, err := p.conndb.Exec(
+		query,
+		cmt.StrIdx,
+		cmt.Wuid,
+		cmt.Nick,
+		cmt.ThumbUrl,
+		cmt.WGender,
+		cmt.WAge,
+		cmt.WArea,
+		cmt.Body,
+		cmt.Stat,
+	)
 	if err != nil {
 		return 0, err
 	}
 	return result.LastInsertId()
 }
 
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int) (*[]ptl.StrComment, error) {
-	query := `SELECT idx, wuid, nick, body, at_create FROM str_cmt WHERE str_idx = ? AND stat IN (0,1) ORDER BY at_create DESC`
-	// var comments []ptl.StrComment
-	rows, err := p.conndb.Query(query, cmtIdx)
+func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, error) {
+	const pageSize = 20
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
+	          FROM str_cmt
+	          WHERE str_idx = ? AND stat IN (0,1)
+	          ORDER BY at_create DESC
+	          LIMIT ? OFFSET ?`
+	rows, err := p.conndb.Query(query, cmtIdx, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +251,48 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int) (*[]ptl.StrComment, error) {
 	comments := []ptl.StrComment{}
 	for rows.Next() {
 		var comment ptl.StrComment
-		err := rows.Scan(&comment.Idx, &comment.Wuid, &comment.Nick, &comment.Body, &comment.AtCreate)
+		var nick, thumbUrl, wgender, wage, warea, body sql.NullString
+		err := rows.Scan(
+			&comment.Idx,
+			&comment.StrIdx,
+			&comment.Wuid,
+			&nick,
+			&thumbUrl,
+			&wgender,
+			&wage,
+			&warea,
+			&body,
+			&comment.Stat,
+			&comment.AtCreate,
+			&comment.AtUpdate,
+		)
 		if err != nil {
 			return nil, err
+		}
+		// NULL string 처리
+		comment.Nick = ""
+		if nick.Valid {
+			comment.Nick = nick.String
+		}
+		comment.ThumbUrl = ""
+		if thumbUrl.Valid {
+			comment.ThumbUrl = thumbUrl.String
+		}
+		comment.WGender = ""
+		if wgender.Valid {
+			comment.WGender = wgender.String
+		}
+		comment.WAge = ""
+		if wage.Valid {
+			comment.WAge = wage.String
+		}
+		comment.WArea = ""
+		if warea.Valid {
+			comment.WArea = warea.String
+		}
+		comment.Body = ""
+		if body.Valid {
+			comment.Body = body.String
 		}
 		comments = append(comments, comment)
 	}
@@ -238,7 +300,10 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int) (*[]ptl.StrComment, error) {
 }
 
 func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptl.StrComment, error) {
-	query := `SELECT idx, wuid, nick, body, at_create FROM str_cmt WHERE str_idx = ? AND stat IN (0,1) ORDER BY at_create DESC`
+	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
+	          FROM str_cmt
+	          WHERE str_idx = ? AND stat IN (0,1)
+	          ORDER BY at_create DESC`
 	// var comments []ptl.StrComment
 	rows, err := p.conndb.Query(query, strIdx)
 	if err != nil {
@@ -248,10 +313,55 @@ func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptl.StrComment, error) {
 
 	comments := []ptl.StrComment{}
 	for rows.Next() {
-		var comment ptl.StrComment
-		err := rows.Scan(&comment.Idx, &comment.Wuid, &comment.Nick, &comment.Body, &comment.AtCreate)
+		var (
+			comment  ptl.StrComment
+			nick     sql.NullString
+			thumbUrl sql.NullString
+			wgender  sql.NullString
+			wage     sql.NullString
+			warea    sql.NullString
+			body     sql.NullString
+		)
+		err := rows.Scan(
+			&comment.Idx,
+			&comment.StrIdx,
+			&comment.Wuid,
+			&nick,
+			&thumbUrl,
+			&wgender,
+			&wage,
+			&warea,
+			&body,
+			&comment.Stat,
+			&comment.AtCreate,
+			&comment.AtUpdate,
+		)
 		if err != nil {
 			return nil, err
+		}
+		comment.Nick = ""
+		if nick.Valid {
+			comment.Nick = nick.String
+		}
+		comment.ThumbUrl = ""
+		if thumbUrl.Valid {
+			comment.ThumbUrl = thumbUrl.String
+		}
+		comment.WGender = ""
+		if wgender.Valid {
+			comment.WGender = wgender.String
+		}
+		comment.WAge = ""
+		if wage.Valid {
+			comment.WAge = wage.String
+		}
+		comment.WArea = ""
+		if warea.Valid {
+			comment.WArea = warea.String
+		}
+		comment.Body = ""
+		if body.Valid {
+			comment.Body = body.String
 		}
 		comments = append(comments, comment)
 	}

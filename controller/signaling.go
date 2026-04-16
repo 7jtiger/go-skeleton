@@ -318,7 +318,9 @@ func (p *SignalingController) brcWorker() {
 func (p *SignalingController) handleWTRoom(client *WSClient, msg *Message) {
 	switch msg.Type {
 	case "join-waiting":
-		// 대기방 입장 (이미 처리됨)
+		// 대기방 입장 상태 확인용 (목록은 별도 요청 프로토콜로 전송)
+	case "get-user-list":
+		// 대기방 사용자 목록 요청 시에만 반환
 		p.sendUserList(client)
 
 	case "call-request":
@@ -424,9 +426,6 @@ func (p *SignalingController) HandleConnection(c *gin.Context) {
 		p.waitingRoom.mu.Unlock()
 
 		log.Info("%s (ID: %s) joined waiting room", joinData.Name, joinData.UserID)
-
-		// 사용자 목록 전송
-		p.sendUserList(client)
 
 		// 다른 사용자들에게 새 사용자 입장 알림
 		p.broadcastUserJoined(client)
@@ -700,11 +699,23 @@ func (p *SignalingController) handleCallCancel(client *WSClient, msg *Message) {
 	}
 	cancelData, _ := json.Marshal(cancelMsg)
 
-	p.waitingRoom.mu.RLock()
-	targetClient, exists := p.waitingRoom.Clients[reqData.To]
-	p.waitingRoom.mu.RUnlock()
+	targetClient, exists := p.findClientByUserID(reqData.To)
 	if exists {
 		p.trySend(targetClient, cancelData)
+
+		// 수신자가 이미 통화방에 있는 상태에서 취소가 들어오면
+		// 종료 이벤트를 전달하고 대기실로 복귀시켜 통화를 정리한다.
+		if targetClient.room != nil {
+			endMsg := Message{
+				Type: "partner-left",
+				Data: map[string]interface{}{
+					"message": "발신자가 통화를 취소했습니다. 통화를 종료합니다.",
+				},
+			}
+			endData, _ := json.Marshal(endMsg)
+			p.trySend(targetClient, endData)
+			go p.returnToWaitingRoom(targetClient)
+		}
 	}
 
 	if p.ctl != nil && p.ctl.ChatCtl != nil {
@@ -825,6 +836,32 @@ func (p *SignalingController) IsUserInWaitingRoom(userID string) bool {
 	_, exists := p.waitingRoom.Clients[userID]
 	p.waitingRoom.mu.RUnlock()
 	return exists
+}
+
+// findClientByUserID는 대기실/통화방 전체에서 사용자 클라이언트를 찾는다.
+func (p *SignalingController) findClientByUserID(userID string) (*WSClient, bool) {
+	p.waitingRoom.mu.RLock()
+	if client, exists := p.waitingRoom.Clients[userID]; exists {
+		p.waitingRoom.mu.RUnlock()
+		return client, true
+	}
+	p.waitingRoom.mu.RUnlock()
+
+	p.roomsMu.RLock()
+	defer p.roomsMu.RUnlock()
+
+	for _, room := range p.rooms {
+		room.mu.RLock()
+		for c := range room.Clients {
+			if c.userID == userID {
+				room.mu.RUnlock()
+				return c, true
+			}
+		}
+		room.mu.RUnlock()
+	}
+
+	return nil, false
 }
 
 // ForwardCallRequest ChatController -> SignalingController 브릿지

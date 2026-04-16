@@ -49,6 +49,7 @@
 - `RegistUserInfo()`: Registers new user with encrypted data, generates default profile settings, and validates required fields
 - `LoginUser()`: Authenticates user login, creates JWT access/refresh tokens, stores session in Redis, initializes WebRTC session with device/network info, sets x-meta header, and returns WebRTC configuration
 - `genLoginUserToken()`: Internal function that generates JWT access token (24h) and refresh token (14d), stores them in Redis AUTH:ACCESS and AUTH:REFRESH hashes with user information
+- `RefreshToken()`: Validates refresh token (header/body), verifies JWT signature and Redis AUTH:REFRESH session, rotates access/refresh token pair atomically, and returns renewed tokens with x-meta header
 - `LogoutUser()`: Processes user logout, deletes JWT token from Redis, and updates last access time
 
 ### Account Management Functions
@@ -216,6 +217,8 @@
 
 ### Story Comment Functions
 - `CreateStrComment()`: Creates new comment on a story with writer uid, nickname, body (max 256 chars), and status
+- `CreateStrComment()`: 작성자 메타데이터(`thumb_url`, `wgender`, `wage`, `warea`)를 함께 저장
+- `GetStrCmtDetail()`: `idx/page` 기반 댓글 페이지 조회
 - `UpdateStrStatComment()`: Updates comment status (0=default, 1=private, 2=reserved, 3=reserved, 4=deleted)
 - `UpdateStrBodyComment()`: Updates comment body content
 
@@ -387,6 +390,7 @@
   2. Chat WS 온라인이면 → `call-incoming` DM 알림
   3. 완전 오프라인 → `FCMPusher.SendCallPush()` fallback
 - **통화 취소** (`handleCallCancel`): 수신자 오프라인 시 FCM push fallback 포함
+- **시그널링 취소 보강** (`SignalingController.handleCallCancel`): 수신자가 이미 통화방에 있는 경우 `partner-left` 이벤트 전달 + `returnToWaitingRoom()`으로 종료 처리
 
 ### ChatController (`chatCtl.go`)
 - `ChatClient`에 `uid uint64` 필드 추가
@@ -398,6 +402,7 @@
 
 ### SignalingController (`signaling.go`)
 - 대기실 메시지 타입에 `call-cancel` 추가
+- 대기방 사용자 목록 프로토콜 분리: `join-waiting` 자동 목록 전송 제거, `get-user-list` 요청 시 반환
 - `handleCallRequest()` 오프라인 fallback: Chat WS(`call-incoming`) -> FCM 순서 처리
 - `handleCallResponse()` 수락 시 `partner` 정보 포함
 - 신규 공개 메서드: `IsUserInWaitingRoom`, `ForwardCallRequest`

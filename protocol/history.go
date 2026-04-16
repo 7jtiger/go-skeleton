@@ -121,6 +121,10 @@ CREATE TABLE `str_cmt` (
 	`str_idx` int unsigned NOT NULL,
 	`wuid` bigint NOT NULL,
 	`nick` varchar(20) DEFAULT NULL,
+	`thumb_url` varchar(256) DEFAULT NULL,
+	`wgender` varchar(2) DEFAULT NULL,
+	`wage` varchar(45) DEFAULT NULL,
+	`warea` varchar(45) DEFAULT NULL,
 	`body` varchar(256) DEFAULT NULL,
 	`stat` tinyint DEFAULT NULL COMMENT 'stat=0:default, stat=1:private, stat=2::rerv, stat=3:rerv,stat=4:del',
 	`at_create` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -135,6 +139,10 @@ type StrComment struct {
 	StrIdx   int       `json:"str_idx"`
 	Wuid     uint64    `json:"wuid"`
 	Nick     string    `json:"nick"`
+	ThumbUrl string    `json:"thumb_url"`
+	WGender  string    `json:"wgender"`
+	WAge     string    `json:"wage"`
+	WArea    string    `json:"warea"`
 	Body     string    `json:"body"`
 	Stat     int       `json:"stat"`
 	AtCreate time.Time `json:"at_create"`

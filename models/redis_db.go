@@ -1,4 +1,4 @@
-﻿package models
+package models
 
 import (
 	"context"
@@ -336,6 +336,40 @@ func (r *RedisDB) HGetJWTRefresh(token string) (*ptl.UserInfoResp, error) {
 	}
 
 	return &userInfo, nil
+}
+
+func (r *RedisDB) DeleteJWTRefreshToken(token string) error {
+	if token == "" {
+		return nil
+	}
+	return r.client.HDel(r.ctx, "AUTH:REFRESH", token).Err()
+}
+
+func (r *RedisDB) RotateJWTToken(oldRefreshToken, newAccessToken, newRefreshToken string, userInfo *ptl.UserInfoResp) error {
+	userInfoJSON, err := json.Marshal(userInfo)
+	if err != nil {
+		return err
+	}
+
+	pipe := r.client.TxPipeline()
+	if oldRefreshToken != "" {
+		pipe.HDel(r.ctx, "AUTH:REFRESH", oldRefreshToken)
+	}
+
+	accessOptions := &redis.HSetEXOptions{
+		ExpirationType: redis.HSetEXExpirationEX,
+		ExpirationVal:  86400 * 7,
+	}
+	pipe.HSetEXWithArgs(r.ctx, "AUTH:ACCESS", accessOptions, newAccessToken, string(userInfoJSON))
+
+	refreshOptions := &redis.HSetEXOptions{
+		ExpirationType: redis.HSetEXExpirationEX,
+		ExpirationVal:  86400 * 14,
+	}
+	pipe.HSetEXWithArgs(r.ctx, "AUTH:REFRESH", refreshOptions, newRefreshToken, string(userInfoJSON))
+
+	_, err = pipe.Exec(r.ctx)
+	return err
 }
 
 // SetJWTToken JWT 토큰과 세션 정보를 HSET에 저장

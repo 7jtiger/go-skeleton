@@ -13,23 +13,29 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GetJWTClaims(uidStr string) *JWTClaims {
+func GetJWTClaims(uidStr string, expiration time.Duration) *JWTClaims {
+	now := time.Now()
 	return &JWTClaims{
 		UserID: uidStr,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "cupitok.com",
 			Subject:   "Authentication",
 			Audience:  jwt.ClaimStrings{uidStr},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 			ID:        uidStr,
 		},
 	}
+
+	// ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+	// IssuedAt:  jwt.NewNumericDate(time.Now()),
+	// NotBefore: jwt.NewNumericDate(time.Now()),
 }
 
 // CreateJWTTokenWithConfig 설정을 포함한 JWT 토큰 생성
-func CreateJWTToken(secret string, claims *JWTClaims, expiration time.Duration) (string, error) {
+// func CreateJWTToken(secret string, claims *JWTClaims, expiration time.Duration) (string, error) {
+func CreateJWTToken(secret string, claims *JWTClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }

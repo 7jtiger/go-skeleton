@@ -21,6 +21,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	ACCESS_TKN_EXPIRE  = 24 * time.Hour
+	REFRESH_TKN_EXPIRE = 14 * 24 * time.Hour
+)
+
 type AccountController struct {
 	ctl *Controller
 	cfg *conf.Config
@@ -346,14 +351,15 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, string, error) {
 	uidStr := strconv.FormatUint(user.Uid, 10)
 
-	claims := utils.GetJWTClaims(uidStr)
-	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 24*time.Hour)
+	claims := utils.GetJWTClaims(uidStr, ACCESS_TKN_EXPIRE)
+	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims)
 	if err != nil {
 		log.Warn("Failed to create JWT token:", err)
 		return "", "", err
 	}
 
-	refTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, claims, 14*24*time.Hour)
+	rfClaims := utils.GetJWTClaims(uidStr, REFRESH_TKN_EXPIRE)
+	refTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, rfClaims)
 	if err != nil {
 		log.Warn("Failed to create JWT token:", err)
 		return "", "", err
@@ -372,6 +378,116 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 	}
 
 	return acTok, refTok, nil
+}
+
+// @Summary Refresh access token
+// @Description Reissues access and refresh token using a valid refresh token.
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param Authorization header string false "Bearer refresh_token"
+// @Param data body protocol.RefreshTokenReq false "Refresh token payload { refTok: xxx }"
+// @Success 200 {object} protocol.RespDataHeader{data=protocol.RefreshTokenResp}
+// @Failure 400 {object} protocol.RespHeader "Invalid request"
+// @Failure 401 {object} protocol.RespHeader "Invalid refresh token"
+// @Router /acc/v01/refresh [post]
+// @xample 요청 예시
+// POST /acc/v01/refresh
+// Header:
+//   Authorization: Bearer <refresh_token>
+// Body:
+// {
+//     "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2ODg4ODg4ODgsInVzZXJpZCI6IjEyMzQ1In0.sM4wL5WOEV2TqtW06R1vGuFsxWXhYMrh6oZ7PWnykJc"
+// }
+
+// @xample 응답 예시
+// HTTP/1.1 200 OK
+// Content-Type: application/json
+// {
+//     "msg": "success",
+//     "acTok": "new-access-token-here",
+//     "refTok": "new-refresh-token-here",
+//     "uid": "12345"
+// }
+
+func (p *AccountController) RefreshToken(c *gin.Context) {
+	refTok := extractRefreshToken(c)
+	if refTok == "" {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "No refresh token")
+		return
+	}
+
+	claims, err := utils.VerifyJWTToken(refTok, p.cfg.Server.JWTSecret)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid refresh token")
+		return
+	}
+
+	user, err := p.rdb.HGetJWTRefresh(refTok)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Refresh token not found")
+		return
+	}
+
+	uidStr := strconv.FormatUint(user.Uid, 10)
+	if claims.UserID != uidStr {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "Token user mismatch")
+		return
+	}
+
+	acClaims := utils.GetJWTClaims(uidStr, ACCESS_TKN_EXPIRE)
+	acTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, acClaims)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create access token")
+		return
+	}
+
+	rfClaims := utils.GetJWTClaims(uidStr, REFRESH_TKN_EXPIRE)
+	newRefTok, err := utils.CreateJWTToken(p.cfg.Server.JWTSecret, rfClaims)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create refresh token")
+		return
+	}
+
+	if err := p.rdb.RotateJWTToken(refTok, acTok, newRefTok, user); err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to rotate JWT token")
+		return
+	}
+
+	metaHeader := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
+		user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
+	c.Header("x-meta", metaHeader)
+
+	resp := ptl.RefreshTokenResp{
+		Message:      "success",
+		AccessToken:  acTok,
+		RefreshToken: newRefTok,
+		UID:          uidStr,
+	}
+	p.ctl.SendDataResponse(c, http.StatusOK, resp)
+}
+
+func extractRefreshToken(c *gin.Context) string {
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+	if authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			token := strings.TrimSpace(parts[1])
+			if token != "" {
+				return token
+			}
+		}
+	}
+
+	var req ptl.RefreshTokenReq
+	if err := c.ShouldBindJSON(&req); err == nil {
+		token := strings.TrimSpace(req.RefreshToken)
+		if token != "" {
+			return token
+		}
+	}
+
+	return ""
 }
 
 // swagger:route POST /inserv/v01/logout Account LogoutUser

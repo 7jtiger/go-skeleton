@@ -72,7 +72,8 @@
 - WebSocket 연결 요청 처리 (최대 연결 수 제한: MAX_VDWS_CONNECT = 25000)
 - WebSocket 프로토콜로 업그레이드
 - 첫 메시지로 "join-waiting" 또는 "join" 메시지 대기 (10초 타임아웃)
-- "join-waiting": 대기방에 추가, 사용자 목록 전송, 다른 사용자들에게 입장 알림
+- "join-waiting": 대기방에 추가, 다른 사용자들에게 입장 알림
+- "get-user-list": 클라이언트 요청 시 대기방 사용자 목록 전송
 - "join": 기존 방식으로 직접 방 입장 (하위 호환성)
 - 클라이언트 객체 생성 및 등록
 - 읽기/쓰기 고루틴 시작
@@ -109,7 +110,8 @@
 
 ### 대기방 메시지 처리
 - `handleWTRoom(client *WSClient, msg *Message)`: 대기방 메시지 처리
-  - "join-waiting": 사용자 목록 전송
+  - "join-waiting": 대기방 상태 확인용(자동 목록 전송 없음)
+  - "get-user-list": 사용자 목록 요청 시 목록 반환
   - "call-request": 연결 요청 처리
   - "call-response": 연결 응답 처리 (수락 시 방으로 이동)
 - `handleCallRequest(client *WSClient, msg *Message)`: 통화 요청 처리
@@ -148,6 +150,7 @@
 ### DM/통화 브릿지 확장 (2026-03)
 - 대기실 메시지 타입에 `call-cancel` 추가
 - `handleCallCancel()` 추가: 대기실 상대에게 취소 전달 + Chat WS 브릿지 통보
+- `handleCallCancel()` 보강: 대상이 이미 통화방에 있으면 `partner-left` 종료 이벤트 전달 후 `returnToWaitingRoom()`으로 통화 종료 정리
 - `handleCallRequest()` 오프라인 처리 확장:
   - 대기실 부재 시 Chat WS `call-incoming` 전달 시도
   - 완전 오프라인 시 FCM 통화 푸시 전송

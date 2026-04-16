@@ -77,6 +77,19 @@ definitions:
       noiseSuppression:
         type: boolean
     type: object
+  protocol.DMRoomResp:
+    properties:
+      atCreate:
+        type: string
+      atUpdate:
+        type: string
+      partner:
+        $ref: '#/definitions/protocol.PartnerInfo'
+      rid:
+        type: integer
+      unread:
+        type: integer
+    type: object
   protocol.DeleteStrPicReq:
     properties:
       idx:
@@ -134,6 +147,21 @@ definitions:
       result:
         $ref: '#/definitions/protocol.ResultCode'
       resultString:
+        type: string
+    type: object
+  protocol.PartnerInfo:
+    properties:
+      age:
+        type: string
+      area:
+        type: string
+      gender:
+        type: string
+      nick:
+        type: string
+      pid:
+        type: integer
+      thumbPic:
         type: string
     type: object
   protocol.Pre7Story:
@@ -1064,6 +1092,128 @@ paths:
       summary: Content test endpoint
       tags:
       - content
+  /dm/v01/room:
+    post:
+      consumes:
+      - application/json
+      description: Creates a direct message (DM) chat room between the requester (uid)
+        and the target user (tid). Returns the created room info (room id, partner,
+        unread count, timestamps).
+      parameters:
+      - description: 'Request body: { uid: requester UID, tid: target user UID }'
+        in: body
+        name: data
+        required: true
+        schema:
+          properties:
+            tid:
+              type: integer
+            uid:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Chat room created
+          schema:
+            $ref: '#/definitions/protocol.DMRoomResp'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create DM Chat Room
+      tags:
+      - chat
+  /dm/v01/total/unread:
+    get:
+      consumes:
+      - application/json
+      description: Returns the sum of unread messages across all chat rooms for the
+        user, as well as per-room counts
+      parameters:
+      - description: User ID
+        in: query
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'uid: user ID, total: total unread count, rooms: per-room unread
+            counts'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get total unread message count for user
+      tags:
+      - chat
+  /dm/v01/ws:
+    get:
+      description: Establishes a WebSocket connection for direct messaging chat. The
+        user must supply their userId as a query parameter. All chat messages and
+        commands are sent/received over this connection in JSON format. (⚠️ 추후 JWT
+        인증으로 대체 예정; 현재는 userId 쿼리파라미터 사용)
+      parameters:
+      - description: 'User ID (numeric, as string). Should be authenticated user''s
+          UID. Example: userId=123'
+        in: query
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket handshake)
+        "400":
+          description: Bad request (missing or invalid userId)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: 'Unauthorized (future: token required)'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Connect to Chat WebSocket
+      tags:
+      - chat
   /home/v01/mdata:
     get:
       consumes:

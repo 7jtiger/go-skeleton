@@ -1122,6 +1122,179 @@ const docTemplate = `{
                 }
             }
         },
+        "/dm/v01/room": {
+            "post": {
+                "description": "Creates a direct message (DM) chat room between the requester (uid) and the target user (tid). Returns the created room info (room id, partner, unread count, timestamps).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Create DM Chat Room",
+                "parameters": [
+                    {
+                        "description": "Request body: { uid: requester UID, tid: target user UID }",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "tid": {
+                                    "type": "integer"
+                                },
+                                "uid": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Chat room created",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.DMRoomResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dm/v01/total/unread": {
+            "get": {
+                "description": "Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get total unread message count for user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "userId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "uid: user ID, total: total unread count, rooms: per-room unread counts",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dm/v01/ws": {
+            "get": {
+                "description": "Establishes a WebSocket connection for direct messaging chat. The user must supply their userId as a query parameter. All chat messages and commands are sent/received over this connection in JSON format. (⚠️ 추후 JWT 인증으로 대체 예정; 현재는 userId 쿼리파라미터 사용)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Connect to Chat WebSocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID (numeric, as string). Should be authenticated user's UID. Example: userId=123",
+                        "name": "userId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols (WebSocket handshake)"
+                    },
+                    "400": {
+                        "description": "Bad request (missing or invalid userId)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (future: token required)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/home/v01/mdata": {
             "get": {
                 "security": [
@@ -2106,6 +2279,26 @@ const docTemplate = `{
                 }
             }
         },
+        "protocol.DMRoomResp": {
+            "type": "object",
+            "properties": {
+                "atCreate": {
+                    "type": "string"
+                },
+                "atUpdate": {
+                    "type": "string"
+                },
+                "partner": {
+                    "$ref": "#/definitions/protocol.PartnerInfo"
+                },
+                "rid": {
+                    "type": "integer"
+                },
+                "unread": {
+                    "type": "integer"
+                }
+            }
+        },
         "protocol.DeleteStrPicReq": {
             "type": "object",
             "properties": {
@@ -2193,6 +2386,29 @@ const docTemplate = `{
                     "$ref": "#/definitions/protocol.ResultCode"
                 },
                 "resultString": {
+                    "type": "string"
+                }
+            }
+        },
+        "protocol.PartnerInfo": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "pid": {
+                    "type": "integer"
+                },
+                "thumbPic": {
                     "type": "string"
                 }
             }

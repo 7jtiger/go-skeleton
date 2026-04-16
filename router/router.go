@@ -147,6 +147,9 @@ func (p *Router) Idx() *gin.Engine {
 		// 로그인
 		account.POST("/login", p.AesDecrypt(), p.acc.LoginUser)
 
+		// 토큰 재발급
+		account.POST("/refresh", p.acc.RefreshToken)
+
 		// 아이디 찾기 - pass 연동 필요 /:name/:birth
 		account.POST("/fnid", p.acc.FindID)
 
@@ -239,6 +242,7 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/delpic", p.st.DeleteStrPic)
 
 		// ------------- comment -------------
+		story.GET("/comment/:idx/:page", p.st.GetStrCmtDetail)
 		story.POST("/comment/create", p.st.CreateStrComment)
 		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
 		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)
@@ -285,14 +289,11 @@ func (p *Router) Idx() *gin.Engine {
 		// 채팅 기록 조회
 		chat.GET("/history/:roomId", p.chat.GetChatHistory)
 
+		//unread total count
+		chat.GET("/total/unread", p.chat.GetTotalUnread)
+
 		// 메시지 전송 (REST API)
 		chat.POST("/message", p.chat.SendMessage)
-
-		// 기존 엔드포인트 (화상/음성 채팅 리스트)
-		chat.GET("/mlistvd")
-		chat.GET("/wlistvd")
-		chat.GET("/mlistvo")
-		chat.GET("/wlistvo")
 	}
 
 	return e

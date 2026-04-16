@@ -78,6 +78,7 @@
 - `GET /acc/v01/ckemail/:email`: Endpoint to check email duplication
 - `POST /acc/v01/regist`: Endpoint to register new users (AES decryption applied)
 - `POST /acc/v01/login`: Endpoint to handle user login (AES decryption applied)
+- `POST /acc/v01/refresh`: Endpoint to rotate access/refresh token pair using refresh token (Authorization header or body `refTok`)
 - `POST /acc/v01/fnid`: Endpoint to find user ID by name and birth date
 - `POST /acc/v01/fnpw`: Endpoint to find password by ID, email, and birth date
 - `POST /acc/v01/cngpw`: Endpoint to change user password
@@ -115,6 +116,7 @@
 - `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
 - `POST /story/v01/delpic`: Endpoint to delete specific picture from story
 - `POST /story/v01/comment/create`: Endpoint to create new comment on story
+- `GET /story/v01/comment/detail/:idx/:page`: Endpoint to get paginated story comments
 - `POST /story/v01/comment/updstat`: Endpoint to update comment status
 - `POST /story/v01/comment/updbody`: Endpoint to update comment body content
 

@@ -705,7 +705,7 @@ func TestCreateStrComment(t *testing.T) {
 	qurl := "/story/v01/comment/create"
 
 	var key = []string{"str_idx", "wuid", "nick", "stat", "body"}
-	var value = []string{"3", "77645423236541", "test", "1", "111111 test comment body"}
+	var value = []string{"3", "77645423234236541", "test", "1", "111111 test comment body"}
 
 	res, err := PostJson(*targetUrl, qurl, key, value)
 	if err != nil {
@@ -716,13 +716,11 @@ func TestCreateStrComment(t *testing.T) {
 }
 
 func TestGetStrCommentList(t *testing.T) {
+	//story.GET("/comment/:idx/:page",
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/comment/list"
+	qurl := fmt.Sprintf("/story/v01/comment/%s/%s", "3", "1")
 
-	var key = []string{"str_idx"}
-	var value = []string{"3"}
-
-	res, err := Get(*targetUrl, qurl, key, value)
+	res, err := Get(*targetUrl, qurl, nil, nil)
 	if err != nil {
 		t.Errorf("Failed to get str comment list: %v", err)
 	}

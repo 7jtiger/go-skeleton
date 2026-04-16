@@ -29,6 +29,10 @@ type LoginReq struct {
 	DOS string `json:"dos"`
 }
 
+type RefreshTokenReq struct {
+	RefreshToken string `json:"refTok"`
+}
+
 type UserInfoResp struct {
 	ID       string `json:"sid"`
 	Uid      uint64 `json:"uid"`
@@ -106,6 +110,13 @@ type LoginUserResp struct {
 	UID          string       `json:"uid"`
 	MetaHeader   string       `json:"meta"`
 	WebRTCConfig WebRTCConfig `json:"wrtc"`
+}
+
+type RefreshTokenResp struct {
+	Message      string `json:"msg"`
+	AccessToken  string `json:"acTok"`
+	RefreshToken string `json:"refTok"`
+	UID          string `json:"uid"`
 }
 
 type WTRoomUser struct {

@@ -84,6 +84,37 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 // [수신자 정책] 수신자는 로그인 여부와 무관하게 메시지를 수신할 수 있어야 함:
 //   - Chat WS 연결 중이면 실시간 전달
 //   - 미연결(로그아웃/오프라인)이면 FCM Push로 전달
+// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+// Sec-WebSocket-Version: 13
+
+// HandleWebSocket
+//
+// @Summary      Connect to Chat WebSocket
+// @Description  Establishes a WebSocket connection for direct messaging chat. The user must supply their userId as a query parameter. All chat messages and commands are sent/received over this connection in JSON format. (⚠️ 추후 JWT 인증으로 대체 예정; 현재는 userId 쿼리파라미터 사용)
+// @Tags         chat
+// @Produce      json
+// @Param        userId  query    string  true  "User ID (numeric, as string). Should be authenticated user's UID. Example: userId=123"
+// @Success      101  "Switching Protocols (WebSocket handshake)"
+// @Failure      400  {object}  map[string]string "Bad request (missing or invalid userId)"
+// @Failure      401  {object}  map[string]string "Unauthorized (future: token required)"
+// @Failure      500  {object}  map[string]string "Internal Server Error"
+// @Router       /dm/v01/ws [get]
+//
+// @Example
+// Request:
+// GET /dm/v01/ws?userId=123 HTTP/1.1
+// Host: api.example.com
+// Upgrade: websocket
+// Connection: Upgrade
+//
+// Example Response (101 Switching Protocols):
+// (WebSocket protocol upgraded, binary/text frames exchanged)
+//
+// @Notes
+// - This endpoint does not require prior login/session, but userId MUST be valid.
+// - This example uses a query parameter for userId only for development/testing. For production, JWT Auth will be enforced and userId extracted from the access token.
+//
+// --- 실제핸들러
 func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 	// TODO(JWT): 아래 블록으로 교체 — JWT에서 uid 강제 추출
 	// authHeader := c.GetHeader("Authorization")
@@ -501,6 +532,47 @@ func (cc *ChatController) handleCallCancel(client *ChatClient, msg *ptl.ChatMess
 }
 
 // CreateChatRoom 채팅방 생성
+
+// CreateChatRoom
+//
+// @Summary      Create DM Chat Room
+// @Description  Creates a direct message (DM) chat room between the requester (uid) and the target user (tid). Returns the created room info (room id, partner, unread count, timestamps).
+// @Tags         chat
+// @Accept       json
+// @Produce      json
+// @Param        data body object{uid=uint64,tid=uint64} true "Request body: { uid: requester UID, tid: target user UID }"
+// @Success      200  {object}  protocol.DMRoomResp "Chat room created"
+// @Failure      400  {object}  map[string]string "Bad request"
+// @Failure      401  {object}  map[string]string "Unauthorized"
+// @Failure      500  {object}  map[string]string "Internal Server Error"
+// @Router       /dm/v01/room [post]
+//
+// @Example
+// Request:
+// POST /dm/v01/room HTTP/1.1
+// Content-Type: application/json
+//
+//	{
+//	    "uid": 123,
+//	    "tid": 234
+//	}
+//
+// Example Response (200 OK):
+//
+//	{
+//	  "roomId": 123_234,
+//	  "partner": {
+//	    "pid": 234,
+//	    "nick": "testuser",
+//	    "thumbPic": "https://cdn.example.com/avatar.jpg",
+//	    "gender": "1",
+//	    "age": "22",
+//	    "area": "Seoul"
+//	  },
+//	  "unread": 0,
+//	  "atCreate": "2024-06-11T12:00:00Z",
+//	  "atUpdate": "2024-06-12T08:00:00Z"
+//	}
 func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 	var req struct {
 		UID uint64 `json:"uid"`
@@ -512,18 +584,6 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 		return
 	}
 
-	// myUID, err := cc.resolveUIDFromRequest(c, req.UID)
-	// if err != nil {
-	// 	cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
-	// 	return
-	// }
-	/*
-		user, err := cc.adb.GetUserInfoByUID(req.UID)
-		if err != nil {
-			cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
-			return
-		}
-	*/
 	tUser, err := cc.adb.GetUserInfoByUID(req.TID)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
@@ -535,12 +595,6 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create dm room", err)
 		return
 	}
-
-	/* partner, perr := cc.buildPartnerInfoByUID(req.TargetUID)
-	if perr != nil {
-		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to load partner info", perr)
-		return
-	} */
 
 	partner := &ptl.PartnerInfo{
 		PID:      rm.TID,
@@ -572,10 +626,10 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        userId  query     string  true  "User UID"
-// @Success      200     {array}   protocol.DMRoomResp
-// @Failure      400     {object}  protocol.SimpleErrorResp "Bad Request"
-// @Failure      401     {object}  protocol.SimpleErrorResp "Unauthorized"
-// @Failure      500     {object}  protocol.SimpleErrorResp "Internal Server Error"
+// @Success      200 {array}   protocol.DMRoomResp
+// @Failure      400 {object} map[string]string "Bad Request"
+// @Failure      401 {object} map[string]string "Unauthorized"
+// @Failure      500 {object} map[string]string "Internal Server Error"
 // @Router       /dm/v01/rooms [get]
 //
 // @Example

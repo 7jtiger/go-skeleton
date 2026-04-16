@@ -134,13 +134,45 @@ func (p *StoryController) GetStoryDetail(c *gin.Context) {
 		return
 	}
 
-	commentList, err := p.sdb.GetStrCmtDetail(idxInt)
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"story": story})
+}
+
+// GetStrCmtDetail godoc
+// @Summary Get story comment details (list)
+// @Description Retrieve a paginated list of comments for a specific story. Each comment includes idx, wuid, nick, body, at_create, etc.
+// @Tags story
+// @Accept json
+// @Produce json
+// @Param idx path string true "Story Index"
+// @Param page path string true "Page number (starting from 1)"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved story comments - returns an array of comments with idx, wuid, nick, body, at_create, etc."
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid or missing idx/page"
+// @Failure 500 {object} protocol.RespHeader "Internal server error - failed to get story comments"
+// @Router /story/v01/comment/{idx}/{page} [get]
+// @Example Request: GET /story/v01/comment/3/1
+// @Example Response: {"result":0,"resultString":"Success","data":[{"idx":2,"str_idx":3,"wuid":77645423236541,"nick":"test","thumb_url":"assdd","wgender":"","wage":"","warea":"","body":"111111 test comment body","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]}
+func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
+	idx := c.Param("idx")
+	page := c.Param("page")
+
+	idxInt, err := strconv.Atoi(idx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Idx is required")
+		return
+	}
+
+	nPage, err := strconv.Atoi(page)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is required")
+		return
+	}
+
+	commentList, err := p.sdb.GetStrCmtDetail(idxInt, nPage)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get str comment list", err)
 		return
 	}
-
-	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"story": story, "commentList": commentList})
+	p.ctl.SendDataResponse(c, http.StatusOK, commentList)
 }
 
 // UploadStoryPic godoc
@@ -552,12 +584,22 @@ func (p *StoryController) CreateStrComment(c *gin.Context) {
 		return
 	}
 
+	account, err := p.adb.GetUserInfoByUID(uint64(wuidInt))
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get account", err)
+		return
+	}
+
 	cmt := &ptl.StrComment{
-		StrIdx: int(strIdxInt),
-		Wuid:   uint64(wuidInt),
-		Nick:   req.Nick,
-		Stat:   nstat,
-		Body:   req.Body,
+		StrIdx:   int(strIdxInt),
+		Wuid:     uint64(wuidInt),
+		Nick:     req.Nick,
+		ThumbUrl: account.ThumbPic,
+		WGender:  account.Gender,
+		WAge:     strconv.Itoa(utils.CalcBirth2Age(account.Birth)),
+		WArea:    account.Area,
+		Stat:     nstat,
+		Body:     req.Body,
 	}
 
 	lastID, err := p.sdb.SetStrComment(cmt)

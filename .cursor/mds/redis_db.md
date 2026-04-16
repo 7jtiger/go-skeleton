@@ -27,6 +27,10 @@
 ## Active JWT Token Management Functions
 - `HSetJWTAccess()`: Function to store JWT token and user ID in AUTH:ACCESS hash with 24-hour TTL
 - `HGetJWTAccess()`: Function to retrieve user ID by JWT token from AUTH:ACCESS hash
+- `HSetJWTRefresh()`: Function to store refresh token and user info in AUTH:REFRESH hash with 14-day TTL
+- `HGetJWTRefresh()`: Function to retrieve user info by refresh token from AUTH:REFRESH hash
+- `DeleteJWTRefreshToken()`: Function to delete refresh token from AUTH:REFRESH hash
+- `RotateJWTToken()`: Transactional token rotation function that removes old refresh token and stores new access/refresh token pair in one Redis pipeline execution
 - `DeleteJWTToken()`: Function to delete JWT token and remove from user's active token list
 - `DeleteAllUserTokens()`: Function to delete all active tokens for a specific user (uses old jwt:sessions format)
 

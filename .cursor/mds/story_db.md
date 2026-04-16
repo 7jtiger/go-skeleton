@@ -44,8 +44,12 @@ Table for storing comments on stories.
 **Columns:**
 - `idx` (int unsigned, PK, AUTO_INCREMENT): Unique comment identifier
 - `str_idx` (int unsigned, NOT NULL): Story index (foreign key reference)
-- `uid` (bigint, NOT NULL): User ID who wrote the comment
+- `wuid` (bigint, NOT NULL): User ID who wrote the comment
 - `nick` (varchar 20, NULL): Nickname of comment writer
+- `thumb_url` (varchar 256, NULL): Writer thumbnail URL
+- `wgender` (varchar 2, NULL): Writer gender
+- `wage` (varchar 45, NULL): Writer age text
+- `warea` (varchar 45, NULL): Writer area
 - `body` (varchar 256, NULL): Comment content
 - `stat` (tinyint, NULL): Comment status
   - 0: Default/active
@@ -158,6 +162,10 @@ Creates new comment on a story.
 - `cmt.StrIdx` (int): Story index
 - `cmt.Wuid` (uint64): Writer user ID
 - `cmt.Nick` (string): Writer nickname
+- `cmt.ThumbUrl` (string): Writer thumbnail
+- `cmt.WGender` (string): Writer gender
+- `cmt.WAge` (string): Writer age
+- `cmt.WArea` (string): Writer area
 - `cmt.Body` (string): Comment text (max 256 chars)
 - `cmt.Stat` (int): Comment status
 
@@ -165,12 +173,12 @@ Creates new comment on a story.
 
 #### GetStrCmtDetail
 ```go
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int) (*[]ptl.StrComment, error)
+func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, error)
 ```
-Retrieves all active comments (stat IN (0, 1)) for a story.
+Retrieves paginated active comments (stat IN (0, 1)) for a story.
 
 **Returns:**
-- Array of comments with: idx, wuid, nick, body, at_create
+- Array of comments with: idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
 - Ordered by at_create DESC
 
 #### GetStrCommentList

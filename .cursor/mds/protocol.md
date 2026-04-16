@@ -5,9 +5,11 @@
 ### Request Structures
 - `RegistReq struct`: User registration request structure containing ID, password, user info, personal details, and profile settings
 - `LoginReq struct`: User login request structure containing ID and password for authentication
+- `RefreshTokenReq struct`: Refresh token reissue request structure with `refTok` field (body fallback when Authorization header is absent)
 
 ### Response Structures
 - `UserInfoResp struct`: User information response structure containing personal details, profile info, and join date
+- `RefreshTokenResp struct`: Token refresh response structure containing renewed access/refresh token pair and uid
 
 ---
 
@@ -125,6 +127,7 @@
 ### history.go (2 structures)
 - **Notification Structures**: Personal user notifications (1 structure)
 - **Announcement Structures**: Public announcements (1 structure)
+- **Story Comment Structures**: `StrComment` 확장 필드 포함 (`thumb_url`, `wgender`, `wage(string)`, `warea`)
 
 ### home.go (5 structures)
 - **Request Structures**: Home screen data request (1 structure)
