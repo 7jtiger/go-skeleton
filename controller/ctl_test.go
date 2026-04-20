@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	// "gocv.io/x/gocv"
@@ -550,15 +551,41 @@ func Test_Logout(t *testing.T) {
 	fmt.Println(res)
 }
 
+///// test token
+//act := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc"
+//rft := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxMDQxNzAzNTA0OX0.jiQ7sVNgHUgW2pQWoVbQiCZMdvwLlVS3LkvpLJTt3mU"
+
 func Test_GetSetting(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := fmt.Sprintf("/user/v01/set/%s", "8697414060736839837")
-	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNTc1NywibmJmIjoxNzcwMTI5MzU3LCJpYXQiOjE3NzAxMjkzNTcsImp0aSI6ImE0Zjc1OGVjLWQyZWEtNGQzOS05ZDVmLTNjMzQyMTc4M2ZhMCJ9.EMC2dOpcuIr33UBbjhfe8ahbqvXSpgr2-cfBkGbCLns"
+	qurl := fmt.Sprintf("/user/v01/getset/%s", "8697414060736839837")
+	// qurl := fmt.Sprintf("/user/v01/mdata", "8697414060736839837")
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc"
 
 	//"77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
 
 	// meta := "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
 	res, err := GetWithToken(*targetUrl, qurl, nil, nil, token)
+	if err != nil {
+		t.Errorf("Failed to get story detail: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func Test_GetRefreshToken(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/refresh"
+	// qurl := fmt.Sprintf("/user/v01/mdata", "8697414060736839837")
+	// qurl := "/user/v01/mdata"
+	// token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNTc1NywibmJmIjoxNzcwMTI5MzU3LCJpYXQiOjE3NzAxMjkzNTcsImp0aSI6ImE0Zjc1OGVjLWQyZWEtNGQzOS05ZDVmLTNjMzQyMTc4M2ZhMCJ9.EMC2dOpcuIr33UBbjhfe8ahbqvXSpgr2-cfBkGbCLns"
+	// token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxNzc2NjczNzA0LCJuYmYiOjE3NzY2NzM0MDQsImlhdCI6MTc3NjY3MzQwNH0.wnemA-Uz5TJtJqhZ7Nt8isEvPbAAxQUrzs4a-cUaxQo"
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxNzc2NjczOTQyfQ.ibww4Q7zsXlo_548JsAjcmIx1AEAfqDUazoK8v5WhJM"
+
+	//"77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+
+	// meta := "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+	// res, err := GetWithToken(*targetUrl, qurl, nil, nil, token)
+	res, err := PostWithToken(*targetUrl, qurl, nil, nil, token)
 	if err != nil {
 		t.Errorf("Failed to get story detail: %v", err)
 	}
@@ -1629,4 +1656,84 @@ func TestSendEmail(t *testing.T) {
 		t.Errorf("Failed to send email: %v", err)
 	}
 	fmt.Println("Email sent successfully")
+}
+
+// ----------------- dm test
+var (
+	dmTargetHost = flag.String("dm_target", "localhost:8080", "dm test target server url")
+	dmToken      = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc", "dm test bearer token")
+	dmUID        = flag.String("dm_uid", "8697414060736839837", "dm test uid (required for dm room/list/unread/ws query)")
+	dmPeerUID    = flag.String("dm_peer_uid", "5709326013809104361", "dm test peer uid (required for dm room create)")
+)
+
+func Test_ConnectWWS(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run websocket dm test")
+	}
+
+	u := url.URL{
+		Scheme: "ws",
+		Host:   *dmTargetHost,
+		Path:   "/dm/v01/ws",
+	}
+	q := u.Query()
+	q.Set("userId", *dmUID)
+	u.RawQuery = q.Encode()
+
+	header := http.Header{}
+	header.Set("Authorization", "Bearer "+*dmToken)
+
+	conn, res, err := websocket.DefaultDialer.Dial(u.String(), header)
+	if err != nil {
+		if res != nil {
+			t.Fatalf("Failed to connect dm websocket: %v (status=%d)", err, res.StatusCode)
+		}
+		t.Fatalf("Failed to connect dm websocket: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	// t.Logf("dm websocket connected: %s", u.String())
+}
+
+func Test_CreateDMRoom(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" || *dmPeerUID == "" {
+		t.Skip("set -dm_token, -dm_uid, -dm_peer_uid to run dm room create test")
+	}
+
+	qurl := "/dm/v01/mkroom/" + *dmPeerUID
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to create dm room: %v", err)
+		return
+	}
+	fmt.Println("create dm room:", res)
+}
+
+func Test_GetDMRooms(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run dm room list test")
+	}
+
+	qurl := "/dm/v01/list/1"
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get dm rooms: %v", err)
+		return
+	}
+	fmt.Println("dm rooms:", res)
+}
+
+func Test_GetTotalUnread(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run dm unread test")
+	}
+
+	qurl := "/dm/v01/total/unread"
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get total unread: %v", err)
+		return
+	}
+	fmt.Println("dm unread:", res)
 }

@@ -272,28 +272,27 @@ func (p *Router) Idx() *gin.Engine {
 
 	// 텍스트 채팅 인터페이스
 	// chat := e.Group("chat/v01", p.SecurityHeaders(), p.JwtAuth())
-	chat := e.Group("dm/v01", p.SecurityHeaders())
+	chat := e.Group("dm/v01", p.SecurityHeaders(), p.JwtAuth())
 	{
 		// WebSocket 메시징 엔드포인트
 		chat.GET("/ws", p.chat.HandleWebSocket)
 
 		// 채팅방 생성
-		//Todo: JWT Auth 처리
-		// chat.POST("/create", p.JwtAuth(), p.chat.CreateChatRoom)
-		chat.POST("/create", p.chat.CreateChatRoom)
+		chat.POST("/mkroom/:pid", p.chat.CreateChatRoom)
 
 		// 사용자의 채팅방 목록 조회
-		// chat.GET("/rooms", p.JwtAuth(), p.chat.GetChatRooms)
-		chat.GET("/rooms", p.chat.GetChatRooms)
-
-		// 채팅 기록 조회
-		// chat.GET("/list/:roomId", p.chat.GetChatList)
+		chat.GET("/list/:page", p.chat.GetChatRooms)
 
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)
+		/*
+			// 메시지 전송 (REST API)
+			// chat.POST("/message", p.chat.SendMessage)
+			// chat.GET("/rooms", p.JwtAuth(), p.chat.GetChatRooms)
 
-		// 메시지 전송 (REST API)
-		chat.POST("/message", p.chat.SendMessage)
+			// 채팅 기록 조회
+			// chat.GET("/list/:roomId", p.chat.GetChatList)
+		*/
 	}
 
 	return e

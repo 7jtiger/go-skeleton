@@ -30,9 +30,9 @@ const (
 
 // ChatClient 텍스트 채팅 WebSocket 클라이언트
 type ChatClient struct {
-	conn     *websocket.Conn
-	send     chan []byte
-	userID   string
+	conn *websocket.Conn
+	send chan []byte
+	// userID   string
 	uid      uint64
 	mu       sync.Mutex
 	lastSeen time.Time
@@ -46,7 +46,7 @@ type ChatController struct {
 	rdb       *models.RedisDB
 	adb       *models.AccountDB
 	hdb       *models.HistoryDB
-	clients   map[string]*ChatClient // userID -> ChatClient
+	clients   map[uint64]*ChatClient // uid -> ChatClient
 	clientsMu sync.RWMutex
 	upgrader  websocket.Upgrader
 }
@@ -57,7 +57,7 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 		ctl:     ctl,
 		rep:     rep,
 		cfg:     ctl.cfg,
-		clients: make(map[string]*ChatClient),
+		clients: make(map[uint64]*ChatClient),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  CHAT_READ_BUFFER_SIZE,
 			WriteBufferSize: CHAT_WRITE_BUFFER_SIZE,
@@ -89,57 +89,35 @@ Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
 Sec-WebSocket-Version: 13
 */
 
-// HandleWebSocket
-//
-// @Summary      Connect to Chat WebSocket
-// @Description  Establishes a WebSocket connection for direct messaging chat. The user must supply their userId as a query parameter. All chat messages and commands are sent/received over this connection in JSON format. (⚠️ 추후 JWT 인증으로 대체 예정; 현재는 userId 쿼리파라미터 사용)
+// @Summary      Connect DM WebSocket
+// @Description  Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.
+// @Description  Request example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.
+// @Description  Response example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).
+// @Description  This endpoint is for authenticated sessions, and user identity is derived from JWT context.
+// @Description  Legacy note: some clients may still include userId query for compatibility, but auth source is the access token.
+// @Description  WebSocket message request examples:
+// @Description  1) text-message: {"type":"text-message","to":"456","content":"Hello, how are you?","msgId":"1234567890"}
+// @Description  1-1) text-message-ack: {"type":"msg-ack","from":"123","to":"456","roomId":"1234567890","msgId":"1234567890","unread":1,"timestamp":1718851200}
+// @Description  2) typing: {"type":"typing","to":"456","roomId":"1234567890"}
+// @Description  3) read-receipt: {"type":"read-receipt","to":"456","roomId":"1234567890"}
+// @Description  4) call-request: {"type":"call-request","to":"456","roomId":"1234567890","callMode":"video"}
+// @Description  5) call-accept: {"type":"call-accept","to":"456","roomId":"1234567890","callMode":"video"}
+// @Description  6) call-reject: {"type":"call-reject","to":"456","roomId":"1234567890","callMode":"video"}
+// @Description  7) call-cancel: {"type":"call-cancel","to":"456","roomId":"1234567890","callMode":"video"}
 // @Tags         chat
 // @Produce      json
-// @Param        userId  query    string  true  "User ID (numeric, as string). Should be authenticated user's UID. Example: userId=123"
-// @Success      101  "Switching Protocols (WebSocket handshake)"
-// @Failure      400  {object}  map[string]string "Bad request (missing or invalid userId)"
-// @Failure      401  {object}  map[string]string "Unauthorized (future: token required)"
-// @Failure      500  {object}  map[string]string "Internal Server Error"
+// @Param        Authorization  header    string  true  "Bearer access token. Example: Bearer {access_token}"
+// @Success      101  {string}  string  "Switching Protocols (WebSocket handshake success)"
+// @Failure      401  {object}  protocol.RespHeader  "Unauthorized"
+// @Failure      500  {object}  protocol.RespHeader  "Internal Server Error"
 // @Router       /dm/v01/ws [get]
-//
-// @Example
-// Request:
-// GET /dm/v01/ws?userId=123 HTTP/1.1
-// Host: api.example.com
-// Upgrade: websocket
-// Connection: Upgrade
-//
-// Example Response (101 Switching Protocols):
-// (WebSocket protocol upgraded, binary/text frames exchanged)
-//
-// @Notes
-// - This endpoint does not require prior login/session, but userId MUST be valid.
-// - This example uses a query parameter for userId only for development/testing. For production, JWT Auth will be enforced and userId extracted from the access token.
-//
-// --- 실제핸들러
 func (cc *ChatController) HandleWebSocket(c *gin.Context) {
-	// TODO(JWT): 아래 블록으로 교체 — JWT에서 uid 강제 추출
-	// authHeader := c.GetHeader("Authorization")
-	// if authHeader == "" { authHeader = "Bearer " + c.Query("token") }
-	// userInfo, err := cc.rdb.HGetJWTAccess(extractBearerToken(authHeader))
-	// if err != nil { conn upgrade 거절; return }
-	// userId := strconv.FormatUint(userInfo.Uid, 10)
-	// uid := userInfo.Uid
-
-	userId := c.Query("userId")
-	if userId == "" {
-		log.Warn("WebSocket connection attempt without userId")
-		cc.ctl.RespError(c, ptl.NewRespHeader(ptl.InvalidParam, "userId required"), http.StatusBadRequest, nil)
+	user, exists := c.Get("user")
+	if !exists {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-
-	uid, err := strconv.ParseUint(userId, 10, 64)
-	if err != nil {
-		log.Warn("Invalid userId for chat websocket: %s", userId)
-		cc.ctl.RespError(c, ptl.NewRespHeader(ptl.InvalidParam, "userId must be numeric"), http.StatusBadRequest, nil)
-		return
-	}
-
+	uid64 := user.(*ptl.UserInfoResp).Uid
 	// WebSocket 업그레이드
 	conn, err := cc.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -151,14 +129,13 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 	client := &ChatClient{
 		conn:     conn,
 		send:     make(chan []byte, CHAT_MSG_BUFFER_SIZE),
-		userID:   userId,
-		uid:      uid,
+		uid:      uid64,
 		lastSeen: time.Now(),
 	}
 
 	cc.registerClient(client)
 
-	log.Info(fmt.Sprintf("New chat WebSocket connection: %s", userId))
+	log.Info(fmt.Sprintf("New chat WebSocket connection: %d", uid64))
 
 	// 고루틴 시작
 	go cc.writePump(client)
@@ -171,16 +148,16 @@ func (cc *ChatController) registerClient(client *ChatClient) {
 	defer cc.clientsMu.Unlock()
 
 	// 기존 연결이 있으면 종료
-	if oldClient, exists := cc.clients[client.userID]; exists {
+	if oldClient, exists := cc.clients[client.uid]; exists {
 		close(oldClient.send)
 		oldClient.conn.Close()
 	}
 
-	cc.clients[client.userID] = client
+	cc.clients[client.uid] = client
 	if err := cc.rdb.SetOnline(client.uid); err != nil {
-		log.Warn("failed to set online state for %s: %v", client.userID, err)
+		log.Warn("failed to set online state for %d: %v", client.uid, err)
 	}
-	log.Info(fmt.Sprintf("Chat client registered: %s", client.userID))
+	log.Info(fmt.Sprintf("Chat client registered: %d", client.uid))
 }
 
 // unregisterClient 클라이언트 등록 해제
@@ -188,13 +165,13 @@ func (cc *ChatController) unregisterClient(client *ChatClient) {
 	cc.clientsMu.Lock()
 	defer cc.clientsMu.Unlock()
 
-	if _, exists := cc.clients[client.userID]; exists {
-		delete(cc.clients, client.userID)
+	if _, exists := cc.clients[client.uid]; exists {
+		delete(cc.clients, client.uid)
 		close(client.send)
 		if err := cc.rdb.DeleteOnline(client.uid); err != nil {
-			log.Warn("failed to delete online state for %s: %v", client.userID, err)
+			log.Warn("failed to delete online state for %d: %v", client.uid, err)
 		}
-		log.Info(fmt.Sprintf("Chat client unregistered: %s", client.userID))
+		log.Info(fmt.Sprintf("Chat client unregistered: %d", client.uid))
 	}
 }
 
@@ -276,7 +253,7 @@ func (cc *ChatController) handleMessage(client *ChatClient, message []byte) {
 		return
 	}
 
-	msg.From = client.userID
+	msg.From = strconv.FormatUint(client.uid, 10)
 	msg.Timestamp = time.Now().Unix()
 
 	switch msg.Type {
@@ -295,7 +272,7 @@ func (cc *ChatController) handleMessage(client *ChatClient, message []byte) {
 	case "call-cancel":
 		cc.handleCallCancel(client, &msg)
 	default:
-		log.Warn(fmt.Sprintf("Unknown chat message type: %s from %s", msg.Type, client.userID))
+		log.Warn(fmt.Sprintf("Unknown chat message type: %s from %d", msg.Type, client.uid))
 	}
 }
 
@@ -334,7 +311,7 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptl.ChatMes
 	delivered := cc.sendToUser(msg.To, msg)
 	if !delivered {
 		if tUserErr == nil && cc.ctl.FCMPusher != nil {
-			cc.ctl.FCMPusher.SendDMPush(client.userID, msg.Content, tUser.Did)
+			cc.ctl.FCMPusher.SendDMPush(strconv.FormatUint(client.uid, 10), msg.Content, tUser.Did)
 		}
 	}
 
@@ -347,7 +324,7 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptl.ChatMes
 		Unread:    int(unreadCnt),
 		Timestamp: time.Now().Unix(),
 	}
-	cc.sendToUser(client.userID, ack)
+	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
 
 	log.Info(fmt.Sprintf("Text message sent: %s -> %s (room=%s, delivered=%v)", msg.From, msg.To, msg.RoomID, delivered))
 }
@@ -367,20 +344,25 @@ func (cc *ChatController) handleReadReceipt(client *ChatClient, msg *ptl.ChatMes
 			return
 		}
 		if err := cc.rdb.ResetUnread(client.uid, roomID); err != nil {
-			log.Warn("failed to reset unread for %s room %s: %v", client.userID, msg.RoomID, err)
+			log.Warn("failed to reset unread for %d room %s: %v", client.uid, msg.RoomID, err)
 		}
 	}
 	cc.sendToUser(msg.To, msg)
 }
 
 // sendToUser 특정 사용자에게 메시지 전송
-func (cc *ChatController) sendToUser(userID string, msg *ptl.ChatMessage) bool {
+func (cc *ChatController) sendToUser(uid string, msg *ptl.ChatMessage) bool {
+	uid64, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		log.Warn(fmt.Sprintf("invalid uid in sendToUser: %s", uid))
+		return false
+	}
 	cc.clientsMu.RLock()
-	client, exists := cc.clients[userID]
+	client, exists := cc.clients[uid64]
 	cc.clientsMu.RUnlock()
 
 	if !exists {
-		log.Warn(fmt.Sprintf("User %s not connected to chat WebSocket", userID))
+		log.Warn(fmt.Sprintf("User %d not connected to chat WebSocket", uid64))
 		return false
 	}
 
@@ -391,7 +373,7 @@ func (cc *ChatController) sendToUser(userID string, msg *ptl.ChatMessage) bool {
 	}
 
 	if !cc.trySend(client, data) {
-		log.Warn(fmt.Sprintf("Client %s send buffer full", userID))
+		log.Warn(fmt.Sprintf("Client %d send buffer full", uid64))
 		return false
 	}
 	return true
@@ -400,7 +382,7 @@ func (cc *ChatController) sendToUser(userID string, msg *ptl.ChatMessage) bool {
 func (cc *ChatController) trySend(client *ChatClient, data []byte) (sent bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Warn("chat safe send recovered (%s): %v", client.userID, r)
+			log.Warn("chat safe send recovered (%d): %v", client.uid, r)
 			sent = false
 		}
 	}()
@@ -419,7 +401,7 @@ func (cc *ChatController) trySend(client *ChatClient, data []byte) (sent bool) {
 func (cc *ChatController) ensureDMRoom(uid uint64, tUser *ptl.UserInfoResp) (*models.DMRoomRow, error) {
 	room, err := cc.hdb.GetDMRoomByPair(uid, tUser.Uid)
 	if err == nil {
-		//차단 리스트
+		//TODO : 차단 리스트
 		if room.STChat == 0 {
 			if actErr := cc.hdb.ActivateDMRoomByPair(uid, tUser.Uid); actErr != nil {
 				return nil, actErr
@@ -432,6 +414,7 @@ func (cc *ChatController) ensureDMRoom(uid uint64, tUser *ptl.UserInfoResp) (*mo
 		return nil, err
 	}
 
+	//TODO : 과금
 	rmid, createErr := cc.hdb.CreateDMRoom(uid, tUser)
 	if createErr != nil {
 		return nil, createErr
@@ -493,7 +476,10 @@ func (cc *ChatController) handleCallRequestFromDM(client *ChatClient, msg *ptl.C
 	if userErr != nil {
 		return
 	}
-	cc.ctl.FCMPusher.SendCallPush(client.userID, "", msg.CallMode, receiver.Did)
+
+	fromUID := strconv.FormatUint(client.uid, 10)
+
+	cc.ctl.FCMPusher.SendCallPush(fromUID, "", msg.CallMode, receiver.Did)
 
 	notice := &ptl.ChatMessage{
 		Type:      "call-info",
@@ -503,7 +489,7 @@ func (cc *ChatController) handleCallRequestFromDM(client *ChatClient, msg *ptl.C
 		Content:   "상대방이 오프라인 상태여서 푸시 알림을 전송했습니다.",
 		Timestamp: time.Now().Unix(),
 	}
-	cc.sendToUser(client.userID, notice)
+	cc.sendToUser(fromUID, notice)
 }
 
 func (cc *ChatController) handleCallAcceptFromDM(client *ChatClient, msg *ptl.ChatMessage) {
@@ -529,70 +515,69 @@ func (cc *ChatController) handleCallCancel(client *ChatClient, msg *ptl.ChatMess
 		if userErr != nil {
 			return
 		}
-		cc.ctl.FCMPusher.SendCallPush(client.userID, "", "cancel", receiver.Did)
+		cc.ctl.FCMPusher.SendCallPush(msg.From, "", "cancel", receiver.Did)
 	}
 }
 
-// CreateChatRoom 채팅방 생성
-
-// CreateChatRoom
+// CreateChatRoom godoc
+// @Summary DM create chat room
+// @Description 1:1 채팅방(DM)을 생성. 생성된 방의 정보(방 아이디, 파트너 정보, 미확인 메시지 수, 생성/갱신 시각)를 반환
+// @Tags chat
+// @Accept json
+// @Produce json
+// @Param request body object{uid=uint64,tid=uint64} true "pid  partner UID"
+// @Success 200 {object} protocol.DMRoomResp "채팅방 생성 성공 및 방 정보"
+// @Failure 400 {object} protocol.RespHeader "잘못된 요청"
+// @Failure 401 {object} protocol.RespHeader "인증 실패"
+// @Failure 500 {object} protocol.RespHeader "서버 내부 오류"
+// @Router /dm/v01/mkroom/{pid} [post]
 //
-// @Summary      Create DM Chat Room
-// @Description  Creates a direct message (DM) chat room between the requester (uid) and the target user (tid). Returns the created room info (room id, partner, unread count, timestamps).
-// @Tags         chat
-// @Accept       json
-// @Produce      json
-// @Param        data body object{uid=uint64,tid=uint64} true "Request body: { uid: requester UID, tid: target user UID }"
-// @Success      200  {object}  protocol.DMRoomResp "Chat room created"
-// @Failure      400  {object}  map[string]string "Bad request"
-// @Failure      401  {object}  map[string]string "Unauthorized"
-// @Failure      500  {object}  map[string]string "Internal Server Error"
-// @Router       /dm/v01/room [post]
-//
-// @Example
-// Request:
-// POST /dm/v01/room HTTP/1.1
+// @Example request
+// POST /dm/v01/mkroom/{pid} HTTP/1.1
 // Content-Type: application/json
 //
-//	{
-//	    "uid": 123,
-//	    "tid": 234
-//	}
-//
-// Example Response (200 OK):
+// @Example success response
 //
 //	{
-//	  "roomId": 123_234,
-//	  "partner": {
-//	    "pid": 234,
-//	    "nick": "testuser",
-//	    "thumbPic": "https://cdn.example.com/avatar.jpg",
-//	    "gender": "1",
-//	    "age": "22",
-//	    "area": "Seoul"
-//	  },
-//	  "unread": 0,
-//	  "atCreate": "2024-06-11T12:00:00Z",
-//	  "atUpdate": "2024-06-12T08:00:00Z"
+//	 "roomId": 123234,
+//	 "partner": {
+//	   "pid": 234,
+//	   "nick": "testuser",
+//	   "thumbPic": "https://cdn.example.com/avatar.jpg",
+//	   "gender": "1",
+//	   "age": "22",
+//	   "area": "Seoul"
+//	 },
+//	 "unread": 0,
+//	 "atCreate": "2024-06-11T12:00:00Z",
+//	 "atUpdate": "2024-06-12T08:00:00Z"
 //	}
 func (cc *ChatController) CreateChatRoom(c *gin.Context) {
-	var req struct {
-		UID uint64 `json:"uid"`
-		TID uint64 `json:"tid"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		cc.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
+	user, exists := c.Get("user")
+	if !exists {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
+	uid64 := user.(*ptl.UserInfoResp).Uid
 
-	tUser, err := cc.adb.GetUserInfoByUID(req.TID)
+	pid64, err := strconv.ParseUint(c.Param("pid"), 10, 64)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	rm, err := cc.ensureDMRoom(req.UID, &tUser)
+	// if err := c.ShouldBindJSON(&req); err != nil {
+	// 	cc.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
+	// 	return
+	// }
+
+	tUser, err := cc.adb.GetUserInfoByUID(pid64)
+	if err != nil {
+		cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	rm, err := cc.ensureDMRoom(uid64, &tUser)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to create dm room", err)
 		return
@@ -607,7 +592,7 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 		Area:     rm.TArea,
 	}
 
-	unread, _ := cc.rdb.GetUnread(req.UID, rm.Idx)
+	unread, _ := cc.rdb.GetUnread(uid64, rm.Idx)
 	resp := ptl.DMRoomResp{
 		RoomID:   rm.Idx,
 		Partner:  partner,
@@ -619,69 +604,58 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 	cc.ctl.SendDataResponse(c, http.StatusOK, resp)
 }
 
-// GetChatRooms retrieves the list of DM chat rooms for a user.
-//
+// GetChatRooms retrieves the list of DM chat rooms for the authenticated user.
+// GetChatRooms godoc
 // @Summary      Get User DM Chat Rooms
-// @Description  Retrieves the list of direct message chat rooms that the specified user is participating in.
-// @Description  Todo: JWT Auth
+// @Description  Retrieves the list of direct message chat rooms that the currently authenticated user is participating in. Note: 'userId' query parameter is no longer required or used. Room list is based on the authenticated session.
 // @Tags         chat
 // @Accept       json
 // @Produce      json
-// @Param        userId  query     string  true  "User UID"
 // @Success      200 {array}   protocol.DMRoomResp
 // @Failure      400 {object} map[string]string "Bad Request"
 // @Failure      401 {object} map[string]string "Unauthorized"
 // @Failure      500 {object} map[string]string "Internal Server Error"
-// @Router       /dm/v01/rooms [get]
+// @Router       /dm/v01/list/{page} [get]
 //
-// @Example
-// GET /dm/v01/rooms?userId=10001 HTTP/1.1
+// @Example Request:
+//
+// GET /dm/v01/list/{page} HTTP/1.1
 // Host: localhost:8080
+// Authorization: Bearer {access_token}
 //
-// Response (200 OK)
-// [
-//   {
-//     "roomId": 12345,
-//     "partner": {
-//       "pid": 20002,
-//       "nick": "testuser",
-//       "thumbPic": "https://cdn.example.com/avatar.jpg",
-//       "gender": "1",
-//       "age": "22",
-//       "area": "Seoul"
-//     },
-//     "unread": 3,
-//     "atCreate": "2024-06-11T12:00:00Z",
-//     "atUpdate": "2024-06-12T08:00:00Z"
-//   }
-// ]
-
+// @Example Success Response:
+//
+//	[
+//	  {
+//	    "roomId": 12345,
+//	    "partner": {
+//	      "pid": 20002,
+//	      "nick": "testuser",
+//	      "thumbPic": "https://cdn.example.com/avatar.jpg",
+//	      "gender": "1",
+//	      "age": "22",
+//	      "area": "Seoul"
+//	    },
+//	    "unread": 3,
+//	    "atCreate": "2024-06-11T12:00:00Z",
+//	    "atUpdate": "2024-06-12T08:00:00Z"
+//	  }
+//	]
 func (cc *ChatController) GetChatRooms(c *gin.Context) {
-	//Todo: JWT Auth 처리, 페이징 처리리
-	/*
-		user, exists := c.Get("user")
-		if !exists {
-			cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
-			return
-		}
-
-		uid := user.(*ptl.UserInfoResp).Uid
-	*/
-	// userID := c.Query("userId")
-	// uid, err := cc.resolveUIDFromRequest(c, userID)
-	// if err != nil {
-	// 	cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
-	// 	return
-	// }
-
-	uid := c.Query("userId")
-	uid64, err := strconv.ParseUint(uid, 10, 64)
-	if err != nil {
-		cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
+	user, exists := c.Get("user")
+	if !exists {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
+	uid64 := user.(*ptl.UserInfoResp).Uid
 
-	rooms, err := cc.hdb.GetDMRoomsByUser(uid64)
+	page := c.Param("page")
+	pageInt, err := strconv.Atoi(page)
+	if err != nil {
+		pageInt = 1
+	}
+
+	rooms, err := cc.hdb.GetDMRoomsByUser(uid64, pageInt)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get dm rooms", err)
 		return
@@ -714,27 +688,26 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 // GetTotalUnread 사용자 전체 unread 합계 조회
 // GetTotalUnread godoc
 // @Summary     Get total unread message count for user
-// @Description Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts
+// @Description Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts. (변경사항 반영됨: userId 파라미터는 더 이상 필요하지 않음, 인증된 사용자 기준)
 // @Tags        chat
 // @Accept      json
 // @Produce     json
-// @Param       userId query string true "User ID"
-// @Success     200 {object} map[string]interface{} "uid: user ID, total: total unread count, rooms: per-room unread counts"
-// @Failure     400 {object} map[string]string "Bad request"
+// @Success     200 {object} map[string]interface{} "total: 전체 unread 개수, rooms: 각 방별 unread 개수"
+// @Failure     401 {object} map[string]string "인증 실패"
 // @Failure     500 {object} map[string]string "Internal server error"
 // @Router      /dm/v01/total/unread [get]
 //
 // @Example Request:
 //
-//	GET /dm/v01/total/unread?userId=12345 HTTP/1.1
+//	GET /dm/v01/total/unread HTTP/1.1
 //	Host: localhost:8080
+//	Authorization: Bearer {access_token}
 //
 // @Example Success Response:
 //
 //	HTTP/1.1 200 OK
 //	Content-Type: application/json
 //	{
-//	  "uid": "12345",
 //	  "total": 7,
 //	  "rooms": {
 //	    "101": 5,
@@ -742,13 +715,14 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 //	  }
 //	}
 func (cc *ChatController) GetTotalUnread(c *gin.Context) {
-	userID := c.Query("userId")
-	uid, err := strconv.ParseUint(userID, 10, 64)
-	if err != nil {
-		cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
+	user, exists := c.Get("user")
+	if !exists {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-	unreadMap, err := cc.rdb.GetAllUnreadForUser(uid)
+	uid64 := user.(*ptl.UserInfoResp).Uid
+
+	unreadMap, err := cc.rdb.GetAllUnreadForUser(uid64)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "failed to get unread", err)
 		return
@@ -759,12 +733,12 @@ func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 	}
 
 	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{
-		"uid":   userID,
 		"total": total,
 		"rooms": unreadMap,
 	})
 }
 
+/*
 // GetChatList godoc
 // @Summary      채팅 기록 조회
 // @Description  특정 채팅방의 메시지 기록을 조회합니다
@@ -782,34 +756,34 @@ func (cc *ChatController) GetChatList(c *gin.Context) {
 		cc.ctl.SimpleError(c, http.StatusBadRequest, "roomId required")
 		return
 	}
-	/*
+
 		// 페이지네이션 파라미터
-		page := c.DefaultQuery("page", "1")
-		limit := c.DefaultQuery("limit", "50")
+		// page := c.DefaultQuery("page", "1")
+		// limit := c.DefaultQuery("limit", "50")
 
-		pageNum, err := strconv.Atoi(page)
-		if err != nil {
-			pageNum = 1
-		}
+		// pageNum, err := strconv.Atoi(page)
+		// if err != nil {
+		// 	pageNum = 1
+		// }
 
-		limitNum, err := strconv.Atoi(limit)
-		if err != nil {
-			limitNum = 50
-		}
+		// limitNum, err := strconv.Atoi(limit)
+		// if err != nil {
+		// 	limitNum = 50
+		// }
 
-		offset := (pageNum - 1) * limitNum
+		// offset := (pageNum - 1) * limitNum
 
-		// Redis에서 메시지 조회
-		messages, err := cc.rdb.GetChatMessages(roomID, offset, limitNum)
-		if err != nil {
-			cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat history", err)
-			return
-		}
+		// // Redis에서 메시지 조회
+		// messages, err := cc.rdb.GetChatMessages(roomID, offset, limitNum)
+		// if err != nil {
+		// 	cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat history", err)
+		// 	return
+		// }
 
-		cc.ctl.SendDataResponse(c, http.StatusOK, messages)
-	*/
+		// cc.ctl.SendDataResponse(c, http.StatusOK, messages)
 }
-
+*/
+/*
 // SendMessage godoc
 // @Summary      REST API 메시지 전송
 // @Description  REST API를 통해 특정 채팅방에 메시지를 전송합니다
@@ -834,17 +808,16 @@ func (cc *ChatController) SendMessage(c *gin.Context) {
 		return
 	}
 
-	/*
-		 	// Redis에 메시지 저장
-			if err := cc.rdb.SaveChatMessage(req.RoomID, req.UserID, req.Content); err != nil {
-				cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to save message", err)
-				return
-			}
+	// Redis에 메시지 저장
+	// if err := cc.rdb.SaveChatMessage(req.RoomID, req.UserID, req.Content); err != nil {
+	// 	cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to save message", err)
+	// 	return
+	// }
 
-			cc.ctl.SendResponse(c, http.StatusOK, "Message sent")
-	*/
+	// cc.ctl.SendResponse(c, http.StatusOK, "Message sent")
+
 }
-
+*/
 // SendCallNotification 통화 알림 전송 (SignalingController에서 호출)
 func (cc *ChatController) SendCallNotification(msg *ptl.ChatMessage) {
 	cc.sendToUser(msg.To, msg)
@@ -853,17 +826,17 @@ func (cc *ChatController) SendCallNotification(msg *ptl.ChatMessage) {
 
 // IsUserOnline 채팅 WS 온라인 여부 반환
 func (cc *ChatController) IsUserOnline(userID string) bool {
+	uid, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return false
+	}
 	cc.clientsMu.RLock()
-	_, exists := cc.clients[userID]
+	_, exists := cc.clients[uid]
 	cc.clientsMu.RUnlock()
 	if exists {
 		return true
 	}
 
-	uid, err := strconv.ParseUint(userID, 10, 64)
-	if err != nil {
-		return false
-	}
 	online, onlineErr := cc.rdb.IsOnline(uid)
 	if onlineErr != nil {
 		return false

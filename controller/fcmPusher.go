@@ -136,14 +136,14 @@ func (p *FCMPusher) WriteSender(notiTitle, notiBody, cate, did string) {
 }
 
 // SendCallPush 통화 요청 푸시 전송
-func (p *FCMPusher) SendCallPush(callerNick, callerPic, callMode, did string) {
+func (p *FCMPusher) SendCallPush(fromUID, callerPic, callMode, did string) {
 	if did == "" {
 		return
 	}
 	title := "통화 요청"
-	body := fmt.Sprintf("%s님의 %s 통화 요청", callerNick, callMode)
+	body := fmt.Sprintf("%s님의 %s 통화 요청", fromUID, callMode)
 	if callerPic != "" {
-		body = fmt.Sprintf("%s님의 %s 통화 요청 (%s)", callerNick, callMode, callerPic)
+		body = fmt.Sprintf("%s님의 %s 통화 요청 (%s)", fromUID, callMode, callerPic)
 	}
 	p.WriteSender(title, body, "CALL", did)
 }

@@ -14,6 +14,8 @@
 - `RegistUserInfo()`: Function that registers new users and sets up default profile information
 - `LoginUser()`: Function that handles user login, generates JWT tokens, stores session in Redis, initializes WebRTC session, and returns WebRTC configuration
 - `genLoginUserToken()`: Internal function that generates JWT access/refresh tokens and stores them in Redis with user information
+- `RefreshToken()`: Function that reissues access/refresh tokens using refresh token from `Authorization: Bearer ...` header or JSON body
+- `extractRefreshToken()`: Helper that safely reads refresh token without treating empty request body as JSON parse failure (`EOF`)
 - `LogoutUser()`: Function that handles user logout, deletes JWT token from Redis, and updates last access time
 
 ## User Account Management Functions

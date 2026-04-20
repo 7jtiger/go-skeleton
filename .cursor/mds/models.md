@@ -88,7 +88,7 @@
 - `GetAnnouncementDetail()`: Retrieves specific announcement detail with automatic 'new' badge calculation
 
 ### DM Room Management Functions (2026-03)
-- `CreateDMRoom()`, `GetDMRoom()`, `GetDMRoomByPair()`, `GetDMRoomsByUser()`
+- `CreateDMRoom()`, `GetDMRoom()`, `GetDMRoomByPair()`, `GetDMRoomsByUser(uid, page)`
 - `SoftDeleteDMRoom()`, `SoftDeleteDMRoomsByUser()`, `ActivateDMRoomByPair()`
 
 ### Database Schema

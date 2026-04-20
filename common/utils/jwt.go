@@ -18,13 +18,13 @@ func GetJWTClaims(uidStr string, expiration time.Duration) *JWTClaims {
 	return &JWTClaims{
 		UserID: uidStr,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "cupitok.com",
-			Subject:   "Authentication",
-			Audience:  jwt.ClaimStrings{uidStr},
+			// Issuer:    "cupitok.com",
+			// Subject:   "Authentication",
+			// Audience:  jwt.ClaimStrings{uidStr},
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			ID:        uidStr,
+			// IssuedAt:  jwt.NewNumericDate(now),
+			// NotBefore: jwt.NewNumericDate(now),
+			// ID:        uidStr,
 		},
 	}
 

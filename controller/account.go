@@ -3,7 +3,9 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	log "ms-gateway/common/logger"
 	"ms-gateway/common/utils"
@@ -273,11 +275,11 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 		return
 	}
 
-	mStr := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
-		user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
+	// mStr := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
+	// 	user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
 
-	// x-meta header에 저장
-	c.Header("x-meta", mStr)
+	// // x-meta header에 저장
+	// c.Header("x-meta", mStr)
 
 	// WebRTC 설정 정보 조회
 	webrtcConfig, err := p.rdb.GetWebRTCConfig(user.Uid)
@@ -291,8 +293,9 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 
 	uidStr := strconv.FormatUint(user.Uid, 10)
 	responseData := ptl.LoginUserResp{
-		Message:      "success",
-		MetaHeader:   mStr,
+		Message: "success",
+		// MetaHeader:   "mStr",
+		MetaHeader:   "",
 		AccessToken:  acTok,
 		RefreshToken: refTok,
 		UID:          uidStr,
@@ -432,9 +435,9 @@ func (p *AccountController) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	metaHeader := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
-		user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
-	c.Header("x-meta", metaHeader)
+	// metaHeader := fmt.Sprintf("%d/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s",
+	// 	user.Uid, user.ID, user.Did, user.Nick, user.Gender, user.Age, user.Area, user.Email, user.MainPic, user.ThumbPic, user.SPIntro)
+	// c.Header("x-meta", metaHeader)
 
 	resp := ptl.RefreshTokenResp{
 		Message:      "success",
@@ -457,12 +460,29 @@ func extractRefreshToken(c *gin.Context) string {
 		}
 	}
 
-	var req ptl.RefreshTokenReq
-	if err := c.ShouldBindJSON(&req); err == nil {
-		token := strings.TrimSpace(req.RefreshToken)
-		if token != "" {
-			return token
+	if c == nil || c.Request == nil || c.Request.Body == nil {
+		return ""
+	}
+
+	body, err := c.GetRawData()
+	if err != nil {
+		// Empty body on refresh endpoint is a valid case when token is provided via Authorization header.
+		if errors.Is(err, io.EOF) {
+			return ""
 		}
+		return ""
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return ""
+	}
+
+	var req ptl.RefreshTokenReq
+	if err := json.Unmarshal(body, &req); err != nil {
+		return ""
+	}
+	token := strings.TrimSpace(req.RefreshToken)
+	if token != "" {
+		return token
 	}
 
 	return ""

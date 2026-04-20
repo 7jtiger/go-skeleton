@@ -814,13 +814,14 @@ func Test_GetDMRoomByUser(t *testing.T) {
 	defer hdb.Close()
 
 	uid := uint64(123) // 조회할 DM Room ID
+	page := 1
 
 	// HistoryDB 초기화 (mock root, conf nil 허용)
 	historyDB := &HistoryDB{
 		conndb: hdb,
 	}
 
-	rooms, err := historyDB.GetDMRoomsByUser(uid)
+	rooms, err := historyDB.GetDMRoomsByUser(uid, page)
 	if err != nil {
 		fmt.Println("CreateDMRoom 실패:", err)
 		return

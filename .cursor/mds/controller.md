@@ -183,6 +183,10 @@
 - `TestAccountRegister()`: Tests user registration endpoint with encrypted data payload
 - `TestAccountLogin()`: Tests user login endpoint with credential validation
 - `TestWebRTCEndpoints()`: Tests WebRTC-related endpoints including configuration and status updates
+- `Test_ConnectWWS()`: 실제 DM WebSocket 핸드셰이크 테스트 (`-dm_token`, `-dm_uid` 필요)
+- `Test_GetDMRooms()`: `GET /dm/v01/list?userId=` 테스트 (`-dm_token`, `-dm_uid` 필요)
+- `Test_CreateDMRoom()`: `POST /dm/v01/room` 본문 `{uid,tid}` 테스트 (`-dm_peer_uid` 포함 필요)
+- `Test_GetTotalUnread()`: `GET /dm/v01/total/unread?userId=` 테스트 (`-dm_token`, `-dm_uid` 필요)
 
 ---
 
@@ -242,9 +246,11 @@
 - `NewChatController()`: Creates ChatController instance with Redis connection for real-time messaging
 
 ### WebSocket Connection Management
-- `HandleWebSocket()`: Handles WebSocket connection upgrade and client registration
+- `HandleWebSocket()`: Handles WebSocket connection upgrade and client registration (JWT context required, uses authenticated UID)
+- `HandleWebSocket()`: Swagger description includes DM WebSocket message examples for `text-message`, `msg-ack`, `typing`, `read-receipt`, `call-request`, `call-accept`, `call-reject`, `call-cancel`
 - `registerClient()`: Registers new client to active connections map, closes old connection if exists
 - `unregisterClient()`: Removes client from active connections and cleans up resources
+- Swagger annotation note: use swag-compatible tags only (`@Summary`, repeated `@Description`, `@Param`, `@Success`, `@Failure`, `@Router`) for WebSocket endpoint docs.
 
 ### Message Processing Functions
 - `readPump()`: Goroutine that reads messages from WebSocket connection with ping/pong timeout

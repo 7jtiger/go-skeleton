@@ -174,6 +174,17 @@ func (p *Router) JwtAuth() gin.HandlerFunc {
 			return
 		}
 
+		acToken := tokens[1]
+		acClaims, err := utils.VerifyJWTToken(acToken, p.cfg.Server.JWTSecret)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid JWT ", err.Error())
+			return
+		}
+
+		if acClaims.ExpiresAt.Before(time.Now()) {
+			p.ctl.SimpleError(c, http.StatusUnauthorized, "JWT expired")
+			return
+		}
 		// JWT 토큰 유효성 검증 (HSET에서 조회)
 		userID, err := p.rdb.HGetJWTAccess(tokens[1])
 		if err != nil {

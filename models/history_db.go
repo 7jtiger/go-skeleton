@@ -455,13 +455,33 @@ func (p *HistoryDB) GetDMRoomByUID(tid uint64) (*DMRoomRow, error) {
 }
 */
 // GetDMRoomsByUser 사용자 기준 DM 방 목록 조회
-func (p *HistoryDB) GetDMRoomsByUser(uid uint64) (*[]DMRoomRow, error) {
-	rows, err := p.conndb.Query(
-		"(SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE st_chat = 1 AND uid = ? ORDER BY at_update DESC) "+
-			"UNION "+
-			"(SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE st_chat = 1 AND tid = ? ORDER BY at_update DESC)",
-		uid, uid,
-	)
+// 페이징 기능 추가와 쿼리 오류 수정
+
+// GetDMRoomsByUser retrieves a paginated list of DM rooms for the given user (as sender or receiver)
+// Note: union 서브쿼리에서 paging(ORDER BY, LIMIT)이 제대로 동작하지 않아 OUTER 쿼리에서 정렬 및 페이징 적용 필요
+func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, error) {
+	const pageSize = 10
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	// UNION 시 LIMIT/OFFSET을 각 서브쿼리에 개별 적용하면 전체에 정상 동작하지 않음
+	// 따라서 전체 union 한 뒤 OUTER 쿼리에서 order/limit/offset 처리:
+	// (SELECT ... WHERE st_chat=1 AND uid=?) UNION (SELECT ... WHERE st_chat=1 AND tid=?) -> as T
+	// SELECT * FROM ( ... ) as T ORDER BY at_update DESC LIMIT ? OFFSET ?
+
+	query := `
+		SELECT * FROM (
+			SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+			FROM chat_his WHERE st_chat = 1 AND uid = ?
+			UNION
+			SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+			FROM chat_his WHERE st_chat = 1 AND tid = ?
+		) AS T
+		ORDER BY at_update DESC
+		LIMIT ? OFFSET ?`
+	rows, err := p.conndb.Query(query, uid, uid, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
