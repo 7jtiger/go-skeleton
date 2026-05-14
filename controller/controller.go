@@ -2,7 +2,7 @@ package controller
 
 import (
 	"encoding/json"
-	"ms-gateway/hachecker"
+	haredis "ms-gateway/common/ha-redis"
 	"ms-gateway/models"
 	ptl "ms-gateway/protocol"
 	"net/http"
@@ -18,7 +18,7 @@ import (
 // Controller
 type Controller struct {
 	cfg       *conf.Config
-	hchecker  *hachecker.HAChecker
+	hchecker  *haredis.HAChecker
 	AccCtl    *AccountController
 	PfCtl     *ProfileController
 	HomeCtl   *HomeController
@@ -32,7 +32,7 @@ type Controller struct {
 	Rdb *models.RedisDB
 }
 
-func NewCTL(cf *conf.Config, hch *hachecker.HAChecker, rep *models.Repositories) (*Controller, error) {
+func NewCTL(cf *conf.Config, hch *haredis.HAChecker, rep *models.Repositories) (*Controller, error) {
 	r := &Controller{
 		cfg:      cf,
 		hchecker: hch,
@@ -154,6 +154,6 @@ func (p *Controller) GetRedis() *models.RedisDB {
 	return p.Rdb
 }
 
-func (p *Controller) GetHAChecker() *hachecker.HAChecker {
+func (p *Controller) GetHAChecker() *haredis.HAChecker {
 	return p.hchecker
 }

@@ -145,12 +145,12 @@ func (p *StoryController) GetStoryDetail(c *gin.Context) {
 // @Produce json
 // @Param idx path string true "Story Index"
 // @Param page path string true "Page number (starting from 1)"
-// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved story comments - returns an array of comments with idx, wuid, nick, body, at_create, etc."
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved story comments - returns {comment_list, total_count}"
 // @Failure 400 {object} protocol.RespHeader "Bad request - invalid or missing idx/page"
 // @Failure 500 {object} protocol.RespHeader "Internal server error - failed to get story comments"
 // @Router /story/v01/comment/{idx}/{page} [get]
 // @Example Request: GET /story/v01/comment/3/1
-// @Example Response: {"result":0,"resultString":"Success","data":[{"idx":2,"str_idx":3,"wuid":77645423236541,"nick":"test","thumb_url":"assdd","wgender":"","wage":"","warea":"","body":"111111 test comment body","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]}
+// @Example Response: {"code":200,"message":"success","data":{"comment":[{"idx":2,"str_idx":3,"wuid":77645423236541,"nick":"test","thumb_url":"assdd","wgender":"","wage":"","warea":"","body":"111111 test comment body","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}],"total_count":52}}
 func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 	idx := c.Param("idx")
 	page := c.Param("page")
@@ -167,12 +167,15 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 		return
 	}
 
-	commentList, err := p.sdb.GetStrCmtDetail(idxInt, nPage)
+	commentList, totalCount, err := p.sdb.GetStrCmtDetail(idxInt, nPage)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get str comment list", err)
 		return
 	}
-	p.ctl.SendDataResponse(c, http.StatusOK, commentList)
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"comment":     commentList,
+		"total_count": totalCount,
+	})
 }
 
 // UploadStoryPic godoc
@@ -370,6 +373,7 @@ func (p *StoryController) uploadCldFlr(files []*multipart.FileHeader) (*map[stri
 	return &cldFlrInfos, nil
 }
 */
+
 // UpdateStoryStat godoc
 // @Summary Update story status
 // @Description Update the status of a story
@@ -590,7 +594,21 @@ func (p *StoryController) CreateStrComment(c *gin.Context) {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get account", err)
 		return
 	}
-
+	/* 	ownerUid, err := p.sdb.GetStoryOwnerUID(int(strIdxInt))
+	   	if err != nil {
+	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story owner", err)
+	   		return
+	   	}
+	   	isBlocked, err := p.sdb.IsBlockedPair(uint64(wuidInt), ownerUid)
+	   	if err != nil {
+	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check block relation", err)
+	   		return
+	   	}
+	   	if isBlocked {
+	   		p.ctl.SimpleError(c, http.StatusForbidden, "blocked relation")
+	   		return
+	   	}
+	*/
 	cmt := &ptl.StrComment{
 		StrIdx:   int(strIdxInt),
 		Wuid:     uint64(wuidInt),
@@ -699,6 +717,351 @@ func (p *StoryController) UpdateStrBodyComment(c *gin.Context) {
 	}
 
 	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully updated str body comment", "affected": affected})
+}
+
+// ToggleStoryLike godoc
+// @Summary Toggle story like
+// @Description Toggle like/unlike for a story and return latest like count
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.StoryLikeToggleReq true "Story like toggle request"
+// @Success 200 {object} map[string]interface{} "Successfully toggled story like"
+// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
+// @Failure 403 {object} map[string]interface{} "Forbidden - blocked relation"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/like/toggle [post]
+func (p *StoryController) ToggleStoryLike(c *gin.Context) {
+	var req ptl.StoryLikeToggleReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+	if req.StoryIdx == "" || req.Uid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StoryIdx and Uid are required")
+		return
+	}
+
+	storyIdx, err := strconv.Atoi(req.StoryIdx)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "StoryIdx is invalid")
+		return
+	}
+	uid, err := strconv.ParseUint(req.Uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+		return
+	}
+	/*
+	   	ownerUid, err := p.sdb.GetStoryOwnerUID(storyIdx)
+	   	if err != nil {
+	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story owner", err)
+	   		return
+	   	}
+	    	isBlocked, err := p.sdb.IsBlockedPair(uid, ownerUid)
+	   	if err != nil {
+	   		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check block relation", err)
+	   		return
+	   	}
+	   	if isBlocked {
+	   		p.ctl.SimpleError(c, http.StatusForbidden, "blocked relation")
+	   		return
+	   	}
+	*/
+	liked, likeCount, err := p.sdb.ToggleStoryLikeTx(storyIdx, uid)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to toggle story like", err)
+		return
+	}
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully toggled story like", "liked": liked, "like_count": likeCount})
+}
+
+// FollowUser godoc
+// @Summary Follow user
+// @Description Create or reactivate follow relation between users
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.FollowReq true "Follow request"
+// @Success 200 {object} map[string]interface{} "Successfully followed user"
+// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
+// @Failure 403 {object} map[string]interface{} "Forbidden - blocked relation"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/follow/create [post]
+func (p *StoryController) FollowUser(c *gin.Context) {
+	var req ptl.FollowReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+	if req.FollowerUid == "" || req.FolloweeUid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid and FolloweeUid are required")
+		return
+	}
+	followerUid, err := strconv.ParseUint(req.FollowerUid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid is invalid")
+		return
+	}
+	followeeUid, err := strconv.ParseUint(req.FolloweeUid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FolloweeUid is invalid")
+		return
+	}
+	if followerUid == followeeUid {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "self follow is not allowed")
+		return
+	}
+
+	/*
+		isBlocked, err := p.sdb.IsBlockedPair(followerUid, followeeUid)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check block relation", err)
+			return
+		}
+		if isBlocked {
+			p.ctl.SimpleError(c, http.StatusForbidden, "blocked relation")
+			return
+		}
+	*/
+	affected, err := p.sdb.SetFollow(followerUid, followeeUid)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to follow user", err)
+		return
+	}
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully followed user", "affected": affected})
+}
+
+// UnfollowUser godoc
+// @Summary Unfollow user
+// @Description Deactivate follow relation between users
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.FollowReq true "Unfollow request"
+// @Success 200 {object} map[string]interface{} "Successfully unfollowed user"
+// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/follow/cancel [post]
+func (p *StoryController) UnfollowUser(c *gin.Context) {
+	var req ptl.FollowReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+	if req.FollowerUid == "" || req.FolloweeUid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid and FolloweeUid are required")
+		return
+	}
+	followerUid, err := strconv.ParseUint(req.FollowerUid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid is invalid")
+		return
+	}
+	followeeUid, err := strconv.ParseUint(req.FolloweeUid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "FolloweeUid is invalid")
+		return
+	}
+	affected, err := p.sdb.SetUnfollow(followerUid, followeeUid)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to unfollow user", err)
+		return
+	}
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully unfollowed user", "affected": affected})
+}
+
+// GetFollowerList godoc
+// @Summary Get follower list
+// @Description Retrieve follower list by uid with pagination
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param uid path string true "User ID"
+// @Param page path string true "Page number"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved follower list"
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid parameters"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
+// @Router /story/v01/follow/follower/{uid}/{page} [get]
+func (p *StoryController) GetFollowerList(c *gin.Context) {
+	uid := c.Param("uid")
+	page := c.Param("page")
+	uidInt, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+		return
+	}
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt <= 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
+		return
+	}
+	list, err := p.sdb.GetFollowerList(uidInt, pageInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get follower list", err)
+		return
+	}
+	p.ctl.SendDataResponse(c, http.StatusOK, list)
+}
+
+// GetFollowingList godoc
+// @Summary Get following list
+// @Description Retrieve following list by uid with pagination
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param uid path string true "User ID"
+// @Param page path string true "Page number"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved following list"
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid parameters"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
+// @Router /story/v01/follow/following/{uid}/{page} [get]
+func (p *StoryController) GetFollowingList(c *gin.Context) {
+	uid := c.Param("uid")
+	page := c.Param("page")
+	uidInt, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+		return
+	}
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt <= 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
+		return
+	}
+	list, err := p.sdb.GetFollowingList(uidInt, pageInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get following list", err)
+		return
+	}
+	p.ctl.SendDataResponse(c, http.StatusOK, list)
+}
+
+// BlockUser godoc
+// @Summary Block user
+// @Description Create or reactivate block relation between users
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.BlockReq true "Block request"
+// @Success 200 {object} map[string]interface{} "Successfully blocked user"
+// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/block/create [post]
+func (p *StoryController) BlockUser(c *gin.Context) {
+	var req ptl.BlockReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+	if req.Uid == "" || req.Bid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockerUid and BlockedUid are required")
+		return
+	}
+	uid, err := strconv.ParseUint(req.Uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockerUid is invalid")
+		return
+	}
+	bid, err := strconv.ParseUint(req.Bid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockedUid is invalid")
+		return
+	}
+	if uid == bid {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "self block is not allowed")
+		return
+	}
+
+	affected, err := p.adb.SetBlock(uid, bid, req.Reason)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to block user", err)
+		return
+	}
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully blocked user", "affected": affected})
+}
+
+// UnblockUser godoc
+// @Summary Unblock user
+// @Description Deactivate block relation between users
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param request body protocol.BlockReq true "Unblock request"
+// @Success 200 {object} map[string]interface{} "Successfully unblocked user"
+// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /story/v01/block/cancel [post]
+func (p *StoryController) UnblockUser(c *gin.Context) {
+	var req ptl.BlockReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+		return
+	}
+	if req.Uid == "" || req.Bid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockerUid and BlockedUid are required")
+		return
+	}
+	uid, err := strconv.ParseUint(req.Uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockerUid is invalid")
+		return
+	}
+	bid, err := strconv.ParseUint(req.Bid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "BlockedUid is invalid")
+		return
+	}
+
+	affected, err := p.adb.SetUnblock(uid, bid)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to unblock user", err)
+		return
+	}
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully unblocked user", "affected": affected})
+}
+
+// GetBlockList godoc
+// @Summary Get block list
+// @Description Retrieve blocked user list by uid with pagination
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Param uid path string true "User ID"
+// @Param page path string true "Page number (start at 1)"
+// @Param limit path string true "Page size (1~100)"
+// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved block list"
+// @Failure 400 {object} protocol.RespHeader "Bad request - invalid parameters"
+// @Failure 500 {object} protocol.RespHeader "Internal server error"
+// @Router /story/v01/block/list/{uid}/{page}/{limit} [get]
+func (p *StoryController) GetBlockList(c *gin.Context) {
+	uid := c.Param("uid")
+	page := c.Param("page")
+	limit := c.Param("limit")
+
+	uidInt, err := strconv.ParseUint(uid, 10, 64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+		return
+	}
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt <= 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
+		return
+	}
+
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt <= 0 || limitInt > 100 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Limit is invalid")
+		return
+	}
+
+	list, err := p.adb.GetBlockList(uidInt, pageInt, limitInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get block list", err)
+		return
+	}
+	p.ctl.SendDataResponse(c, http.StatusOK, list)
 }
 
 /*

@@ -174,8 +174,16 @@
 - **Security**: Encrypted data transmission and token validation
 - **Pagination**: List response management with page controls
 - **Internationalization**: Multi-language response support
+- **Story Social**: Like toggle, follow/unfollow, block/unblock DTO support
+
+### Story Social DTOs (2026-04)
+- `StoryLikeToggleReq`: story like toggle request
+- `FollowReq`: follow/unfollow request
+- `FollowUserItem`: follower/following list item response
+- `BlockReq`: block/unblock request
+- `BlockUserItem`: block list item response
 
 ---
 *Created: 2025-09-15*
-*Last Updated: 2025-11-05*
+*Last Updated: 2026-04-21*
 *File Location: /home/jino/go/src/ms-gateway/protocol/*

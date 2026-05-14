@@ -507,6 +507,7 @@ func Test_FBlogin(t *testing.T) {
 
 	var key = []string{"data"}
 	var value = []string{"test243", "123456789"}
+	// var value = []string{"qqqq1111", "qqqq1111!"}
 
 	dataMap := LoginReq{
 		Id: value[0],
@@ -552,8 +553,13 @@ func Test_Logout(t *testing.T) {
 }
 
 ///// test token
-//act := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc"
-//rft := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxMDQxNzAzNTA0OX0.jiQ7sVNgHUgW2pQWoVbQiCZMdvwLlVS3LkvpLJTt3mU"
+// test243 uid: 8697414060736839837
+//act := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
+//rft := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
+
+// qqqq11111 uid: 4033287471439576593
+//act := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI"
+//ref := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI"
 
 func Test_GetSetting(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
@@ -815,6 +821,120 @@ func Test_UpdStatComment(t *testing.T) {
 	fmt.Println(res)
 }
 
+func TestToggleStoryLike(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/like/toggle"
+
+	var key = []string{"story_idx", "uid"}
+	var value = []string{"3", "77645423234236541"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to toggle story like: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestFollowUser(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/follow/create"
+
+	var key = []string{"follower_uid", "followee_uid"}
+	var value = []string{"77645423234236541", "7766493213763375817"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to follow user: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUnfollowUser(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/follow/cancel"
+
+	var key = []string{"follower_uid", "followee_uid"}
+	var value = []string{"77645423234236541", "7766493213763375817"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to unfollow user: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetFollowerList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/follow/follower/7766493213763375817/1"
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get follower list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetFollowingList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/follow/following/77645423234236541/1"
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get following list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+// ---- story end ----
+
+func TestBlockUser(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/block/create"
+
+	var key = []string{"blocker_uid", "blocked_uid", "reason"}
+	var value = []string{"77645423234236541", "7766493213763375817", "spam"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to block user: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestUnblockUser(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/block/cancel"
+
+	var key = []string{"blocker_uid", "blocked_uid"}
+	var value = []string{"77645423234236541", "7766493213763375817"}
+
+	res, err := PostJson(*targetUrl, qurl, key, value)
+	if err != nil {
+		t.Errorf("Failed to unblock user: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+func TestGetBlockList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/block/list/77645423234236541/1/20"
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get block list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+// ---- file upload ----
 func TestUploadStoryPic(t *testing.T) {
 	accountID := "3a5160a653bf6175ea5c5b24ee01e344"
 	apiToken := "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
@@ -1122,6 +1242,189 @@ func TestMultiFileUpload(t *testing.T) {
 
 }
 
+type ModifyMainPicReq struct {
+	UID string `json:"uid"`
+}
+
+func TestModifyMainPic(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/inserv/v01/upd/mpic"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var key = []string{"data"}
+	value := "test23"
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := ModifyMainPicReq{
+		UID: value,
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Create a new file upload request
+	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("파일 열기 실패: %v", err)
+	}
+	defer file.Close()
+
+	// Add file to form
+	part, err := writer.CreateFormFile("files", filepath.Base(filePath))
+	if err != nil {
+		t.Fatalf("폼 파일 생성 실패: %v", err)
+	}
+
+	// Copy file content to form
+	_, err = io.Copy(part, file)
+	if err != nil {
+		t.Errorf("Failed to copy file content: %v", err)
+		return
+	}
+	err = writer.WriteField("data", encryptedData)
+	if err != nil {
+		t.Errorf("Failed to write data field: %v", err)
+		return
+	}
+
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	// Create request
+	url := fmt.Sprintf("http://%s%s", *targetUrl, qurl)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		t.Errorf("Failed to create request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Authorization", "Bearer "+
+		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxMjYxMiwibmJmIjoxNzcwMTI2MjEyLCJpYXQiOjE3NzAxMjYyMTIsImp0aSI6ImY0MjI4NmZmLWE1YTUtNGE3Yy1hM2M0LWEyY2NlZDUwYjQ1YyJ9.N9NeyBmSr_ePxBphBw1haUrBoDSEuTkj2sh9OY2LBO8")
+
+	req.Header.Set("x-meta", "8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("요청 전송 실패: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("응답 읽기 실패: %v", err)
+	}
+
+	fmt.Printf("Response Status: %d\n", resp.StatusCode)
+	fmt.Printf("Response Body: %s\n", string(respBody))
+
+}
+
+func TestSimpleMainPic(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/acc/v01/upd/mpic"
+
+	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
+	// var key = []string{"data"}
+	value := "test23"
+
+	// Convert the key-value pairs to a map for easier JSON handling
+	dataMap := ModifyMainPicReq{
+		UID: value,
+	}
+
+	encryptedData, err := EncryptData(dataMap)
+	if err != nil {
+		t.Errorf("Failed to encrypt data: %v", err)
+		return
+	}
+
+	// Create a new file upload request
+	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("파일 열기 실패: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		t.Fatalf("파일 정보 가져오기 실패: %v", err)
+	}
+
+	// 파일을 읽어들여 바이트 배열로 변환
+	fileBytes := make([]byte, fileInfo.Size())
+	_, err = file.Read(fileBytes)
+	if err != nil {
+		t.Fatalf("파일 읽기 실패: %v", err)
+	}
+
+	// 파일 업로드 요청 생성
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		t.Fatalf("폼 파일 생성 실패: %v", err)
+	}
+	part.Write(fileBytes)
+
+	// 인코딩 된 파라메터 추가
+	err = writer.WriteField("data", encryptedData)
+	if err != nil {
+		t.Fatalf("폼 필드 추가 실패: %v", err)
+	}
+
+	writer.Close()
+
+	req, err := http.NewRequest("POST", *targetUrl+qurl, body)
+	if err != nil {
+		t.Fatalf("HTTP 요청 생성 실패: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("이미지 업로드 실패: %v", err)
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("이미지 업로드 실패, 상태 코드: %d", res.StatusCode)
+	} else {
+		fmt.Println("이미지 업로드 성공")
+	}
+
+}
+
+func Test_tmp(t *testing.T) {
+	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public]
+	testMap := map[string]string{
+		"bc1.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public",
+	}
+	fmt.Println(testMap)
+
+	urls := make([]string, 0, len(testMap))
+	for _, url := range testMap {
+		urls = append(urls, url)
+	}
+	fmt.Println(urls)
+}
+
+// ---- file upload end ----
+
+// ---- account ----
 func TestAccLogin2(t *testing.T) {
 	hash := "$2a$11$tO.ziYPkqMgVY28iiTn54ufX3TmIJlm13UiRIchaYQ80EUlu.HhZC"
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("123456789"))
@@ -1445,186 +1748,6 @@ func TestGetRandDefIntroImg(t *testing.T) {
 
 }
 
-type ModifyMainPicReq struct {
-	UID string `json:"uid"`
-}
-
-func TestModifyMainPic(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/inserv/v01/upd/mpic"
-
-	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
-	// var key = []string{"data"}
-	value := "test23"
-
-	// Convert the key-value pairs to a map for easier JSON handling
-	dataMap := ModifyMainPicReq{
-		UID: value,
-	}
-
-	encryptedData, err := EncryptData(dataMap)
-	if err != nil {
-		t.Errorf("Failed to encrypt data: %v", err)
-		return
-	}
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Create a new file upload request
-	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
-	file, err := os.Open(filePath)
-	if err != nil {
-		t.Fatalf("파일 열기 실패: %v", err)
-	}
-	defer file.Close()
-
-	// Add file to form
-	part, err := writer.CreateFormFile("files", filepath.Base(filePath))
-	if err != nil {
-		t.Fatalf("폼 파일 생성 실패: %v", err)
-	}
-
-	// Copy file content to form
-	_, err = io.Copy(part, file)
-	if err != nil {
-		t.Errorf("Failed to copy file content: %v", err)
-		return
-	}
-	err = writer.WriteField("data", encryptedData)
-	if err != nil {
-		t.Errorf("Failed to write data field: %v", err)
-		return
-	}
-
-	contentType := writer.FormDataContentType()
-	writer.Close()
-
-	// Create request
-	url := fmt.Sprintf("http://%s%s", *targetUrl, qurl)
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		t.Errorf("Failed to create request: %v", err)
-		return
-	}
-
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Authorization", "Bearer "+
-		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxMjYxMiwibmJmIjoxNzcwMTI2MjEyLCJpYXQiOjE3NzAxMjYyMTIsImp0aSI6ImY0MjI4NmZmLWE1YTUtNGE3Yy1hM2M0LWEyY2NlZDUwYjQ1YyJ9.N9NeyBmSr_ePxBphBw1haUrBoDSEuTkj2sh9OY2LBO8")
-
-	req.Header.Set("x-meta", "8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!")
-
-	// Send request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("요청 전송 실패: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("응답 읽기 실패: %v", err)
-	}
-
-	fmt.Printf("Response Status: %d\n", resp.StatusCode)
-	fmt.Printf("Response Body: %s\n", string(respBody))
-
-}
-
-func TestSimpleMainPic(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/acc/v01/upd/mpic"
-
-	// var key = []string{"id", "pw", "name", "gender", "age", "birth", "area"}
-	// var key = []string{"data"}
-	value := "test23"
-
-	// Convert the key-value pairs to a map for easier JSON handling
-	dataMap := ModifyMainPicReq{
-		UID: value,
-	}
-
-	encryptedData, err := EncryptData(dataMap)
-	if err != nil {
-		t.Errorf("Failed to encrypt data: %v", err)
-		return
-	}
-
-	// Create a new file upload request
-	filePath := "/home/jino/tmp/bc1.jpg" // 이미지 파일 경로 설정
-	file, err := os.Open(filePath)
-	if err != nil {
-		t.Fatalf("파일 열기 실패: %v", err)
-	}
-	defer file.Close()
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		t.Fatalf("파일 정보 가져오기 실패: %v", err)
-	}
-
-	// 파일을 읽어들여 바이트 배열로 변환
-	fileBytes := make([]byte, fileInfo.Size())
-	_, err = file.Read(fileBytes)
-	if err != nil {
-		t.Fatalf("파일 읽기 실패: %v", err)
-	}
-
-	// 파일 업로드 요청 생성
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
-	if err != nil {
-		t.Fatalf("폼 파일 생성 실패: %v", err)
-	}
-	part.Write(fileBytes)
-
-	// 인코딩 된 파라메터 추가
-	err = writer.WriteField("data", encryptedData)
-	if err != nil {
-		t.Fatalf("폼 필드 추가 실패: %v", err)
-	}
-
-	writer.Close()
-
-	req, err := http.NewRequest("POST", *targetUrl+qurl, body)
-	if err != nil {
-		t.Fatalf("HTTP 요청 생성 실패: %v", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("이미지 업로드 실패: %v", err)
-		return
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("이미지 업로드 실패, 상태 코드: %d", res.StatusCode)
-	} else {
-		fmt.Println("이미지 업로드 성공")
-	}
-
-}
-
-func Test_tmp(t *testing.T) {
-	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public]
-	testMap := map[string]string{
-		"bc1.jpg": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public",
-	}
-	fmt.Println(testMap)
-
-	urls := make([]string, 0, len(testMap))
-	for _, url := range testMap {
-		urls = append(urls, url)
-	}
-	fmt.Println(urls)
-}
-
 func TestSendEmail(t *testing.T) {
 	tmpl, err := template.New("email").Parse(protocol.EmailOTPCode)
 	if err != nil {
@@ -1661,10 +1784,16 @@ func TestSendEmail(t *testing.T) {
 // ----------------- dm test
 var (
 	dmTargetHost = flag.String("dm_target", "localhost:8080", "dm test target server url")
-	dmToken      = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc", "dm test bearer token")
-	dmUID        = flag.String("dm_uid", "8697414060736839837", "dm test uid (required for dm room/list/unread/ws query)")
-	dmPeerUID    = flag.String("dm_peer_uid", "5709326013809104361", "dm test peer uid (required for dm room create)")
+	// dmToken      = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc", "dm test bearer token")
+	dmToken     = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE", "dm test bearer token")
+	dmUID       = flag.String("dm_uid", "8697414060736839837", "dm test uid (required for dm room/list/unread/ws query)")
+	dmPeerUID   = flag.String("dm_peer_uid", "4033287471439576593", "dm test peer uid (required for dm room create)")
+	dmPeerToken = flag.String("dm_peer_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI", "dm test peer bearer token (required for peer ws auth)")
 )
+
+//"acTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc3NDYxMjI2fQ.em-dbS_WqiW3BWYj33cz0RjZfUEO2bRQF_GpVnCyVZ0",
+// "refTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc4NTg0NDI2fQ.eLgd6RLtddrNVwM_YrYhRahNKNL7qGQjP5-lr28cJ1I"
+//
 
 func Test_ConnectWWS(t *testing.T) {
 	if *dmToken == "" || *dmUID == "" {
@@ -1736,4 +1865,128 @@ func Test_GetTotalUnread(t *testing.T) {
 		return
 	}
 	fmt.Println("dm unread:", res)
+}
+
+func Test_GetChatList(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run dm chat list test")
+	}
+
+	qurl := "/dm/v01/history/" + "10/" + "1/" + "20"
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get chat list: %v", err)
+		return
+	}
+	fmt.Println("dm chat list:", res)
+}
+
+func Test_SendDMMessage(t *testing.T) {
+	// if *dmToken == "" || *dmUID == "" || *dmPeerUID == "" || *dmPeerToken == "" {
+	// 	t.Skip("set -dm_token, -dm_uid, -dm_peer_uid, -dm_peer_token to run dm message send test")
+	// }
+
+	senderURL := url.URL{
+		Scheme: "ws",
+		Host:   *dmTargetHost,
+		Path:   "/dm/v01/ws",
+	}
+	senderQ := senderURL.Query()
+	senderQ.Set("userId", *dmUID)
+	senderURL.RawQuery = senderQ.Encode()
+
+	senderHeader := http.Header{}
+	senderHeader.Set("Authorization", "Bearer "+*dmToken)
+	senderConn, senderRes, err := websocket.DefaultDialer.Dial(senderURL.String(), senderHeader)
+	if err != nil {
+		if senderRes != nil {
+			t.Fatalf("Failed to connect sender websocket: %v (status=%d)", err, senderRes.StatusCode)
+		}
+		t.Fatalf("Failed to connect sender websocket: %v", err)
+	}
+	defer senderConn.Close()
+
+	receiverURL := url.URL{
+		Scheme: "ws",
+		Host:   *dmTargetHost,
+		Path:   "/dm/v01/ws",
+	}
+	receiverQ := receiverURL.Query()
+	receiverQ.Set("userId", *dmPeerUID)
+	receiverURL.RawQuery = receiverQ.Encode()
+
+	receiverHeader := http.Header{}
+	receiverHeader.Set("Authorization", "Bearer "+*dmPeerToken)
+	receiverConn, receiverRes, err := websocket.DefaultDialer.Dial(receiverURL.String(), receiverHeader)
+	if err != nil {
+		if receiverRes != nil {
+			t.Fatalf("Failed to connect receiver websocket: %v (status=%d)", err, receiverRes.StatusCode)
+		}
+		t.Fatalf("Failed to connect receiver websocket: %v", err)
+	}
+	defer receiverConn.Close()
+
+	roomRes, err := PostWithToken(*dmTargetHost, "/dm/v01/mkroom/"+*dmPeerUID, nil, nil, *dmToken)
+	if err != nil {
+		t.Fatalf("Failed to create dm room: %v", err)
+	}
+	t.Logf("create dm room response: %s", roomRes)
+
+	msgID := fmt.Sprintf("dm-it-msg-%d", time.Now().UnixNano())
+	wantContent := "hello from dm integration test"
+	sendPayload := map[string]interface{}{
+		"type":    "text-message",
+		"to":      *dmPeerUID,
+		"content": wantContent,
+		"msgId":   msgID,
+	}
+
+	if err := senderConn.WriteJSON(sendPayload); err != nil {
+		t.Fatalf("Failed to send websocket dm message: %v", err)
+	}
+
+	receiverConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, recvRaw, err := receiverConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read dm message on receiver: %v", err)
+	}
+
+	var recvMsg map[string]interface{}
+	if err := json.Unmarshal(recvRaw, &recvMsg); err != nil {
+		t.Fatalf("Failed to parse receiver message: %v raw=%s", err, string(recvRaw))
+	}
+
+	if recvMsg["type"] != "text-message" {
+		t.Fatalf("Unexpected receiver message type: %v raw=%s", recvMsg["type"], string(recvRaw))
+	}
+	if recvMsg["from"] != *dmUID {
+		t.Fatalf("Unexpected receiver from uid: got=%v want=%s", recvMsg["from"], *dmUID)
+	}
+	if recvMsg["to"] != *dmPeerUID {
+		t.Fatalf("Unexpected receiver to uid: got=%v want=%s", recvMsg["to"], *dmPeerUID)
+	}
+	if recvMsg["content"] != wantContent {
+		t.Fatalf("Unexpected receiver content: got=%v want=%s", recvMsg["content"], wantContent)
+	}
+
+	senderConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, ackRaw, err := senderConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read msg-ack on sender: %v", err)
+	}
+
+	var ackMsg map[string]interface{}
+	if err := json.Unmarshal(ackRaw, &ackMsg); err != nil {
+		t.Fatalf("Failed to parse sender ack message: %v raw=%s", err, string(ackRaw))
+	}
+
+	if ackMsg["type"] != "msg-ack" {
+		t.Fatalf("Unexpected ack message type: %v raw=%s", ackMsg["type"], string(ackRaw))
+	}
+	if ackMsg["msgId"] != msgID {
+		t.Fatalf("Unexpected ack msgId: got=%v want=%s", ackMsg["msgId"], msgID)
+	}
+	if ackMsg["to"] != *dmUID {
+		t.Fatalf("Unexpected ack to uid: got=%v want=%s", ackMsg["to"], *dmUID)
+	}
 }

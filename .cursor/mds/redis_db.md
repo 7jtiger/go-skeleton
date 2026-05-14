@@ -84,10 +84,10 @@
 - `CleanupInactiveRooms()`: Function to clean up chat rooms inactive for certain period
 
 ## DM Unread / Online State Functions (2026-03)
-- `IncrUnread(uid, roomID)`: `DM:UNREAD:{uid}:{roomId}` 카운터 증가
+- `IncrUnread(uid, roomID)`: Redis Lua로 원자 실행 — `DM:UNREAD:{uid}:{roomId}` `INCR`, companion `...:ts`에 마지막 증가 시각(Unix 초) `SET`, 두 키 모두 **30일** `EXPIRE` 매 호출 갱신(스케줄러 없음).
 - `GetUnread(uid, roomID)`: 단일 방 unread 조회 (키 미존재 시 0)
-- `ResetUnread(uid, roomID)`: 단일 방 unread 초기화(DEL)
-- `GetAllUnreadForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` 기반 전체 unread 맵 조회
+- `ResetUnread(uid, roomID)`: 해당 방 카운터·`:ts` companion 동시 `DEL`
+- `GetAllUnreadForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` 기반 전체 unread 맵 (`:ts` 키 제외)
 - `SetOnline(uid)`: `DM:ONLINE:{uid}` 키를 90초 TTL로 설정
 - `IsOnline(uid)`: 온라인 키 존재 여부로 상태 판별
 - `DeleteOnline(uid)`: 온라인 키 제거

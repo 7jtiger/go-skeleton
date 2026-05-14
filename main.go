@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	haredis "ms-gateway/common/ha-redis"
 	"ms-gateway/common/logger"
 	"ms-gateway/conf"
 	ctl "ms-gateway/controller"
-	"ms-gateway/hachecker"
 	"ms-gateway/models"
 	rt "ms-gateway/router"
 	schd "ms-gateway/scheduler"
@@ -115,18 +115,18 @@ func initLogger(cf *conf.Config) error {
 // runServer 서버를 초기화하고 실행합니다
 func runServer(cf *conf.Config) error {
 
-	hch := hachecker.NewHAChecker(cf)
-	if hch == nil {
-		fmt.Printf("hachecker.NewHAChecker failed")
-		os.Exit(1)
-	}
-
 	// 모델 초기화
 	mod, err := models.NewModel(cf)
 	if err != nil {
 		return fmt.Errorf("failed to initialize models: %w", err)
 	}
 	logger.Info("Models initialized successfully")
+
+	hch, err := haredis.NewHAChecker(cf, mod)
+	if hch == nil {
+		fmt.Printf("hachecker.NewHAChecker failed")
+		os.Exit(1)
+	}
 
 	// 컨트롤러 초기화
 	controller, err := ctl.NewCTL(cf, hch, mod)
@@ -136,7 +136,7 @@ func runServer(cf *conf.Config) error {
 	logger.Info("Controller initialized successfully")
 
 	// 스케줄러 초기화
-	scheduler, err := schd.NewScheduler(cf, mod)
+	scheduler, err := schd.NewScheduler(cf, hch, mod)
 	if err != nil {
 		return fmt.Errorf("failed to initialize scheduler: %w", err)
 	}

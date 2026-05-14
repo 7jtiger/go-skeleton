@@ -742,6 +742,7 @@ func Test_GetAnnouncementDetail(t *testing.T) {
 }
 
 // ===============DM Room db test===============================================
+
 func Test_CreateDMRoom(t *testing.T) {
 	// HistoryDB의 CreateDMRoom 메서드 테스트 코드 구현 (chat_his 테이블 사용)
 	hdb := ConnectDB("hdb")
@@ -821,11 +822,127 @@ func Test_GetDMRoomByUser(t *testing.T) {
 		conndb: hdb,
 	}
 
-	rooms, err := historyDB.GetDMRoomsByUser(uid, page)
+	rooms, _, err := historyDB.GetDMRoomsByUser(uid, page)
 	if err != nil {
 		fmt.Println("CreateDMRoom 실패:", err)
 		return
 	}
 	fmt.Printf("DM Room 생성 성공 (chat_his idx): %+v\n", rooms)
 
+}
+
+/*
+	 func IncrUnread(uid uint64, roomID int64) (int64, error) {
+		nret, err := r.client.Incr(r.ctx, dmUnreadKey(uid, roomID)).Result()
+
+		return nret, err
+	}
+*/
+func Test_IncrUnread(t *testing.T) {
+	rdb := ConnRedis()
+	if rdb == nil {
+		fmt.Println("Redis 연결 실패")
+		return
+	}
+	defer rdb.Close()
+
+	// uid := uint64(4033287471439576593)
+	// roomID := int64(10)
+	// res, err2 := rdb.HSet(context.Background(), dmUnreadKey(uid, roomID)+":ts", "ts", time.Now().Unix()).Result()
+	// key := dmUnreadKey(uid, roomID)
+	key := "DM:UNREAD:4033287471439576593"
+	err := rdb.Del(context.Background(), key).Err()
+	if err != nil {
+		fmt.Println("HSet 실패:", err)
+		return
+	}
+
+	fmt.Println("HSet 성공 ", err)
+}
+
+func Test_Expired24hMsg(t *testing.T) {
+	rdb := ConnRedis()
+	if rdb == nil {
+		fmt.Println("Redis 연결 실패")
+		return
+	}
+	defer rdb.Close()
+
+	result, err := Expired24hMsg(rdb, context.Background(), 24*time.Hour)
+	if err != nil {
+		fmt.Println("Expired24hMsg 실패:", err)
+		return
+	}
+
+	fmt.Println(result)
+}
+
+func Expired24hMsg(rdb *redis.Client, ctx context.Context, ttl time.Duration) (*ChatPruneResult, error) {
+	if ttl <= 0 {
+		return nil, fmt.Errorf("ttl must be greater than zero")
+	}
+
+	cutoff := time.Now().Add(-ttl)
+	pattern := "chat:rooms:*:msg"
+	var cursor uint64
+	result := &ChatPruneResult{}
+
+	for {
+		keys, nextCursor, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, key := range keys {
+			result.ScannedRooms++
+
+			rawMessages, lErr := rdb.LRange(ctx, key, 0, -1).Result()
+			if lErr != nil || len(rawMessages) == 0 {
+				continue
+			}
+
+			kept := make([]interface{}, 0, len(rawMessages))
+			deletedInRoom := 0
+
+			for _, raw := range rawMessages {
+				var msg ChatMessageData
+				if uErr := json.Unmarshal([]byte(raw), &msg); uErr != nil {
+					// 파싱 실패 데이터는 유실 방지를 위해 보존
+					kept = append(kept, raw)
+					continue
+				}
+
+				if msg.Timestamp.Before(cutoff) {
+					deletedInRoom++
+					continue
+				}
+				kept = append(kept, raw)
+			}
+
+			if deletedInRoom == 0 {
+				continue
+			}
+
+			pipe := rdb.TxPipeline()
+			pipe.Del(ctx, key)
+			if len(kept) > 0 {
+				pipe.RPush(ctx, key, kept...)
+				pipe.Expire(ctx, key, ttl)
+			}
+
+			if _, pErr := pipe.Exec(ctx); pErr != nil {
+				fmt.Printf("failed to prune key %s: %v\n", key, pErr)
+				continue
+			}
+
+			result.DeletedMsgs += deletedInRoom
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return result, nil
 }

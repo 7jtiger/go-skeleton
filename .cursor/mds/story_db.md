@@ -173,12 +173,13 @@ Creates new comment on a story.
 
 #### GetStrCmtDetail
 ```go
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, error)
+func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, int, error)
 ```
 Retrieves paginated active comments (stat IN (0, 1)) for a story.
 
 **Returns:**
 - Array of comments with: idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
+- Total active comment count for the story (same filter: stat IN (0, 1))
 - Ordered by at_create DESC
 
 #### GetStrCommentList
@@ -349,15 +350,27 @@ type StrComment struct {
 - Monitor str_img and str_imgbak JSON sizes
 - Clean up old deleted stories (stat=0) periodically
 
+## 2026-04 Update (Social Extension)
+
+### Added DB templates in code comments (`models/story_db.go`)
+- `story_like`: like/unlike ledger (`stat`) with unique `(story_idx, uid)`
+- `user_follow`: follow/unfollow ledger (`stat`) with unique `(follower_uid, followee_uid)`
+- `user_block`: block/unblock ledger (`stat`) with unique `(blocker_uid, blocked_uid)`
+
+### Added repository methods
+- `ToggleStoryLikeTx()`: transactional like toggle + `story.qt_good` sync
+- `SetFollow()`, `SetUnfollow()`, `GetFollowerList()`, `GetFollowingList()`
+- `SetBlock()`, `SetUnblock()`, `GetBlockList()`, `IsBlockedPair()`
+- `GetStoryOwnerUID()` for ownership lookup in block checks
+
 ## Future Enhancements
-- [ ] Add like/good functionality (qt_good column exists)
-- [ ] Implement view tracking (qt_checked column exists)
+- [ ] Implement view tracking (`qt_checked`)
 - [ ] Add story expiration feature (24-hour stories)
 - [ ] Support story mentions and hashtags
 - [ ] Implement story analytics
 
 ---
 *Created: 2026-02-02*
-*Last Updated: 2026-02-02*
+*Last Updated: 2026-04-21*
 *Database: MySQL 8.0+*
 *Character Set: utf8mb4*

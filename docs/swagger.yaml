@@ -68,15 +68,60 @@ definitions:
       noiseSuppression:
         type: boolean
     type: object
+  protocol.BlockReq:
+    properties:
+      bid:
+        type: string
+      reason:
+        type: string
+      uid:
+        type: string
+    type: object
+  protocol.ChatMessage:
+    properties:
+      callMode:
+        description: video | audio | text
+        type: string
+      content:
+        description: 메시지 내용
+        type: string
+      from:
+        description: 발신자 ID
+        type: string
+      msgId:
+        description: 클라이언트 메시지 식별자
+        type: string
+      partner:
+        allOf:
+        - $ref: '#/definitions/protocol.PartnerInfo'
+        description: 상대방 정보
+      roomId:
+        description: 채팅방 ID
+        type: string
+      timestamp:
+        description: 타임스탬프
+        type: integer
+      to:
+        description: 수신자 ID
+        type: string
+      type:
+        description: text-message, typing, read-receipt, call-*
+        type: string
+      unread:
+        description: 읽지 않은 메시지 수
+        type: integer
+    type: object
   protocol.DMRoomResp:
     properties:
-      atCreate:
+      at_crtchat:
         type: string
-      atUpdate:
+      at_update:
         type: string
       partner:
         $ref: '#/definitions/protocol.PartnerInfo'
       rid:
+        type: integer
+      total:
         type: integer
       unread:
         type: integer
@@ -86,6 +131,13 @@ definitions:
       idx:
         type: string
       pic_idx:
+        type: string
+    type: object
+  protocol.FollowReq:
+    properties:
+      followee_uid:
+        type: string
+      follower_uid:
         type: string
     type: object
   protocol.ICEServer:
@@ -259,6 +311,13 @@ definitions:
     type: integer
     x-enum-varnames:
     - Success
+  protocol.StoryLikeToggleReq:
+    properties:
+      story_idx:
+        type: string
+      uid:
+        type: string
+    type: object
   protocol.StrCmtCreateReq:
     properties:
       body:
@@ -996,6 +1055,41 @@ paths:
       summary: Get User DM Chat Rooms
       tags:
       - chat
+  /dm/v01/list/{roomId}/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: 특정 채팅방의 메시지 기록을 조회합니다
+      parameters:
+      - description: Chat Room ID
+        in: path
+        name: roomId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/protocol.ChatMessage'
+            type: array
+        "400":
+          description: roomId required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: 채팅 기록 조회
+      tags:
+      - chat
   /dm/v01/mkroom/{pid}:
     post:
       consumes:
@@ -1077,12 +1171,23 @@ paths:
         WebSocket message request examples:
         1) text-message: {"type":"text-message","to":"456","content":"Hello, how are you?","msgId":"1234567890"}
         1-1) text-message-ack: {"type":"msg-ack","from":"123","to":"456","roomId":"1234567890","msgId":"1234567890","unread":1,"timestamp":1718851200}
-        2) typing: {"type":"typing","to":"456","roomId":"1234567890"}
+        2) typing(optional): {"type":"typing","to":"456","roomId":"1234567890"}
         3) read-receipt: {"type":"read-receipt","to":"456","roomId":"1234567890"}
-        4) call-request: {"type":"call-request","to":"456","roomId":"1234567890","callMode":"video"}
-        5) call-accept: {"type":"call-accept","to":"456","roomId":"1234567890","callMode":"video"}
-        6) call-reject: {"type":"call-reject","to":"456","roomId":"1234567890","callMode":"video"}
-        7) call-cancel: {"type":"call-cancel","to":"456","roomId":"1234567890","callMode":"video"}
+        DM Client Work flow:
+        1) connection : 로그인시 ws 연결
+        1-1) {domain}/dm/v01/ws GET 로그인후
+        2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작
+        2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작
+        3) chatlist : 기존 채팅방 리스트 요청
+        3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청
+        4) totalunread : 총 미읽음 메시지 수 조회
+        4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회
+        5) read-receipt : 특정 채팅방 입장시 미읽음 초기화
+        5-1) Type : "read-receipt", To : 수신자 UID, RoomID : 채팅방 ID
+        6) text-message : 텍스트 메시지 전송
+        6-1) Type : "text-message", To : 수신자 UID, Content : 텍스트 메시지, MsgID : 메시지 식별자(m-{timestamp(unixtime)})
+        7) 로그아웃 : 로그아웃시 ws disconnect
+        7-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
       parameters:
       - description: 'Bearer access token. Example: Bearer {access_token}'
         in: header
@@ -1285,6 +1390,111 @@ paths:
       summary: 알림 목록 조회
       tags:
       - Noti
+  /story/v01/block/cancel:
+    post:
+      consumes:
+      - application/json
+      description: Deactivate block relation between users
+      parameters:
+      - description: Unblock request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.BlockReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully unblocked user
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Unblock user
+      tags:
+      - Story
+  /story/v01/block/create:
+    post:
+      consumes:
+      - application/json
+      description: Create or reactivate block relation between users
+      parameters:
+      - description: Block request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.BlockReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully blocked user
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Block user
+      tags:
+      - Story
+  /story/v01/block/list/{uid}/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve blocked user list by uid with pagination
+      parameters:
+      - description: User ID
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Page number (start at 1)
+        in: path
+        name: page
+        required: true
+        type: string
+      - description: Page size (1~100)
+        in: path
+        name: limit
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved block list
+          schema:
+            $ref: '#/definitions/protocol.RespDataHeader'
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get block list
+      tags:
+      - Story
   /story/v01/comment/{idx}/{page}:
     get:
       consumes:
@@ -1306,8 +1516,8 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully retrieved story comments - returns an array of
-            comments with idx, wuid, nick, body, at_create, etc.
+          description: Successfully retrieved story comments - returns {comment_list,
+            total_count}
           schema:
             $ref: '#/definitions/protocol.RespDataHeader'
         "400":
@@ -1509,6 +1719,183 @@ paths:
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: Get story detail by story index
+      tags:
+      - Story
+  /story/v01/follow/cancel:
+    post:
+      consumes:
+      - application/json
+      description: Deactivate follow relation between users
+      parameters:
+      - description: Unfollow request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.FollowReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully unfollowed user
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Unfollow user
+      tags:
+      - Story
+  /story/v01/follow/create:
+    post:
+      consumes:
+      - application/json
+      description: Create or reactivate follow relation between users
+      parameters:
+      - description: Follow request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.FollowReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully followed user
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden - blocked relation
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Follow user
+      tags:
+      - Story
+  /story/v01/follow/follower/{uid}/{page}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve follower list by uid with pagination
+      parameters:
+      - description: User ID
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Page number
+        in: path
+        name: page
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved follower list
+          schema:
+            $ref: '#/definitions/protocol.RespDataHeader'
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get follower list
+      tags:
+      - Story
+  /story/v01/follow/following/{uid}/{page}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve following list by uid with pagination
+      parameters:
+      - description: User ID
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Page number
+        in: path
+        name: page
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved following list
+          schema:
+            $ref: '#/definitions/protocol.RespDataHeader'
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/protocol.RespHeader'
+      summary: Get following list
+      tags:
+      - Story
+  /story/v01/like/toggle:
+    post:
+      consumes:
+      - application/json
+      description: Toggle like/unlike for a story and return latest like count
+      parameters:
+      - description: Story like toggle request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.StoryLikeToggleReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully toggled story like
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden - blocked relation
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Toggle story like
       tags:
       - Story
   /story/v01/list/{uid}:

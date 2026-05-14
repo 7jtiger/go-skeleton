@@ -15,6 +15,8 @@
 - `close()`: Cleanup function that stops the ticker for a specific scheduled task item
 - `task()`: Task dispatcher that executes specific functions based on task name (depositcheck, makeexceldaily, 1min, etc.)
 - `tmp()`: Placeholder function for temporary task execution (currently empty implementation)
+- `MsgWorker()`: `msg_remove` 작업에서 Redis DM 메시지 정리 함수(`PruneExpiredRoomMessages(24h)`)를 호출
+- `Stop()`: `sync.Once` 기반 idempotent 종료를 수행하며 `context cancel`, `quit` 채널 종료, 각 job `ticker/quit` 안전 종료를 보장
 
 ---
 
@@ -70,6 +72,7 @@
 - **makeexceldaily**: Daily Excel report generation
 - **1min**: One-minute interval tasks
 - **Custom tasks**: Flexible task naming and execution
+- **msg_remove**: `chat:rooms:*:msg` 키를 스캔하여 24시간 초과 메시지 삭제
 
 ---
 *Created: 2025-09-15*

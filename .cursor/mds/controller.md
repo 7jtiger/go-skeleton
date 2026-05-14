@@ -183,10 +183,16 @@
 - `TestAccountRegister()`: Tests user registration endpoint with encrypted data payload
 - `TestAccountLogin()`: Tests user login endpoint with credential validation
 - `TestWebRTCEndpoints()`: Tests WebRTC-related endpoints including configuration and status updates
+- Story social tests:
+  - `TestToggleStoryLike()`
+  - `TestFollowUser()`, `TestUnfollowUser()`
+  - `TestGetFollowerList()`, `TestGetFollowingList()`
+  - `TestBlockUser()`, `TestUnblockUser()`, `TestGetBlockList()`
 - `Test_ConnectWWS()`: 실제 DM WebSocket 핸드셰이크 테스트 (`-dm_token`, `-dm_uid` 필요)
 - `Test_GetDMRooms()`: `GET /dm/v01/list?userId=` 테스트 (`-dm_token`, `-dm_uid` 필요)
 - `Test_CreateDMRoom()`: `POST /dm/v01/room` 본문 `{uid,tid}` 테스트 (`-dm_peer_uid` 포함 필요)
 - `Test_GetTotalUnread()`: `GET /dm/v01/total/unread?userId=` 테스트 (`-dm_token`, `-dm_uid` 필요)
+- `Test_SendDMMessage()`: DM WebSocket E2E 테스트. 송신자/수신자 WS 접속 후 메시지 송신(`text-message`)과 송신자 ACK(`msg-ack`) 수신까지 검증 (`-dm_token`, `-dm_uid`, `-dm_peer_uid`, `-dm_peer_token` 필요)
 
 ---
 
@@ -222,9 +228,16 @@
 ### Story Comment Functions
 - `CreateStrComment()`: Creates new comment on a story with writer uid, nickname, body (max 256 chars), and status
 - `CreateStrComment()`: 작성자 메타데이터(`thumb_url`, `wgender`, `wage`, `warea`)를 함께 저장
-- `GetStrCmtDetail()`: `idx/page` 기반 댓글 페이지 조회
+- `CreateStrComment()`: 댓글 작성 전 차단 관계(`user_block`) 검증
+- `GetStrCmtDetail()`: `idx/page` 기반 댓글 페이지 조회 (응답에 `comment_list`, `total_count` 포함)
 - `UpdateStrStatComment()`: Updates comment status (0=default, 1=private, 2=reserved, 3=reserved, 4=deleted)
 - `UpdateStrBodyComment()`: Updates comment body content
+
+### Story Social Functions (2026-04)
+- `ToggleStoryLike()`: story like/unlike 토글, 트랜잭션 기반 카운트 반영
+- `FollowUser()`, `UnfollowUser()`: 팔로우/언팔로우 처리
+- `GetFollowerList()`, `GetFollowingList()`: 팔로워/팔로잉 페이지 조회
+- `BlockUser()`, `UnblockUser()`, `GetBlockList()`: 차단/해제/목록 조회 (`uid/page/limit`, page starts at 1, limit 1~100)
 
 ### Cloudflare Integration
 - **Image Upload**: Uses `utils.UploadCldFlr()` to upload images to Cloudflare Images

@@ -31,6 +31,13 @@
 - `GetUserInfo()`: Function to query encrypted user information by user ID and return decrypted data
 - `GetUserInfoByUID()`: Function to query encrypted user information by numeric UID and return decrypted data
 
+## Block/Favorite Management Functions
+- `SetBlock()`: Function to create or reactivate block relation (`uid`, `bid`)
+- `SetUnblock()`: Function to deactivate block relation
+- `GetBlockList()`: Function to retrieve blocked users with pagination (`page`, `limit`)
+- `IsBlockedPair()`: Function to check active block relation in either direction
+- `SetFavoriteUser()`, `GetFavoriteUsers()`, `IsFavoriteUser()`, `CountFavoriteUsers()`: Favorite user management functions
+
 ## Utility Functions
 - `updatedLastest()`: Internal function to update user's last update time to current time
 

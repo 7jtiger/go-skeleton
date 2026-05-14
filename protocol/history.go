@@ -166,3 +166,34 @@ type StrCmtUpdBodyReq struct {
 	Idx  string `json:"idx"`
 	Body string `json:"body"`
 }
+
+type StoryLikeToggleReq struct {
+	StoryIdx string `json:"story_idx"`
+	Uid      string `json:"uid"`
+}
+
+type FollowReq struct {
+	FollowerUid string `json:"follower_uid"`
+	FolloweeUid string `json:"followee_uid"`
+}
+
+type FollowUserItem struct {
+	Uid      uint64    `json:"uid"`
+	Nick     string    `json:"nick"`
+	ThumbPic string    `json:"thumb_pic"`
+	AtUpdate time.Time `json:"at_update"`
+}
+
+type BlockReq struct {
+	Uid    string `json:"uid"`
+	Bid    string `json:"bid"`
+	Reason string `json:"reason"`
+}
+
+type BlockUserItem struct {
+	Uid      uint64    `json:"uid"`
+	Nick     string    `json:"nick"`
+	ThumbPic string    `json:"thumb_pic"`
+	Reason   string    `json:"reason"`
+	AtUpdate time.Time `json:"at_update"`
+}

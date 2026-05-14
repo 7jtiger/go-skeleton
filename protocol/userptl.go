@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"strings"
+	"time"
 )
 
 type RegistReq struct {
@@ -171,4 +172,17 @@ func ToMetaHeader(meta string) *MetaHeader {
 		SPIntro:  parts[10],
 	} */
 	return nil
+}
+
+type FavoriteUserItem struct {
+	UID      uint64
+	SID      string
+	Nick     string
+	Gender   int
+	Age      int
+	Area     string
+	MainPic  string
+	ThumbPic string
+	SPIntro  string
+	FavAt    time.Time
 }

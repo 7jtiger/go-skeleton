@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DM Chat Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f2f4f8; margin: 0; padding: 20px; }
+        .wrap { max-width: 1100px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 20px; }
+        .row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        input, button, select { padding: 10px; font-size: 14px; }
+        input, select { flex: 1; min-width: 120px; }
+        .panel { display: grid; grid-template-columns: 320px 1fr; gap: 16px; margin-top: 16px; }
+        .rooms, .chat { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+        .room-item { border: 1px solid #e8e8e8; border-radius: 8px; padding: 8px; margin-bottom: 8px; cursor: pointer; }
+        .room-item.pending { border-style: dashed; background: #fffbf0; }
+        .room-item.active { border-color: #2f80ed; background: #eef5ff; }
+        .badge { background: #dc3545; color: #fff; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+        #messages { height: 420px; overflow: auto; border: 1px solid #eee; border-radius: 8px; padding: 8px; background: #fafafa; }
+        .msg { margin-bottom: 8px; padding: 6px 8px; border-radius: 8px; word-break: break-word; }
+        .me { background: #d8f3dc; }
+        .other { background: #f1f3f5; }
+        .sys { background: #fff3cd; }
+        .hint { font-size: 12px; color: #666; margin-top: 4px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h2>DM Chat 테스트 페이지</h2>
+    <p class="hint">
+        <b>WS 엔드포인트:</b> <code>GET /dm/v01/ws</code> (JWT 인증 필수 — Authorization 헤더로 전달)<br/>
+        <b>방 생성:</b> <code>POST /dm/v01/mkroom/:pid</code> (pid = 상대방 UID, URL 경로 파라미터)<br/>
+        <b>방 목록:</b> <code>GET /dm/v01/list/:page</code> (JWT 인증 기반, 응답: <code>{totalcount, rooms}</code>)<br/>
+        <b>총 unread:</b> <code>GET /dm/v01/total/unread</code> (JWT 인증 기반, 응답: <code>{total, rooms}</code>)<br/>
+        <b>메시지 프로토콜:</b> <code>ChatMessage</code> JSON (type: text-message, msg-ack, typing, read-receipt, call-* 등)<br/>
+        점선 칸은 아직 DB에 없는 로컬 준비 방입니다. 첫 메시지 전송 또는 <code>POST /dm/v01/mkroom/:pid</code> 성공 후 서버에 반영됩니다.
+    </p>
+    <div class="row">
+        <input id="server" value="localhost:8080" placeholder="서버 (예: localhost:8080)" />
+        <input id="token" placeholder="Bearer 액세스 토큰 (JWT)" />
+        <button type="button" onclick="connectWS()">WS 연결</button>
+    </div>
+    <div class="row">
+        <input id="targetUid" placeholder="상대 UID (숫자 문자열)" />
+        <button type="button" onclick="prepareDMChat()">상대와 채팅 준비</button>
+        <button type="button" onclick="loadRooms()">방 목록 새로고침</button>
+        <button type="button" onclick="loadUnread()">총 unread 조회</button>
+    </div>
+    <div id="status">상태: 대기</div>
+    <div class="panel">
+        <div class="rooms">
+            <h3>쪽지함 <span id="roomPage" style="font-size:12px;color:#888;"></span></h3>
+            <div id="roomList"></div>
+            <div class="row" style="margin-top:8px;">
+                <button type="button" onclick="prevPage()">◀ 이전</button>
+                <button type="button" onclick="nextPage()">다음 ▶</button>
+            </div>
+        </div>
+        <div class="chat">
+            <h3 id="chatTitle">선택된 방 없음</h3>
+            <div id="messages"></div>
+            <div class="row" style="margin-top:10px;">
+                <input id="messageInput" placeholder="메시지 입력" onkeydown="if(event.key==='Enter')sendText()" />
+                <button type="button" onclick="sendText()">전송</button>
+                <button type="button" onclick="sendRead()">읽음</button>
+            </div>
+            <div class="row">
+                <select id="callMode">
+                    <option value="video">video</option>
+                    <option value="audio">audio</option>
+                    <option value="text">text</option>
+                </select>
+                <button type="button" onclick="sendCallRequest()">통화 요청</button>
+                <button type="button" onclick="sendCallCancel()">통화 취소</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let ws = null;
+let currentRoomId = '';
+let currentPartnerUid = '';
+let myUid = '';
+let currentPage = 1;
+
+function wsUrl(addr, token) {
+    let a = addr.trim();
+    if (!a.startsWith('ws://') && !a.startsWith('wss://')) {
+        a = (a.includes('localhost') || a.includes('127.0.0.1')) ? 'ws://' + a : 'wss://' + a;
+    }
+    return a + '/dm/v01/ws';
+}
+
+function apiBase(addr) {
+    let a = addr.trim();
+    if (!a.startsWith('http://') && !a.startsWith('https://')) {
+        a = (a.includes('localhost') || a.includes('127.0.0.1')) ? 'http://' + a : 'https://' + a;
+    }
+    return a;
+}
+
+function getToken() {
+    return document.getElementById('token').value.trim();
+}
+
+function authHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    const t = getToken();
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h;
+}
+
+function setStatus(text) {
+    document.getElementById('status').textContent = '상태: ' + text;
+}
+
+function parseWsPayload(data) {
+    const raw = typeof data === 'string' ? data : '';
+    return raw.split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
+}
+
+function connectWS() {
+    const token = getToken();
+    if (!token) { alert('JWT 토큰을 입력하세요 (서버가 Authorization 헤더로 인증합니다)'); return; }
+
+    if (ws) {
+        try { ws.close(); } catch (e) { /* ignore */ }
+    }
+    const server = document.getElementById('server').value.trim();
+    const url = wsUrl(server, token);
+
+    ws = new WebSocket(url, ['access_token', token]);
+
+    ws.onopen = function () {
+        setStatus('WS 연결됨');
+        addSys('WebSocket 연결 성공');
+    };
+    ws.onclose = function (e) {
+        setStatus('WS 종료 (code=' + e.code + ')');
+        addSys('WebSocket 종료: code=' + e.code + ' reason=' + (e.reason || '없음'));
+    };
+    ws.onerror = function () { setStatus('WS 오류'); };
+    ws.onmessage = function (e) {
+        parseWsPayload(e.data).forEach(function (line) {
+            try {
+                const msg = JSON.parse(line);
+                handleIncoming(msg);
+            } catch (err) {
+                addSys('JSON 파싱 실패: ' + line);
+            }
+        });
+    };
+}
+
+function handleIncoming(msg) {
+    if (msg.type === 'text-message') {
+        addMsg(msg.from, msg.content, String(msg.from) === String(myUid));
+    } else if (msg.type === 'msg-ack') {
+        if (msg.roomId) {
+            currentRoomId = msg.roomId;
+            updateRoomIdInPending(currentRoomId);
+        }
+        addSys('ACK roomId=' + msg.roomId + ', msgId=' + (msg.msgId || '') + ', unread=' + msg.unread);
+        if (getToken()) {
+            setTimeout(function () { loadRooms({ silent: true }); }, 400);
+        }
+    } else if (msg.type === 'read-receipt') {
+        addSys('상대 읽음 처리 (room=' + (msg.roomId || '') + ')');
+    } else if (msg.type === 'typing') {
+        addSys('상대 입력 중… (from=' + msg.from + ')');
+    } else if (msg.type === 'call-incoming' || msg.type === 'call-request') {
+        addSys('통화 요청 수신 from=' + msg.from + ', mode=' + (msg.callMode || ''));
+    } else if (msg.type === 'call-accept') {
+        addSys('통화 수락 from=' + msg.from + ', partner=' + ((msg.partner && msg.partner.nick) || '-'));
+    } else if (msg.type === 'call-reject') {
+        addSys('통화 거절 from=' + msg.from);
+    } else if (msg.type === 'call-cancel') {
+        addSys('통화 취소 from=' + msg.from);
+    } else if (msg.type === 'call-info') {
+        addSys('통화 안내: ' + (msg.content || ''));
+    } else if (msg.type === 'dm-incoming') {
+        addSys('DM 알림 from=' + msg.from + ' content=' + (msg.content || ''));
+    } else {
+        addSys('수신: ' + JSON.stringify(msg));
+    }
+}
+
+function addMsg(from, text, me) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + (me ? 'me' : 'other');
+    el.textContent = '[' + from + '] ' + text;
+    const wrap = document.getElementById('messages');
+    wrap.appendChild(el);
+    wrap.scrollTop = wrap.scrollHeight;
+}
+
+function addSys(text) {
+    const el = document.createElement('div');
+    el.className = 'msg sys';
+    el.textContent = text;
+    const wrap = document.getElementById('messages');
+    wrap.appendChild(el);
+    wrap.scrollTop = wrap.scrollHeight;
+}
+
+function sendText() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return alert('WS 연결 먼저 하세요');
+    if (!currentPartnerUid) return alert('「상대와 채팅 준비」로 상대를 지정하세요');
+    const content = document.getElementById('messageInput').value.trim();
+    if (!content) return;
+    ws.send(JSON.stringify({
+        type: 'text-message',
+        to: currentPartnerUid,
+        roomId: currentRoomId,
+        content: content,
+        msgId: 'm-' + Date.now()
+    }));
+    addMsg(myUid || '나', content, true);
+    document.getElementById('messageInput').value = '';
+}
+
+function sendRead() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!currentPartnerUid || !currentRoomId) return alert('방을 선택한 후 읽음 처리하세요');
+    ws.send(JSON.stringify({ type: 'read-receipt', to: currentPartnerUid, roomId: currentRoomId }));
+    addSys('읽음 처리 전송 (room=' + currentRoomId + ')');
+}
+
+function sendCallRequest() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!currentPartnerUid) return alert('상대 설정 필요');
+    ws.send(JSON.stringify({
+        type: 'call-request',
+        to: currentPartnerUid,
+        roomId: currentRoomId,
+        callMode: document.getElementById('callMode').value
+    }));
+}
+
+function sendCallCancel() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!currentPartnerUid) return;
+    ws.send(JSON.stringify({
+        type: 'call-cancel',
+        to: currentPartnerUid,
+        roomId: currentRoomId,
+        callMode: document.getElementById('callMode').value
+    }));
+}
+
+/**
+ * POST /dm/v01/mkroom/:pid 로 방 생성/재사용.
+ * 서버는 JWT에서 내 UID를 추출하고, URL의 :pid 가 상대방 UID가 됨.
+ */
+async function prepareDMChat() {
+    const targetUid = document.getElementById('targetUid').value.trim();
+    const token = getToken();
+    if (!targetUid) return alert('상대 UID를 입력하세요');
+    if (!token) return alert('JWT 토큰을 입력하세요');
+
+    const server = apiBase(document.getElementById('server').value.trim());
+
+    try {
+        const res = await fetch(server + '/dm/v01/mkroom/' + encodeURIComponent(targetUid), {
+            method: 'POST',
+            headers: authHeaders()
+        });
+        const json = await res.json().catch(function () { return {}; });
+        const room = unwrapData(json);
+        const rid = getRoomId(room);
+        if (res.ok && rid) {
+            currentRoomId = rid;
+            currentPartnerUid = getPartnerUid(room) || String(targetUid);
+            const partner = room && room.partner ? room.partner : {};
+            myUid = extractMyUid(room);
+            document.getElementById('chatTitle').textContent =
+                'Room: ' + currentRoomId + ' / Partner: ' + (partner.nick || currentPartnerUid);
+            addSys('방 준비 완료 (POST /dm/v01/mkroom/' + targetUid + ')');
+            await loadRooms({ silent: true });
+            return;
+        }
+        addSys('POST /dm/v01/mkroom 실패 (' + res.status + '): ' + JSON.stringify(json) + ' — 첫 메시지 ack로 roomId를 받습니다.');
+    } catch (err) {
+        addSys('POST /dm/v01/mkroom 요청 오류: ' + err + ' — 첫 메시지 ack로 roomId를 받습니다.');
+    }
+
+    currentPartnerUid = String(targetUid);
+    currentRoomId = '';
+    document.getElementById('chatTitle').textContent = 'Partner UID: ' + currentPartnerUid + ' / Room: (대기)';
+    addSys('채팅 준비 완료: 첫 메시지 전송 후 msg-ack 에서 roomId를 자동 반영합니다.');
+    await loadRooms({ silent: true });
+}
+
+function unwrapData(json) {
+    if (json && json.data !== undefined) return json.data;
+    return json;
+}
+
+function getRoomId(room) {
+    if (!room) return '';
+    if (room.rid != null) return String(room.rid);
+    if (room.roomId != null) return String(room.roomId);
+    return '';
+}
+
+function getPartnerUid(room) {
+    const p = room && room.partner ? room.partner : {};
+    if (p.pid != null) return String(p.pid);
+    if (p.uid != null) return String(p.uid);
+    return '';
+}
+
+function extractMyUid(room) {
+    return myUid;
+}
+
+function updateRoomIdInPending(newRoomId) {
+    var items = document.querySelectorAll('.room-item.pending');
+    items.forEach(function (el) {
+        el.classList.remove('pending');
+        var ridDiv = el.querySelector('[data-role="rid"]');
+        if (ridDiv) ridDiv.textContent = 'roomId: ' + newRoomId;
+    });
+}
+
+function mergePendingIntoList(list) {
+    const out = Array.isArray(list) ? list.slice() : [];
+    if (!currentPartnerUid) return out;
+    if (currentRoomId) {
+        var has = out.some(function (r) { return getRoomId(r) === currentRoomId; });
+        if (has) return out;
+    }
+    out.unshift({
+        rid: currentRoomId || '(대기)',
+        partner: { pid: currentPartnerUid, nick: '로컬 준비 (DB 미등록)' },
+        unread: 0,
+        _localOnly: true
+    });
+    return out;
+}
+
+function renderRoomList(list) {
+    const box = document.getElementById('roomList');
+    box.innerHTML = '';
+    if (!list || list.length === 0) {
+        box.innerHTML = '<div style="color:#999;font-size:13px;padding:8px;">방이 없습니다</div>';
+        return;
+    }
+    list.forEach(function (room) {
+        const div = document.createElement('div');
+        const local = room._localOnly === true;
+        const rid = getRoomId(room);
+        div.className = 'room-item' + (rid === currentRoomId ? ' active' : '') + (local ? ' pending' : '');
+        const p = room.partner || {};
+        div.innerHTML = '<div><b>' + (p.nick || p.pid || p.uid || '?') + '</b>'
+            + (local ? ' <span style="font-size:11px;color:#856404">(첫 메시지 후 서버 등록)</span>' : '') + '</div>'
+            + '<div data-role="rid">roomId: ' + rid + '</div>'
+            + '<div>unread: <span class="badge">' + (room.unread != null ? room.unread : 0) + '</span></div>';
+        div.onclick = function () {
+            currentRoomId = rid;
+            currentPartnerUid = getPartnerUid(room);
+            document.getElementById('chatTitle').textContent =
+                'Room: ' + currentRoomId + ' / Partner: ' + (p.nick || currentPartnerUid || p.pid || p.uid);
+            renderRoomList(list);
+        };
+        box.appendChild(div);
+    });
+}
+
+/**
+ * GET /dm/v01/list/:page — JWT 인증 기반 방 목록 조회
+ * 응답: { data: { totalcount: N, rooms: [...] } }
+ */
+async function loadRooms(opts) {
+    opts = opts || {};
+    const token = getToken();
+    if (!token) {
+        if (!opts.silent) alert('방 목록 API는 JWT가 필요합니다.');
+        renderRoomList(mergePendingIntoList([]));
+        return;
+    }
+    const server = apiBase(document.getElementById('server').value.trim());
+    try {
+        const res = await fetch(server + '/dm/v01/list/' + currentPage, {
+            headers: { 'Authorization': 'Bearer ' + token },
+            cache: 'no-store'
+        });
+        const json = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+            addSys('rooms API 오류 ' + res.status + ': ' + JSON.stringify(json));
+            renderRoomList(mergePendingIntoList([]));
+            return;
+        }
+        const data = unwrapData(json);
+        const rooms = data && data.rooms ? data.rooms : (Array.isArray(data) ? data : []);
+        const total = data && data.totalcount != null ? data.totalcount : rooms.length;
+        document.getElementById('roomPage').textContent = '(page ' + currentPage + ', total ' + total + ')';
+        renderRoomList(mergePendingIntoList(rooms));
+    } catch (err) {
+        addSys('rooms API 요청 오류: ' + err);
+        renderRoomList(mergePendingIntoList([]));
+    }
+}
+
+function prevPage() {
+    if (currentPage > 1) { currentPage--; loadRooms(); }
+}
+
+function nextPage() {
+    currentPage++;
+    loadRooms();
+}
+
+/**
+ * GET /dm/v01/total/unread — JWT 인증 기반 전체 unread 조회
+ * 응답: { data: { total: N, rooms: { "roomId": count, ... } } }
+ */
+async function loadUnread() {
+    const token = getToken();
+    if (!token) return alert('unread 조회는 JWT가 필요합니다.');
+    const server = apiBase(document.getElementById('server').value.trim());
+    try {
+        const res = await fetch(server + '/dm/v01/total/unread', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const json = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+            addSys('unread API 오류 ' + res.status + ': ' + JSON.stringify(json));
+            return;
+        }
+        const data = unwrapData(json);
+        const total = data && data.total != null ? data.total : '?';
+        const rooms = data && data.rooms ? data.rooms : {};
+        addSys('총 unread: ' + total + ', 방별: ' + JSON.stringify(rooms));
+    } catch (err) {
+        addSys('unread API 요청 오류: ' + err);
+    }
+}
+</script>
+</body>
+</html>

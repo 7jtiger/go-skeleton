@@ -22,6 +22,7 @@ func GetJWTClaims(uidStr string, expiration time.Duration) *JWTClaims {
 			// Subject:   "Authentication",
 			// Audience:  jwt.ClaimStrings{uidStr},
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
+			// ExpiresAt: jwt.NewNumericDate(now.Add(100 * 365 * 24 * time.Hour)),
 			// IssuedAt:  jwt.NewNumericDate(now),
 			// NotBefore: jwt.NewNumericDate(now),
 			// ID:        uidStr,

@@ -45,6 +45,8 @@ type Config struct {
 		JWTSecret  string
 		CfId       string
 		CfToken    string
+		CronJob    string
+		SchWorker  string
 	}
 
 	WebRTC struct {

@@ -119,6 +119,14 @@
 - `GET /story/v01/comment/detail/:idx/:page`: Endpoint to get paginated story comments
 - `POST /story/v01/comment/updstat`: Endpoint to update comment status
 - `POST /story/v01/comment/updbody`: Endpoint to update comment body content
+- `POST /story/v01/like/toggle`: Story like/unlike toggle endpoint (transaction-safe count sync)
+- `POST /story/v01/follow/create`: Follow user endpoint
+- `POST /story/v01/follow/cancel`: Unfollow user endpoint
+- `GET /story/v01/follow/follower/:uid/:page`: Follower list endpoint
+- `GET /story/v01/follow/following/:uid/:page`: Following list endpoint
+- `POST /story/v01/block/create`: Block user endpoint
+- `POST /story/v01/block/cancel`: Unblock user endpoint
+- `GET /story/v01/block/list/:uid/:page/:limit`: Blocked user list endpoint (page starts at 1, limit 1~100)
 
 ### upload/v01 - File Upload (Lightweight Authentication Required)
 - `POST /upload/v01/story/img`: Endpoint to upload images for stories

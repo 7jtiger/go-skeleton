@@ -89,9 +89,10 @@ type PartnerInfo struct {
 type DMRoomResp struct {
 	RoomID   int64        `json:"rid"`
 	Partner  *PartnerInfo `json:"partner"`
+	Total    int          `json:"total"`
 	Unread   int          `json:"unread"`
-	AtCreate string       `json:"atCreate"`
-	AtUpdate string       `json:"atUpdate"`
+	AtCreate string       `json:"at_crtchat"`
+	AtUpdate string       `json:"at_update"`
 }
 
 // ChatMessage 텍스트 채팅 메시지 구조체

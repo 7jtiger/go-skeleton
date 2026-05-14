@@ -134,6 +134,8 @@
 - **Real-time Status**: User availability and call status tracking
 - **Cache Layer**: High-performance data caching for frequently accessed data
 - **DM Presence/Unread**: `DM:ONLINE:*`, `DM:UNREAD:*` 키 기반 DM 상태/미읽음 관리
+- **DM Message History**: `chat:rooms:{roomID}:msg` LIST 키에 JSON 메시지를 저장하고, 최신순(offset/limit)으로 조회
+- **DM Message Prune**: `PruneExpiredRoomMessages(ttl)`로 room별 메시지를 스캔하여 기준 시간 초과 메시지를 삭제
 
 ---
 
@@ -170,6 +172,12 @@
 - `GetStrCommentList()`: Alternative function to retrieve comment list for a story
 - `UpdateStrStatComment()`: Updates comment status and at_update timestamp
 - `UpdateStrBodyComment()`: Updates comment body content and at_update timestamp
+
+### Story Social Functions (2026-04)
+- `ToggleStoryLikeTx()`: 트랜잭션 기반 like/unlike 토글 + `story.qt_good` 정합성 유지
+- `SetFollow()`, `SetUnfollow()`, `GetFollowerList()`, `GetFollowingList()`
+- `SetBlock()`, `SetUnblock()`, `GetBlockList()`, `IsBlockedPair()`
+- `GetStoryOwnerUID()`: 스토리 소유자 uid 조회 (차단/권한 체크용)
 
 ### Database Schema
 - **story table**: 

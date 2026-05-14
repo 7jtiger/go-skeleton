@@ -231,7 +231,7 @@ func (p *Router) Idx() *gin.Engine {
 	story := e.Group("story/v01", p.SecurityHeaders())
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
-		story.GET("/home/:id")
+		// story.GET("/home/:id")
 		story.GET("/list/:uid", p.st.GetStoryList)
 		story.GET("/detail/:idx", p.st.GetStoryDetail)
 		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryPic)
@@ -246,6 +246,16 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/comment/create", p.st.CreateStrComment)
 		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
 		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)
+
+		// ------------- like/follow/block -------------
+		story.POST("/like/toggle", p.st.ToggleStoryLike)
+		story.POST("/follow/create", p.st.FollowUser)
+		story.POST("/follow/cancel", p.st.UnfollowUser)
+		story.GET("/follow/follower/:uid/:page", p.st.GetFollowerList)
+		story.GET("/follow/following/:uid/:page", p.st.GetFollowingList)
+		story.POST("/block/create", p.st.BlockUser)
+		story.POST("/block/cancel", p.st.UnblockUser)
+		story.GET("/block/list/:uid/:page/:limit", p.st.GetBlockList)
 	}
 
 	//누드, 음모 확인 기능
@@ -285,6 +295,8 @@ func (p *Router) Idx() *gin.Engine {
 
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)
+
+		chat.POST("/history/:roomId/:page/:limit", p.chat.GetChatList)
 		/*
 			// 메시지 전송 (REST API)
 			// chat.POST("/message", p.chat.SendMessage)

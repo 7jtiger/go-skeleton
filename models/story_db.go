@@ -48,6 +48,31 @@ CREATE TABLE `str_cmt` (
   UNIQUE KEY `idx_UNIQUE` (`idx`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
+CREATE TABLE `story_like` (
+  `idx` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `story_idx` INT UNSIGNED NOT NULL,
+  `uid` BIGINT UNSIGNED NOT NULL,
+  `stat` TINYINT NOT NULL DEFAULT 1 COMMENT '1:like, 0:unlike',
+  `at_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `at_update` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `uk_story_user_like` (`story_idx`, `uid`),
+  KEY `idx_story_stat` (`story_idx`, `stat`, `at_update`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `user_follow` (
+  `idx` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `uid` BIGINT UNSIGNED NOT NULL,
+  `followee_uid` BIGINT UNSIGNED NOT NULL,
+  `stat` TINYINT NOT NULL DEFAULT 1 COMMENT '1:follow, 0:unfollow',
+  `at_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `at_update` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `uk_follow_pair` (`follower_uid`, `followee_uid`),
+  KEY `idx_follower_stat` (`follower_uid`, `stat`, `at_update`),
+  KEY `idx_followee_stat` (`followee_uid`, `stat`, `at_update`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 */
 
 type StoryDB struct {
@@ -231,12 +256,19 @@ func (p *StoryDB) SetStrComment(cmt *ptl.StrComment) (int64, error) {
 	return result.LastInsertId()
 }
 
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, error) {
+func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, int, error) {
 	const pageSize = 20
 	offset := (page - 1) * pageSize
 	if offset < 0 {
 		offset = 0
 	}
+
+	countQuery := `SELECT COUNT(1) FROM str_cmt WHERE str_idx = ? AND stat IN (0,1)`
+	var totalCount int
+	if err := p.conndb.QueryRow(countQuery, cmtIdx).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
 	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
 	          FROM str_cmt
 	          WHERE str_idx = ? AND stat IN (0,1)
@@ -244,7 +276,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, erro
 	          LIMIT ? OFFSET ?`
 	rows, err := p.conndb.Query(query, cmtIdx, pageSize, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -267,7 +299,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, erro
 			&comment.AtUpdate,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		// NULL string 처리
 		comment.Nick = ""
@@ -296,7 +328,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, erro
 		}
 		comments = append(comments, comment)
 	}
-	return &comments, nil
+	return &comments, totalCount, nil
 }
 
 func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptl.StrComment, error) {
@@ -414,4 +446,158 @@ func (p *StoryDB) UpdateStrBodyComment(cmtIdx int, body string) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error) {
+	tx, err := p.conndb.Begin()
+	if err != nil {
+		return false, 0, err
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var stat int
+	row := tx.QueryRow(`SELECT stat FROM story_like WHERE story_idx = ? AND uid = ? FOR UPDATE`, storyIdx, uid)
+	err = row.Scan(&stat)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			if _, err = tx.Exec(`INSERT INTO story_like (story_idx, uid, stat, at_create, at_update) VALUES (?, ?, 1, NOW(), NOW())`, storyIdx, uid); err != nil {
+				return false, 0, err
+			}
+			if _, err = tx.Exec(`UPDATE story SET qt_good = COALESCE(qt_good, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+				return false, 0, err
+			}
+			stat = 1
+		} else {
+			return false, 0, err
+		}
+	} else {
+		if stat == 1 {
+			if _, err = tx.Exec(`UPDATE story_like SET stat = 0, at_update = NOW() WHERE story_idx = ? AND uid = ?`, storyIdx, uid); err != nil {
+				return false, 0, err
+			}
+			if _, err = tx.Exec(`UPDATE story SET qt_good = GREATEST(COALESCE(qt_good, 0) - 1, 0), at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+				return false, 0, err
+			}
+			stat = 0
+		} else {
+			if _, err = tx.Exec(`UPDATE story_like SET stat = 1, at_update = NOW() WHERE story_idx = ? AND uid = ?`, storyIdx, uid); err != nil {
+				return false, 0, err
+			}
+			if _, err = tx.Exec(`UPDATE story SET qt_good = COALESCE(qt_good, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+				return false, 0, err
+			}
+			stat = 1
+		}
+	}
+
+	var likeCount int
+	if err = tx.QueryRow(`SELECT COALESCE(qt_good, 0) FROM story WHERE idx = ?`, storyIdx).Scan(&likeCount); err != nil {
+		return false, 0, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return false, 0, err
+	}
+	rollback = false
+	return stat == 1, likeCount, nil
+}
+
+func (p *StoryDB) SetFollow(followerUid, followeeUid uint64) (int64, error) {
+	query := `
+		INSERT INTO user_follow (follower_uid, followee_uid, stat, at_create, at_update)
+		VALUES (?, ?, 1, NOW(), NOW())
+		ON DUPLICATE KEY UPDATE stat = 1, at_update = NOW()
+	`
+	result, err := p.conndb.Exec(query, followerUid, followeeUid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (p *StoryDB) SetUnfollow(followerUid, followeeUid uint64) (int64, error) {
+	query := `UPDATE user_follow SET stat = 0, at_update = NOW() WHERE follower_uid = ? AND followee_uid = ?`
+	result, err := p.conndb.Exec(query, followerUid, followeeUid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (p *StoryDB) GetFollowerList(uid uint64, page int) (*[]ptl.FollowUserItem, error) {
+	const pageSize = 20
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT uf.follower_uid, COALESCE(u.nick, ''), COALESCE(u.thumb_pic, ''), uf.at_update
+		FROM user_follow uf
+		LEFT JOIN user_info u ON u.uid = uf.follower_uid
+		WHERE uf.followee_uid = ? AND uf.stat = 1
+		ORDER BY uf.at_update DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := p.conndb.Query(query, uid, pageSize, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []ptl.FollowUserItem{}
+	for rows.Next() {
+		var item ptl.FollowUserItem
+		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	return &list, nil
+}
+
+func (p *StoryDB) GetFollowingList(uid uint64, page int) (*[]ptl.FollowUserItem, error) {
+	const pageSize = 20
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT uf.followee_uid, COALESCE(u.nick, ''), COALESCE(u.thumb_pic, ''), uf.at_update
+		FROM user_follow uf
+		LEFT JOIN user_info u ON u.uid = uf.followee_uid
+		WHERE uf.follower_uid = ? AND uf.stat = 1
+		ORDER BY uf.at_update DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := p.conndb.Query(query, uid, pageSize, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []ptl.FollowUserItem{}
+	for rows.Next() {
+		var item ptl.FollowUserItem
+		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	return &list, nil
+}
+
+func (p *StoryDB) GetStoryOwnerUID(storyIdx int) (uint64, error) {
+	var uid uint64
+	err := p.conndb.QueryRow(`SELECT uid FROM story WHERE idx = ?`, storyIdx).Scan(&uid)
+	if err != nil {
+		return 0, err
+	}
+	return uid, nil
 }

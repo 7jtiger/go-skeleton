@@ -459,7 +459,7 @@ func (p *HistoryDB) GetDMRoomByUID(tid uint64) (*DMRoomRow, error) {
 
 // GetDMRoomsByUser retrieves a paginated list of DM rooms for the given user (as sender or receiver)
 // Note: union 서브쿼리에서 paging(ORDER BY, LIMIT)이 제대로 동작하지 않아 OUTER 쿼리에서 정렬 및 페이징 적용 필요
-func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, error) {
+func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, error) {
 	const pageSize = 10
 	offset := (page - 1) * pageSize
 	if offset < 0 {
@@ -470,6 +470,21 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, error)
 	// 따라서 전체 union 한 뒤 OUTER 쿼리에서 order/limit/offset 처리:
 	// (SELECT ... WHERE st_chat=1 AND uid=?) UNION (SELECT ... WHERE st_chat=1 AND tid=?) -> as T
 	// SELECT * FROM ( ... ) as T ORDER BY at_update DESC LIMIT ? OFFSET ?
+
+	// 먼저 전체 row 갯수를 구한다.
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT 1
+			FROM chat_his WHERE st_chat = 1 AND uid = ?
+			UNION
+			SELECT 1
+			FROM chat_his WHERE st_chat = 1 AND tid = ?
+		) AS T`
+	var totalCount int
+	err := p.conndb.QueryRow(countQuery, uid, uid).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	query := `
 		SELECT * FROM (
@@ -483,7 +498,7 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, error)
 		LIMIT ? OFFSET ?`
 	rows, err := p.conndb.Query(query, uid, uid, pageSize, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -491,9 +506,10 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, error)
 	for rows.Next() {
 		var dm DMRoomRow
 		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		rooms = append(rooms, dm)
 	}
-	return &rooms, nil
+	// totalCount 값을 사용해 반환 타입 확장 필요시 구조체 등으로 반환하거나, caller 측에서 사용할 수 있도록 조치 필요
+	return &rooms, totalCount, nil
 }

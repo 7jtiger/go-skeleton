@@ -3,9 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	haredis "ms-gateway/common/ha-redis"
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
-	"ms-gateway/hachecker"
 	"ms-gateway/models"
 	ptc "ms-gateway/protocol"
 	"strconv"
@@ -26,7 +26,7 @@ type SendFCMElem struct {
 type FCMPusher struct {
 	ctl       *Controller
 	cfg       *conf.Config
-	hch       *hachecker.HAChecker
+	hch       *haredis.HAChecker
 	fcmClient *messaging.Client
 	pushDB    *models.ItemDB
 	accountDB *models.AccountDB
@@ -41,7 +41,7 @@ const (
 	PRIV_ITEM = 1
 )
 
-func NewFCMPusher(root *Controller, hch *hachecker.HAChecker, rep *models.Repositories) (*FCMPusher, error) {
+func NewFCMPusher(root *Controller, hch *haredis.HAChecker, rep *models.Repositories) (*FCMPusher, error) {
 	ctx := context.Background()
 
 	// Firebase Admin SDK 초기화
@@ -89,9 +89,9 @@ func (p *FCMPusher) Terminate() {
 
 func (p *FCMPusher) loop() {
 
-	if !p.hch.GetCurStatus() {
+	if !p.hch.IsLeader() {
 		for {
-			if p.hch.GetCurStatus() {
+			if p.hch.IsLeader() {
 				break
 			}
 			time.Sleep(5 * time.Second)

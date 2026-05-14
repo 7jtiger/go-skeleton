@@ -1101,7 +1101,7 @@ func (s *Server) Shutdown() {
 	log.Println("Server shutdown complete")
 }
 
-func main() {
+func main_test() {
 	// CPU 코어 수에 맞게 GOMAXPROCS 설정
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	log.Printf("Using %d CPU cores", runtime.NumCPU())

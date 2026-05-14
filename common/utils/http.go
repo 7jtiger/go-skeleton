@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"crypto/rand"
 	crand "crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"net"
 
@@ -14,6 +16,14 @@ func GenUuid() string {
 
 	uuid4 := hex.EncodeToString(uuid[:])
 	return uuid4
+}
+
+func Gen6DigitCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000)) // 0 ~ 999999
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil // 항상 6자리
 }
 
 func GenRandomUID() (uint64, error) {

@@ -10,6 +10,9 @@ fcmKeyPath = "./conf/fcm-admsdk.json"
 jwtsecret = "439f7e12e87e327e1b439f4a5aa895627ef47280ce75b553d65f750bea447575"
 cfId = "3a5160a653bf6175ea5c5b24ee01e344"
 cfToken = "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
+cronjob="on"
+schWorker="on"
+
 
 [webrtc] # WebRTC 설정 (STUN only, TURN 제외)
 signalingServerUrl = "ws://localhost:8080/ws"
@@ -69,10 +72,10 @@ name = "rdb"
 # start 5 : *:*:5 start, 5min start
 # duration : seconds
 [[works]] #배열구조, jobs []job
-name = "depositCheck"
-desc = "first deposit check status 1 -> 2, 1h"
-execute = "x"
-start = 0
+name = "msg_delete"
+desc = "Delete Redis messages older than 24 hours every hour"
+execute = "0"
+start = 1
 duration = 3600
 args = "resv"
 
