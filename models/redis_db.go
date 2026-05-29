@@ -48,6 +48,7 @@ type ChatMessageData struct {
 	RoomID    string    `json:"roomId"`
 	UserID    string    `json:"userId"`
 	Content   string    `json:"content"`
+	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -989,7 +990,7 @@ func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 
 // SaveChatMessage 채팅 메시지 저장
 // SaveChatMessage HSet을 사용하여 채팅 메시지 저장
-func (r *RedisDB) SaveChatMessage(roomID, userID, content string) error {
+func (r *RedisDB) SaveChatMessage(roomID, userID, content, callMode string) error {
 	// messageID := utils.GenUuid()
 	messageID, err := utils.Gen6DigitCode()
 	if err != nil {
@@ -1002,6 +1003,7 @@ func (r *RedisDB) SaveChatMessage(roomID, userID, content string) error {
 		RoomID:    roomID,
 		UserID:    userID,
 		Content:   content,
+		Type:      callMode,
 		Timestamp: now,
 	}
 
@@ -1029,18 +1031,22 @@ func (r *RedisDB) SaveChatMessage(roomID, userID, content string) error {
 }
 
 // GetChatMessages 특정 채팅방의 메시지 조회
-func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) ([]ChatMessageData, error) {
-	if limit <= 0 {
-		return []ChatMessageData{}, nil
-	}
-
+// 첫 반환값은 항상 해당 방 메시지 전체 개수(LLen). limit<=0·offset 범위 밖·메시지 없음이어도 동일.
+func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) (int64, *[]ChatMessageData, error) {
 	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
 	total, err := r.client.LLen(r.ctx, listKey).Result()
 	if err != nil {
-		return nil, err
+		return 0, nil, err
+	}
+
+	empty := []ChatMessageData{}
+	emptyPtr := &empty
+
+	if limit <= 0 {
+		return total, emptyPtr, nil
 	}
 	if total == 0 || int64(offset) >= total {
-		return []ChatMessageData{}, nil
+		return total, emptyPtr, nil
 	}
 
 	// 최신 메시지 기준(offset=0) 페이징 유지
@@ -1052,15 +1058,16 @@ func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) ([]ChatMessa
 
 	rawMessages, err := r.client.LRange(r.ctx, listKey, start, end).Result()
 	if err != nil {
-		return nil, err
+		return total, nil, err
 	}
 	if len(rawMessages) == 0 {
-		return []ChatMessageData{}, nil
+		return total, emptyPtr, nil
 	}
 
 	// LRange 결과는 오래된 순이므로 최신순으로 뒤집는다.
-	messages := make([]ChatMessageData, 0, len(rawMessages))
-	for i := len(rawMessages) - 1; i >= 0; i-- {
+	tCnt := int64(len(rawMessages))
+	messages := make([]ChatMessageData, 0, tCnt)
+	for i := tCnt - 1; i >= 0; i-- {
 		messageJSON := rawMessages[i]
 
 		var message ChatMessageData
@@ -1071,7 +1078,7 @@ func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) ([]ChatMessa
 		messages = append(messages, message)
 	}
 
-	return messages, nil
+	return total, &messages, nil
 }
 
 // PruneExpiredRoomMessages 채팅방별 만료 메시지 정리

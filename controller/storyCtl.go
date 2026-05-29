@@ -58,7 +58,7 @@ func (p *StoryController) GetStoryHomeList(c *gin.Context) {
 		return
 	}
 
-	storyList, err := p.sdb.GetStoryList(uidInt)
+	storyList, err := p.sdb.GetDefStoryList(uidInt)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
 		return
@@ -69,7 +69,7 @@ func (p *StoryController) GetStoryHomeList(c *gin.Context) {
 
 // GetStoryList godoc
 // @Summary Get story list by user ID
-// @Description Retrieve list of stories for a specific user
+// @Description 디폴트, 최신순 스토리 리스트 출력
 // @Tags Story
 // @Accept json
 // @Produce json
@@ -80,7 +80,7 @@ func (p *StoryController) GetStoryHomeList(c *gin.Context) {
 // @Router /story/v01/list/{uid} [get]
 // @Example Request: GET /story/v01/list/5817
 // @Example Response: {"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"1":"https://iy.net/bLg/26c0/lic","2":"https://iy.net/g/94d61/public","3":"https://iy.net/bg/e80/public"},"at_create":"2026-02-02T07:27:44Z"},{"idx":1,"nick":"testnick","str_img":{"1":"https://i.net/bg/ec3d00/public","2":"https://imaet/bh7hqLg/9200/public","3":"https://inet/bhyxVLg/e811fef00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
-func (p *StoryController) GetStoryList(c *gin.Context) {
+func (p *StoryController) GetStoryDefaultList(c *gin.Context) {
 	uid := c.Param("uid")
 	if uid == "" {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
@@ -93,13 +93,97 @@ func (p *StoryController) GetStoryList(c *gin.Context) {
 		return
 	}
 
-	storyList, err := p.sdb.GetStoryList(uidInt)
+	storyList, err := p.sdb.GetDefStoryList(uidInt)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
 		return
 	}
 
 	p.ctl.SendDataResponse(c, http.StatusOK, storyList)
+}
+
+// GetStoryConditionList godoc
+// @Summary 스토리(Story) 조건부 리스트 조회
+// @Description 다양한 조건(area/stat/type/order/gen/page/limit)으로 스토리 리스트를 조회합니다.
+// @Tags Story
+// @Accept  json
+// @Produce json
+// @Param area query string false "지역(all, seoul, gyeonggi, incheon, busan, daejeon/sejong/chungnam, chungbuk/cheonju/chungju, daegu/gyeongbuk, gyeongnam/ulsan, gwangju/jeonnam, jeonbuk/jeonju, gangwon/chuncheon, jeju). 기본값: all"
+// @Param stat query string false "상태(pub=전체공개, flw=팔로워전용, pay=유료, prv=비공개, del=삭제, rsv=예약). 기본값: pub"
+// @Param type query string false "타입(img=이미지, vdo=비디오, all=이미지+비디오, rsv=예약). 기본값: img"
+// @Param order query string false "정렬(new=최신순, cmt=댓글많음, god=좋아요많음, view=조회수많음, rsv=예약). 기본값: new"
+// @Param gen query string false "성별(0=여성, 1=남성, 2=예약). 기본값: 1"
+// @Param page query int false "페이지 번호(1부터 시작). 기본값: 1"
+// @Param limit query int false "페이지 당 데이터 개수. 기본값: 10"
+// @Success 200 {object} protocol.RespDataHeader "성공적으로 스토리 리스트를 반환합니다. story_home_list 필드는 인덱스별 이미지 URL 정보를 포함합니다."
+// @Failure 400 {object} protocol.RespHeader "잘못된 파라미터 입력 시 반환"
+// @Failure 500 {object} protocol.RespHeader "서버 에러 시 반환"
+// @Router /story/v01/cond-list [get]
+// @Example Request: GET /story/v01/cond-list?area=seoul&stat=pub&type=img&order=new&gen=0&page=1&limit=10
+// @Example Response: {"result":0,"resultString":"Success","data":{"story_home_list":{"{story idx}":"{img_url}","{story idx}":"image url","{story index}":"image url", ....}}}
+// @Example Response: {"result":0,"resultString":"Success","data":{"story_home_list":{"1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","2":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","3":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5512db27-6340-43cd-b5ab-85d7b9bd4800/public"}}}
+func (p *StoryController) GetStoryConditionList(c *gin.Context) {
+	area := c.DefaultQuery("area", "all")
+	stat := c.DefaultQuery("stat", "pub")
+	mtype := c.DefaultQuery("type", "img")
+	order := c.DefaultQuery("order", "new")
+	gen := c.DefaultQuery("gen", "1")
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "10")
+
+	/* 	uid, exists := c.Get("user")
+	   	if !exists {
+	   		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
+	   		return
+	   	}
+
+	TODO: 블록 유저 조회
+	*/
+
+	args := []interface{}{}
+	conds := []string{}
+
+	nArea := ptl.GetAreaCode(area)
+	if nArea > 0 {
+		conds = append(conds, "area = ?")
+		args = append(args, nArea)
+	}
+
+	conds = append(conds, "gender = ?")
+	nGen, err := strconv.Atoi(gen)
+	if err != nil {
+		nGen = 1
+	}
+	args = append(args, nGen)
+
+	nMType := ptl.GetTypeCode(mtype)
+	if nMType != 2 {
+		conds = append(conds, "type = ?")
+		args = append(args, nMType)
+	}
+
+	conds = append(conds, "stat = ?")
+	nStat := ptl.GetStatCode(stat)
+	args = append(args, nStat)
+
+	orderQuery := ptl.GetOrderQuery(order)
+	nPage, err := strconv.Atoi(page)
+	if err != nil {
+		nPage = 1
+	}
+	nLimit, err := strconv.Atoi(limit)
+	if err != nil {
+		nLimit = 10
+	}
+
+	offset := (nPage - 1) * nLimit
+	args = append(args, nLimit, offset)
+	storyList, err := p.sdb.GetCondStoryList(conds, orderQuery, args)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get story list", err)
+		return
+	}
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"story_home_list": storyList})
 }
 
 // GetStoryDetail godoc
@@ -179,35 +263,32 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 }
 
 // UploadStoryPic godoc
-// @Summary Upload story picture
-// @Description Upload story picture to Cloudflare Images
+// @Summary 업로드 스토리 이미지 (Cloudflare Images)
+// @Description 최대 5개의 이미지(각 5MB 이하, 총 본문 길이 512자 제한)를 업로드합니다. 인증된 사용자가 Cloudflare Images에 스토리 이미지를 업로드하며, 업로드 성공 시 db에 저장합니다.
 // @Tags Story
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param files formData file true "Story image files (max 5MB each, max 5 files, max body length 512)"
-// @Param uid formData string true "User ID"
-// @Param sbody formData string false "Story body"
-// @Param nick formData string false "Nickname"
-// @Param stat formData string false "Story status (0: del, 1: pub, 2: private, 3: limit, 4: resv)"
-// @Param X-Totp header string false "TOTP token for authentication"
+// @Param files formData file true "스토리 이미지 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가"
+// @Param sbody formData string true "스토리 본문 (최대 512자, 필수)"
+// @Param stat formData int true "스토리 공개 상태 (0:del, 1:pub, 2:private, 3:limit, 4:resv). 숫자만 허용 (필수)"
 //
 //	@Example curl -X POST http://localhost:8080/story/v01/upload \
+//	  -H "Authorization: Bearer {jwt-access-token}" \
 //	  -F "files=@/home/tmp/bc1.jpg" \
 //	  -F "files=@/home/tmp/bc2.jpg" \
 //	  -F "files=@/home/tmp/bc3.jpg" \
-//	  -F "uid=12312413241241" \
-//	  -F "sbody=teststesetsets" \
-//	  -F "nick=testnick" \
+//	  -F "sbody=이것은 스토리 본문입니다." \
 //	  -F "stat=1" \
-//	  -H "X-Totp: test" \
 //	  -v
 //
-// @Success 200 {object} map[string]interface{} "Successfully uploaded story picture"
-// @Failure 400 {object} map[string]interface{} "Bad request - no files uploaded"
-// @Failure 500 {object} map[string]interface{} "Internal server error - upload failed"
+// @Success 200 {object} map[string]interface{} "업로드 성공 시: {\"msg\": \"Successfully uploaded story picture\", \"lastID\":5}"
+// @Failure 400 {object} map[string]interface{} "요청 파라미터 누락 또는 파일 미첨부 시 에러"
+// @Failure 401 {object} map[string]interface{} "인증 실패 시"
+// @Failure 500 {object} map[string]interface{} "Cloudflare 업로드 오류 또는 서버 내부 오류"
 // @Router /story/v01/upload [post]
-func (p *StoryController) UploadStoryPic(c *gin.Context) {
+// @Example Response : Status: 200, Response: {"msg":"Successfully uploaded story picture","lastID":5}
+func (p *StoryController) CreateStory(c *gin.Context) {
 	fileInfo, ok := c.Get("uploadedFiles")
 	if !ok {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "No files uploaded")
@@ -218,15 +299,19 @@ func (p *StoryController) UploadStoryPic(c *gin.Context) {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "No sinfo uploaded")
 		return
 	}
+	// TODO : birth 타입 - 문자열 일자까지만
+	// TODO : area 타입 변경
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
 
 	sinfoMap := sinfo.(map[string][]string)
-	//map[nick:[testnick] sbody:[te] stat:[1] uid:[7766493213763375817]]"
-	sstat := sinfoMap["stat"][0]
-	suid := sinfoMap["uid"][0]
-	ssbody := sinfoMap["sbody"][0]
-	snick := sinfoMap["nick"][0]
-	if sstat == "" || suid == "0" || ssbody == "" || snick == "" {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Stat, Uid, Sbody, Nick are required")
+	sstat, okStat := firstFormValue(sinfoMap, "stat")
+	ssbody, okBody := firstFormValue(sinfoMap, "sbody")
+	if !okStat || !okBody || sstat == "" || ssbody == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Story body, Status are required")
 		return
 	}
 
@@ -241,9 +326,22 @@ func (p *StoryController) UploadStoryPic(c *gin.Context) {
 
 	dix := map[string]string{}
 	i := 1
-	for _, value := range *cldFlrInfos {
+	var hasImg, hasVid bool
+	for key, value := range *cldFlrInfos {
+		tmpftyp := utils.GetFileType(key)
+		switch tmpftyp {
+		case 0:
+			hasImg = true
+		case 1:
+			hasVid = true
+		default:
+			hasImg = false
+			hasVid = false
+		}
+
 		idx := strconv.Itoa(i)
 		dix[idx] = value
+
 		i++
 	}
 
@@ -254,22 +352,48 @@ func (p *StoryController) UploadStoryPic(c *gin.Context) {
 		return
 	}
 
+	if hasImg && hasVid {
+		simg.MType = 2
+	} else if hasImg {
+		simg.MType = 0
+	} else if hasVid {
+		simg.MType = 1
+	} else {
+		simg.MType = 0
+	}
+
+	simg.Uid = user.(*ptl.UserInfoResp).Uid
+
+	//"1990-01-01T00:00:00Z"
+	simg.Birth = utils.Time2StrDay(user.(*ptl.UserInfoResp).Birth)
+	if simg.Birth == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, birth is required")
+		return
+	}
+	simg.Nick = user.(*ptl.UserInfoResp).Nick
+	if simg.Nick == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, nick is required")
+		return
+	}
+	simg.Area = ptl.GetAreaCode(user.(*ptl.UserInfoResp).Area)
+	if simg.Area <= 0 {
+		simg.Area = 0
+	}
+
+	simg.Gender, err = strconv.Atoi(user.(*ptl.UserInfoResp).Gender)
+	if err != nil || simg.Gender < 0 || simg.Gender > 2 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, gender is required")
+		return
+	}
+
 	simg.Body = ssbody
-	simg.Nick = snick
-	nstat, err := strconv.Atoi(sstat)
+	simg.Stat, err = strconv.Atoi(sstat)
 	if err != nil {
 		log.Error("Failed to convert stat to int: %v", err)
 		return
 	}
-	simg.Stat = nstat
-	simg.Uid, err = strconv.ParseUint(suid, 10, 64)
-	if err != nil {
-		log.Error("Failed to convert uid to uint64: %v", err)
-		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to convert uid to uint64", err)
-		return
-	}
 
-	lastID, err := p.sdb.SetStory(simg)
+	lastID, err := p.sdb.SaveStory(simg)
 	if err != nil {
 		log.Error("Failed to set story: %v", err)
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to set story", err)

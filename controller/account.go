@@ -53,6 +53,10 @@ func NewAccountController(ctl *Controller, rep *models.Repositories) (*AccountCo
 
 // @Summary get version
 // @Description get version
+// @Tags Server
+// @Produce json
+// @Success 200 {object} map[string]interface{} "version info"
+// @Router /serv/v01/version [get]
 func (p *AccountController) GetVersion(c *gin.Context) {
 	p.ctl.SimpleRespOK(c, gin.H{"version": "0.9.1"})
 }
@@ -498,7 +502,7 @@ func extractRefreshToken(c *gin.Context) string {
 // @Failure 400 {object} protocol.RespHeader "Bad request"
 // @Failure 401 {object} protocol.RespHeader "Unauthorized"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /acc/v01/logout [post]
+// @Router /inserv/v01/logout [post]
 func (p *AccountController) LogoutUser(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -557,7 +561,7 @@ func (p *AccountController) LogoutUser(c *gin.Context) {
 // @Failure 102 {object} protocol.RespHeader "Parameter is missing"
 // @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Failure 113 {object} protocol.RespHeader "Failed to leave user"
-// @Router /acc/v01/leave [post]
+// @Router /inserv/v01/leave [post]
 func (p *AccountController) LeaveUser(c *gin.Context) {
 	var req struct {
 		ID string `json:"id" binding:"required"`
@@ -711,18 +715,7 @@ func (p *AccountController) sendEmailOtpCode(email, nick, otp string) bool {
 	return true
 }
 
-// @Summary Request OTP authentication code
-// @Description Generate and send OTP code to user's email for authentication
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 {email : xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing or invalid"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 116 {object} protocol.RespHeader "Failed to set OTP"
-// @Router /acc/v01/reqotp [post]
+// ReqAuthOTP - Request OTP authentication code (NOT ROUTED - internal use)
 func (p *AccountController) ReqAuthOTP(c *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required"`
@@ -859,7 +852,7 @@ func (p *AccountController) ChangePW(c *gin.Context) {
 // @Failure 102 {object} protocol.RespHeader "Parameter is missing"
 // @Failure 104 {object} protocol.RespHeader "Failed to change pw"
 // @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Router /acc/v01/modify [post]
+// @Router /inserv/v01/modify [post]
 func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 	var req struct {
 		ID    string `json:"id" binding:"required"`
@@ -899,7 +892,7 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 // @Success 200 {object} protocol.UserInfoResp "User information"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
 // @Failure 114 {object} protocol.RespHeader "Failed to get user info"
-// @Router /acc/v01/info/{id} [get]
+// @Router /inserv/v01/info/{id} [get]
 func (p *AccountController) GetUserInfo(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -927,7 +920,7 @@ func (p *AccountController) GetUserInfo(c *gin.Context) {
 // @Failure 102 {object} protocol.RespHeader "Parameter is missing"
 // @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
 // @Failure 115 {object} protocol.RespHeader "Failed to delete user"
-// @Router /acc/v01/delete/{id} [post]
+// @Router /inserv/v01/delete/{id} [post]
 func (p *AccountController) DeleteUser(c *gin.Context) {
 	var req struct {
 		ID string `json:"id" binding:"required"`
@@ -1032,12 +1025,13 @@ func (p *AccountController) ModifyMainPic(c *gin.Context) {
 
 // @Summary Get WebRTC configuration
 // @Description Get WebRTC configuration for the authenticated user
-// @Tags webrtc
+// @Tags WebRTC
 // @Accept json
 // @Produce json
 // @Success 200 {object} protocol.WebRTCConfig "WebRTC configuration"
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
 // @Failure 401 {object} protocol.RespHeader "Unauthorized"
+// @Router /serv/v01/wsconf [get]
 // @Router /webrtc/v01/config [get]
 func (p *AccountController) GetWebRTCConfig(c *gin.Context) {
 	// JWT에서 사용자 ID 추출
@@ -1062,16 +1056,7 @@ func (p *AccountController) GetWebRTCConfig(c *gin.Context) {
 	p.ctl.SendResponse(c, http.StatusOK, config)
 }
 
-// @Summary Test specific STUN server
-// @Description Test connectivity to a specific STUN server
-// @Tags webrtc
-// @Accept json
-// @Produce json
-// @Param data body object true "STUN server URL {stunUrl: string}"
-// @Success 200 {object} controller.STUNTestResult "STUN test result"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /webrtc/v01/test-stun-server [post]
+// TestSpecificStunServer - Test specific STUN server (NOT ROUTED - internal use)
 func (p *AccountController) TestSpecificStunServer(c *gin.Context) {
 	var req struct {
 		StunURL string `json:"stunUrl" binding:"required"`

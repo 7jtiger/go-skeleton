@@ -218,7 +218,7 @@
 - `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
 - `GetStoryList()`: Retrieves all public stories (stat=1 or 0) for a user, ordered by creation time descending
 - `GetStoryDetail()`: Retrieves detailed story information including all comments for a specific story index
-- `UploadStoryPic()`: Uploads story images to Cloudflare Images (max 5 files, 5MB each), saves story with body text, nickname, and status
+- `CreateStory()`: Uploads story images/videos to Cloudflare Images (max 5 files, 5MB each), builds media type, and saves story with authenticated user profile fields
 
 ### Story Update Functions
 - `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
@@ -418,6 +418,7 @@
 - `handleReadReceipt()`에서 unread 초기화(`ResetUnread`) 후 상대에게 전달
 - 신규 통화 브릿지: `handleCallRequestFromDM`, `handleCallAcceptFromDM`, `handleCallCancel`
 - 신규 공개 메서드: `IsUserOnline`, `SendDMNotification`, `GetTotalUnread`
+- `GetChatList`: 라우트 path의 `page`/`limit`를 우선 사용(없으면 query), `pgSize` query로 `limit` 상한; 응답 `total_count`는 해당 방 Redis 리스트 전체 길이(`LLen`), 빈 페이지·offset 초과 시에도 동일
 
 ### SignalingController (`signaling.go`)
 - 대기실 메시지 타입에 `call-cancel` 추가

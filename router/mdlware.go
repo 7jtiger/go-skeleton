@@ -364,6 +364,23 @@ func detectByMagicBytes(buf []byte, n int) string {
 	return ""
 }
 
+// normalizeFormSinfo flattens multipart field names into sinfo keys.
+// Supports "stat", "sbody" and "sinfo[stat]", "sinfo[sbody]" styles.
+func normalizeFormSinfo(values map[string][]string) map[string][]string {
+	out := make(map[string][]string)
+	for k, vs := range values {
+		if len(vs) == 0 {
+			continue
+		}
+		key := k
+		if strings.HasPrefix(k, "sinfo[") && strings.HasSuffix(k, "]") {
+			key = k[len("sinfo[") : len(k)-1]
+		}
+		out[key] = vs
+	}
+	return out
+}
+
 // validateFileUploadImpl is the shared implementation for file upload validation.
 // When encParam is true, it extracts sinfo from form.Value["data"][0] (encrypted parameter mode).
 // When encParam is false, it sets sinfo to the full form.Value map.
@@ -456,7 +473,7 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 		if encParam {
 			c.Set("sinfo", form.Value["data"][0])
 		} else {
-			c.Set("sinfo", form.Value)
+			c.Set("sinfo", normalizeFormSinfo(form.Value))
 		}
 
 		c.Next()

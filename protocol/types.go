@@ -80,7 +80,7 @@ type NotiItem struct {
 type PartnerInfo struct {
 	PID      uint64 `json:"pid"`
 	Nick     string `json:"nick"`
-	ThumbPic string `json:"thumbPic"`
+	ThumbPic string `json:"thumb_pic"`
 	Gender   string `json:"gender"`
 	Age      string `json:"age"`
 	Area     string `json:"area"`
@@ -89,6 +89,7 @@ type PartnerInfo struct {
 type DMRoomResp struct {
 	RoomID   int64        `json:"rid"`
 	Partner  *PartnerInfo `json:"partner"`
+	LastMsg  string       `json:"last_msg"`
 	Total    int          `json:"total"`
 	Unread   int          `json:"unread"`
 	AtCreate string       `json:"at_crtchat"`

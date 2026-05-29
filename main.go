@@ -1,5 +1,9 @@
 ﻿package main
 
+// @title ms-gateway API
+// @version 1.0
+// @description ms-gateway API server
+
 import (
 	"context"
 	"flag"

@@ -82,9 +82,9 @@ type Story struct {
 // @Produce json
 // @Security JwtAuth
 // @Success 200 {object} HomeData "Home screen information"
-// @Failure 400 {object} ptl.RespHeader "Invalid request"
-// @Failure 401 {object} ptl.RespHeader "Authentication failed"
-// @Failure 500 {object} ptl.RespHeader "Server error"
+// @Failure 400 {object} protocol.RespHeader "Invalid request"
+// @Failure 401 {object} protocol.RespHeader "Authentication failed"
+// @Failure 500 {object} protocol.RespHeader "Server error"
 // @Router /home/v01/mdata [get]
 func (p *HomeController) GetHomeMenInfo(c *gin.Context) {
 	//noti 확인

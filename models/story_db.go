@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,16 +21,20 @@ CREATE TABLE `story` (
   `idx` int unsigned NOT NULL AUTO_INCREMENT,
   `uid` bigint NOT NULL,
   `nick` varchar(20) NOT NULL,
+  `birth` varchar(12) DEFAULT NULL COMMENT '00-11-22',
+  `area` tinyint DEFAULT NULL,
+  `gender` int DEFAULT '1' COMMENT '0=woman, 1=man',
   `body` varchar(512) DEFAULT NULL,
+  `type` tinyint DEFAULT '1' COMMENT '0=only img, 1=only video, 2=img+video',
   `stat` tinyint DEFAULT '1' COMMENT 'stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 : ',
-  `qt_good` int DEFAULT NULL,
-  `qt_checked` int DEFAULT NULL COMMENT '조회수',
+  `qt_good` int DEFAULT '0',
+  `qt_checked` int DEFAULT '0' COMMENT '조회수',
   `str_img` json NOT NULL,
   `at_update` datetime DEFAULT NULL,
   `at_create` datetime DEFAULT NULL,
   `str_imgbak` json DEFAULT NULL,
   PRIMARY KEY (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 CREATE TABLE `str_cmt` (
   `idx` int unsigned NOT NULL AUTO_INCREMENT,
@@ -168,10 +173,12 @@ func (p *StoryDB) GetSList() (string, string, error) {
 	return privacyUrl, termsUrl, nil
 }
 
-func (p *StoryDB) SetStory(simg *ptl.StoryImage) (int64, error) {
-	query := `INSERT INTO story (uid, nick, body, stat, str_img, at_create, at_update) 
-				VALUES (?, ?, ?, ?, ?, NOW(), NOW())`
-	result, err := p.conndb.Exec(query, simg.Uid, simg.Nick, simg.Body, simg.Stat, simg.StrImg)
+func (p *StoryDB) SaveStory(simg *ptl.StoryImage) (int64, error) {
+	query := `INSERT INTO story (uid, nick, birth, area, gender, body, type, stat, str_img, at_create, at_update) 
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
+	result, err := p.conndb.Exec(query, simg.Uid, simg.Nick, simg.Birth,
+		simg.Area, simg.Gender, simg.Body, simg.MType,
+		simg.Stat, simg.StrImg)
 	if err != nil {
 		return 0, err
 	}
@@ -184,7 +191,7 @@ func (p *StoryDB) SetStory(simg *ptl.StoryImage) (int64, error) {
 }
 
 // stat = 0 : pub, stat = 1 : private, stat = 2 : limit, stat = 3 : resv, stat = 4 : del
-func (p *StoryDB) GetStoryList(uid uint64) (*[]ptl.StoryListResp, error) {
+func (p *StoryDB) GetDefStoryList(uid uint64) (*[]ptl.StoryListResp, error) {
 	query := `SELECT idx, nick, str_img, at_create FROM story WHERE uid = ? AND stat IN (1, 0) ORDER BY at_create DESC`
 	rows, err := p.conndb.Query(query, uid)
 	if err != nil {
@@ -201,6 +208,51 @@ func (p *StoryDB) GetStoryList(uid uint64) (*[]ptl.StoryListResp, error) {
 		}
 		stories = append(stories, story)
 	}
+	return &stories, nil
+}
+
+func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []interface{}) (*map[int]string, error) {
+	base := `SELECT idx, str_img FROM story WHERE stat IN (0,1)`
+	if len(conds) > 0 {
+		base += " AND " + strings.Join(conds, " AND ")
+	}
+	query := base + " ORDER BY " + orderQuery + " LIMIT ? OFFSET ?"
+	// fmt.Println("query", query, " args ", args)
+	rows, err := p.conndb.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stories := make(map[int]string)
+	for rows.Next() {
+		var idx int
+		var strImg string
+		err := rows.Scan(&idx, &strImg)
+		if err != nil {
+			return nil, err
+		}
+
+		// str_img JSON에서 첫 번째(가장 작은 숫자 키 우선) URL만 추출한다.
+		var imgMap map[string]string
+		err = json.Unmarshal([]byte(strImg), &imgMap)
+		if err != nil {
+			// JSON 파싱 실패 시 원본 문자열을 그대로 반환
+			stories[idx] = strImg
+			continue
+		}
+
+		// 가장 작은 키(문자열이므로 int로 변환해서 정렬)값의 URL을 선택
+		var minKey string
+		for k := range imgMap {
+			if minKey == "" || k < minKey {
+				minKey = k
+			}
+		}
+		stories[idx] = imgMap[minKey]
+
+	}
+
 	return &stories, nil
 }
 

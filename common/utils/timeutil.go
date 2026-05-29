@@ -28,3 +28,12 @@ func CalcBirth2Age(birth string) int {
 
 	return age
 }
+
+func Time2StrDay(birth string) string {
+	// birth format: "1990-01-01T00:00:00Z"
+	birthDate, err := time.Parse("2006-01-02", birth[:10])
+	if err != nil {
+		return ""
+	}
+	return birthDate.Format("2006-01-02")
+}

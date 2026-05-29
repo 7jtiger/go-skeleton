@@ -102,6 +102,25 @@ Retrieves user's public stories (stat IN (1, 0)).
 - Array of stories with: idx, nick, str_img (JSON), at_create
 - Ordered by at_create DESC
 
+#### GetCondStoryList
+```go
+func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []interface{}) (*map[int]string, error)
+```
+Retrieves condition-based story map (`idx -> first image url`) with dynamic filters.
+
+**Query behavior:**
+- Base filter: `stat IN (0,1)`
+- Extra filters are appended as `AND ...` when `conds` is not empty
+- Sorting always uses `ORDER BY <orderQuery>`
+- Pagination uses `LIMIT ? OFFSET ?` from `args`
+- Special case: if condition includes `area = 0` (all), it is expanded to `area BETWEEN 1 AND 12`
+
+**Notes:**
+- `stories` map is initialized before scan loop
+- `orderQuery` should be built from whitelist mapping (e.g. `protocol.GetOrderQuery`) to avoid invalid SQL
+- `str_img` JSON is parsed and the first URL is selected by the smallest numeric key (`"1"`, `"2"`, ...).  
+  If JSON parsing fails, the raw DB value is returned as fallback.
+
 #### GetStory
 ```go
 func (p *StoryDB) GetStory(strIdx int) (*ptl.StoryDetailResp, error)

@@ -210,13 +210,13 @@ func (p *Router) Idx() *gin.Engine {
 		noti.GET("/anc/list", p.nt.GetAnnouncement)
 		noti.GET("/anc/detail/:idx", p.nt.GetAnnouncementDetail)
 	}
-
-	inbox := e.Group("inbox/v01", p.SecurityHeaders(), p.JwtAuth())
-	{
-		inbox.GET("/list", p.chat.GetChatRooms)
-		inbox.GET("/unread", p.chat.GetTotalUnread)
-	}
-
+	/*
+		inbox := e.Group("inbox/v01", p.SecurityHeaders(), p.JwtAuth())
+		{
+			inbox.GET("/list", p.chat.GetChatRooms)
+			inbox.GET("/unread", p.chat.GetTotalUnread)
+		}
+	*/
 	present := e.Group("present/v01", p.SecurityHeaders(), liteAuth())
 	{
 		present.PUT("/target")
@@ -232,9 +232,11 @@ func (p *Router) Idx() *gin.Engine {
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
 		// story.GET("/home/:id")
-		story.GET("/list/:uid", p.st.GetStoryList)
+		story.POST("/create", p.JwtAuth(), p.ValidateFileUpload(5, 5), p.st.CreateStory)
+		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
+
+		story.GET("/list", p.st.GetStoryDefaultList)
 		story.GET("/detail/:idx", p.st.GetStoryDetail)
-		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryPic)
 
 		// ------------- story -------------
 		story.POST("/updstat", p.st.UpdateStoryStat)

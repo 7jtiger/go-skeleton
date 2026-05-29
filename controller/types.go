@@ -66,3 +66,12 @@ func GetRandDefIntroImg(gender string) string {
 	}
 	return femaleIntroImgs[rand.Intn(len(femaleIntroImgs))]
 }
+
+// firstFormValue returns the first non-empty value for key from normalized sinfo map.
+func firstFormValue(m map[string][]string, key string) (string, bool) {
+	vs, ok := m[key]
+	if !ok || len(vs) == 0 {
+		return "", false
+	}
+	return vs[0], true
+}

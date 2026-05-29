@@ -12,7 +12,7 @@
 
 ### Data Processing Middleware
 - `GetReqXMeta()`: Middleware that parses user metadata from x-meta header and stores it in context
-- `ValidateFileUpload()`: File upload validation middleware that verifies uploaded file count, size, and type
+- `ValidateFileUpload()`: File upload validation middleware that verifies uploaded file count, size, and type; stores normalized `sinfo` in context (`stat`/`sbody` or `sinfo[stat]`/`sinfo[sbody]` both accepted)
 - `AesEncrypt()`: Middleware that encrypts response data using AES GCM mode for transmission
 - `AesDecrypt()`: Middleware that decrypts request data using AES GCM mode for processing
 
@@ -111,7 +111,7 @@
 - `GET /story/v01/home/:id`: Endpoint to retrieve user's story home (placeholder)
 - `GET /story/v01/list/:uid`: Endpoint to retrieve user's public story list (stat=1 or 0)
 - `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details with comments
-- `POST /story/v01/upload`: Endpoint to upload story with images to Cloudflare (max 5 files, 5MB each, ValidateFileUpload middleware)
+- `POST /story/v01/create`: Endpoint to create story with media upload (Cloudflare), requires `JwtAuth`, and uses `ValidateFileUpload` (max 5 files, 5MB each)
 - `POST /story/v01/updstat`: Endpoint to update story status (0=del, 1=pub, 2=private, 3=limit, 4=reserved)
 - `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
 - `POST /story/v01/delpic`: Endpoint to delete specific picture from story

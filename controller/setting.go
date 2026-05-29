@@ -54,10 +54,11 @@ func NewSetController(ctl *Controller, rep *models.Repositories) (*SetController
 // @Produce json
 // @Security BearerAuth
 // @Param Authorization header string true "Bearer {token}"
+// @Param uid path string true "User ID"
 // @Success 200 {object} protocol.RespHeader{data=int} "Notification setting value (0-15)"
 // @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /user/v01/set/{uid} [get]
+// @Router /user/v01/getset/{uid} [get]
 // @Example request
 // GET /user/v01/set/8697414060736839837
 // @Example response 200
@@ -103,12 +104,13 @@ func (p *SetController) GetSetting(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param Authorization header string true "Bearer {token}"
-// @Param request body object{cate=string,value=string} true "Setting request"
-// @Success 200 {object} protocol.RespHeader{data=object{msg=string}} "Setting updated successfully"
+// @Param cate path string true "Setting category (e.g. alert)"
+// @Param value path string true "Setting value"
+// @Success 200 {object} map[string]interface{} "Setting updated successfully"
 // @Failure 400 {object} protocol.RespHeader "Invalid request - Missing or invalid parameters"
 // @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /user/v01/set [post]
+// @Router /user/v01/set/{cate}/{value} [post]
 // @Example request
 // POST /user/v01/set
 // {"cate": "alert", "value": "1"}

@@ -674,6 +674,91 @@ func Test_ToMetaHeader(t *testing.T) {
 }
 
 // ----  stroy ----------------
+
+func Test_CreateStory(t *testing.T) {
+	// story.POST("/create", p.ValidateFileUpload(5, 5), p.st.CreateStory)
+	// "./bak/tmpimg/qwer.jpg"
+	// "./bak/tmpimg/rewq.jpg"
+	// "./bak/tmpimg/wet1.jpg"
+
+	// This test demonstrates a multipart/form POST to the /story/v01/create API.
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	flag.Parse()
+
+	uploadUrl := fmt.Sprintf("http://%s/story/v01/create", *targetUrl)
+
+	// Prepare test files (ensure these files exist!)
+	// img1 := "/home/jino/go/src/ms-gateway/bak/tmpimg/qwer.jpg"
+	img1 := "/home/jino/go/src/ms-gateway/bak/tmpimg/wet1.jpg"
+	img2 := "/home/jino/go/src/ms-gateway/bak/tmpimg/rewq.jpg"
+
+	var b bytes.Buffer
+	writer := multipart.NewWriter(&b)
+
+	// Add files part (maximum 2 images for this test)
+	files := []string{img1, img2}
+	for _, fname := range files {
+		file, err := os.Open(fname)
+		if err != nil {
+			t.Fatalf("Failed to open file %s: %v", fname, err)
+		}
+		defer file.Close()
+
+		part, err := writer.CreateFormFile("files", filepath.Base(fname))
+		if err != nil {
+			t.Fatalf("Failed to create form file for %s: %v", fname, err)
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			t.Fatalf("Failed to copy file data for %s: %v", fname, err)
+		}
+	}
+
+	// Add sinfo part (story info)
+	// Simulate a realistic user
+	sinfo := map[string][]string{
+		"stat":  {"1"},
+		"sbody": {"tasdfsafdest 테스트 스토리 본문 story body from automated test"},
+	}
+	// Flat form fields (also compatible with sinfo[key] via middleware normalize)
+	for k, vs := range sinfo {
+		for _, v := range vs {
+			if err := writer.WriteField(k, v); err != nil {
+				t.Fatalf("Failed to add sinfo field %s: %v", k, err)
+			}
+		}
+	}
+
+	// Set the requested access token in the header for authentication
+	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Failed to close multipart writer: %v", err)
+	}
+
+	// Build the HTTP request
+	req, err := http.NewRequest("POST", uploadUrl, &b)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+testToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to perform request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	fmt.Printf("Status: %d, Response: %s\n", resp.StatusCode, string(respBody))
+
+}
+
 func TestGetStoryDetail(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	idx := "3"
@@ -687,7 +772,7 @@ func TestGetStoryDetail(t *testing.T) {
 	fmt.Println(res)
 }
 
-func TestGetStoryList(t *testing.T) {
+func TestGetDefStoryList(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	qurl := "/story/v01/list"
 
@@ -697,6 +782,39 @@ func TestGetStoryList(t *testing.T) {
 	res, err := Get(*targetUrl, qurl, key, value)
 	if err != nil {
 		t.Errorf("Failed to get story list: %v", err)
+	}
+
+	fmt.Println(res)
+}
+
+// condition : area / stat / type / latest
+// paging
+// area :   // all = 0, seoul, gyeonggi, incheon, busan, daejeon/sejong/chungnam
+// chungbuk/cheonju/chungju, daegu/gyeongbuk, gyeongnam/ulsan, gwangju/jeonnam
+// jeonbuk/jeonju, gangwon/chuncheon, jeju
+// stat : 0=PUB(public 전체공개), 1=FLW(follower only), 2=PAY(paid only), 3=PRV(Private 비공개), 4=DEL(Deleted) 5=RSV(reserved)
+// type : 0=IMG(only img), 1 = VDO(only video), 2 = ALL(img + video), 3=RSV(reserved)
+// order : 0=OLD(oldest), 1=NEW(latest), 2=CMT(comMost), 3=GOD(goodMost), 4=VIEW(viewMost), 5=RSV(reserved)
+// gen : target gender 0=WMN(woman), 1=MAN(man), 2=RSV(reserved)
+// page : 1, 2, 3, ...
+// limit : 10, 20, 30, ...
+// response : {"result":0,"resultString":"Success","data":{"story_home_list":{"1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","2":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","3":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5512db27-6340-43cd-b5ab-85d7b9bd4800/public"}}}
+func TestGetCondStoryList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	area := "all"
+	stat := "pub"
+	mtype := "img"
+	order := "new" // 최신순
+	gen := "1"
+	page := "1"
+	limit := "5"
+
+	qurl := fmt.Sprintf("/story/v01/condition/list/%s/%s/%s/%s/%s/%s/%s", area, stat, mtype, order, gen, page, limit)
+
+	res, err := Get(*targetUrl, qurl, nil, nil)
+	if err != nil {
+		t.Errorf("Failed to get conditional story list: %v", err)
+		return
 	}
 
 	fmt.Println(res)

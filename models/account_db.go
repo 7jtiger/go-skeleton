@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -301,8 +302,9 @@ func (p *AccountDB) RegistUser(req ptc.RegistReq, encpw []byte) error {
 	}
 
 	age := utils.CalcBirth2Age(req.Birth)
+	area := ptc.GetAreaCode(req.Area)
 	query := "INSERT INTO user_info (sid, uid, did, dos, email, pw_hash, name, nick, gender, age, birthday, area, main_pic, thmb_pic, sp_intro, at_join, at_upd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = p.conndb.Exec(query, req.ID, req.Uid, req.DID, req.DOS, encEmail, encpw, encName, req.Nick, req.Gender, age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
+	_, err = p.conndb.Exec(query, req.ID, req.Uid, req.DID, req.DOS, encEmail, encpw, encName, req.Nick, req.Gender, age, req.Birth, area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	// _, err = p.conndb.Exec(query, req.ID, req.Uid, req.Email, encpw, encName, req.Nick, req.Gender, req.Age, req.Birth, req.Area, req.MainPic, req.ThumbIcon, req.SPIntro, time.Now(), time.Now())
 	if err != nil {
 		return fmt.Errorf("error executing query: %v", err)
@@ -520,14 +522,15 @@ func (p *AccountDB) ModifyUserInfo(id, uid, email, cate, value string) error {
 
 func (p *AccountDB) GetUserInfo(id string) (ptc.UserInfoResp, error) {
 	// query := "SELECT sid, email, name, nick, gender, age, birthday, area, at_join FROM user_info WHERE sid = ?"
-	query := "SELECT sid, uid, did, email, name, nick, gender, age, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE sid = ? LIMIT 1"
+	query := "SELECT sid, uid, did, email, name, nick, gender, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE sid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, id)
 	var user ptc.UserInfoResp
 	var encEmail, encName string
 	var did sql.NullString
+	var area int
 
 	// 먼저 데이터베이스에서 암호화된 값들을 스캔 (NULL 가능한 컬럼은 sql.NullString 사용)
-	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Age, &user.Birth, &user.Area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
+	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Birth, &area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
 	if err != nil {
 		return ptc.UserInfoResp{}, err
 	}
@@ -539,6 +542,8 @@ func (p *AccountDB) GetUserInfo(id string) (ptc.UserInfoResp, error) {
 		user.Did = ""
 	}
 
+	user.Area = ptc.GetAreaName(area)
+	user.Age = strconv.Itoa(utils.CalcBirth2Age(user.Birth))
 	// uid를 사용하여 키 생성 (CheckNameBirth와 동일한 방식)
 	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
 
@@ -565,13 +570,14 @@ func (p *AccountDB) GetUserInfo(id string) (ptc.UserInfoResp, error) {
 
 // GetUserInfoByUID uid 기반 사용자 조회
 func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
-	query := "SELECT sid, uid, did, email, name, nick, gender, age, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE uid = ? LIMIT 1"
+	query := "SELECT sid, uid, did, email, name, nick, gender, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE uid = ? LIMIT 1"
 	row := p.conndb.QueryRow(query, uid)
 	var user ptc.UserInfoResp
 	var encEmail, encName string
 	var did sql.NullString
+	var area int
 
-	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Age, &user.Birth, &user.Area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
+	err := row.Scan(&user.ID, &user.Uid, &did, &encEmail, &encName, &user.Nick, &user.Gender, &user.Birth, &area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro)
 	if err != nil {
 		return ptc.UserInfoResp{}, err
 	}
@@ -581,6 +587,9 @@ func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
 	} else {
 		user.Did = ""
 	}
+
+	user.Area = ptc.GetAreaName(area)
+	user.Age = strconv.Itoa(utils.CalcBirth2Age(user.Birth))
 
 	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
 	if encEmail != "" {
@@ -700,7 +709,7 @@ func (p *AccountDB) IsBlockedPair(uidA, uidB uint64) (bool, error) {
 		SELECT 1
 		FROM user_block
 		WHERE stat = 1
-		  AND ((uid = ? AND bid = ?) OR (uid = ? AND bid = ?))
+			AND ((uid = ? AND bid = ?) OR (uid = ? AND bid = ?))
 		LIMIT 1
 	`
 	var one int
@@ -760,9 +769,10 @@ func (p *AccountDB) GetFavoriteUsers(uid uint64, limit, offset int) ([]ptc.Favor
 	if offset < 0 {
 		offset = 0
 	}
+
 	query := `
 		SELECT
-			u.uid, u.sid, u.nick, u.gender, u.age, u.area, u.main_pic, u.thmb_pic, u.sp_intro,
+			u.uid, u.sid, u.nick, u.gender, u.birthday, u.area, u.main_pic, u.thmb_pic, u.sp_intro,
 			uf.at_upd
 		FROM user_fav uf
 		INNER JOIN user_info u ON u.uid = uf.tid
@@ -781,12 +791,16 @@ func (p *AccountDB) GetFavoriteUsers(uid uint64, limit, offset int) ([]ptc.Favor
 	result := make([]ptc.FavoriteUserItem, 0, limit)
 	for rows.Next() {
 		var item ptc.FavoriteUserItem
+		var area int
+		var birthday string
 		if err := rows.Scan(
-			&item.UID, &item.SID, &item.Nick, &item.Gender, &item.Age, &item.Area,
+			&item.UID, &item.SID, &item.Nick, &item.Gender, &birthday, &area,
 			&item.MainPic, &item.ThumbPic, &item.SPIntro, &item.FavAt,
 		); err != nil {
 			return nil, fmt.Errorf("get favorites scan failed: %v", err)
 		}
+		item.Area = ptc.GetAreaName(area)
+		item.Age = utils.CalcBirth2Age(birthday)
 		result = append(result, item)
 	}
 	if err := rows.Err(); err != nil {

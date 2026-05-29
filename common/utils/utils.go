@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/gomail.v2"
 )
@@ -186,4 +188,15 @@ func UploadCldFlr(files []*multipart.FileHeader, accountID, apiToken string) (*m
 	}
 
 	return &cldFlrInfos, nil
+}
+
+func GetFileType(filename string) int {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".jfif":
+		return 0
+	case ".mp4", ".mov", ".avi", ".mkv", ".mpg", ".mpeg", ".m4v", ".webm":
+		return 1
+	}
+	return 2
 }

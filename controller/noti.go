@@ -40,14 +40,15 @@ func NewNotiController(ctl *Controller, rep *models.Repositories) (*NotiControll
 
 // GetNotiList godoc
 // @Summary      알림 목록 조회
-// @Description  사용자의 알림 목록을 조회합니다
+// @Description  사용자의 알림 목록을 조회합니다 (JWT 인증 기반)
 // @Tags         Noti
 // @Accept       json
 // @Produce      json
-// @Param        id   path      string  true  "User ID"
+// @Security     BearerAuth
 // @Success      200  {object}  protocol.RespHeader
-// @Failure      400  {object}  protocol.RespHeader "id is required"
-// @Router       /noti/v01/list/{id} [get]
+// @Failure      400  {object}  protocol.RespHeader "Bad request"
+// @Failure      401  {object}  protocol.RespHeader "Unauthorized"
+// @Router       /noti/v01/list [get]
 func (p *NotiController) GetNotiList(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
