@@ -644,18 +644,44 @@ func (p *AccountDB) DeleteUser(id string) error {
 }
 
 // ==== block =================================================================================
+/*
+CREATE TABLE `user_block` (
+	`idx` bigint unsigned NOT NULL AUTO_INCREMENT,
+	`uid` bigint unsigned NOT NULL,
+	`tid` bigint unsigned NOT NULL,
+	`reason` varchar(128) DEFAULT NULL,
+	`stat` tinyint NOT NULL DEFAULT '1' COMMENT '1:block, 0:unblock',
+	`at_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`at_update` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY (`idx`),
+	UNIQUE KEY `uk_block_pair` (`uid`),
+	KEY `idx_blocker_stat` (`uid`,`stat`,`at_update`),
+	KEY `idx_blocked_stat` (`stat`,`at_update`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
-func (p *AccountDB) SetBlock(uid, bid uint64, reason string) (int64, error) {
+*/
+
+func (p *AccountDB) SetBlockUser(uid, tid uint64, reason string) (int64, error) {
 	query := `
-		INSERT INTO user_block (uid, bid, reason, stat, at_create, at_update)
+		INSERT INTO user_block (uid, tid, reason, stat, at_create, at_update)
 		VALUES (?, ?, ?, 1, NOW(), NOW())
 		ON DUPLICATE KEY UPDATE stat = 1, reason = VALUES(reason), at_update = NOW()
 	`
-	result, err := p.conndb.Exec(query, uid, bid, reason)
+	result, err := p.conndb.Exec(query, uid, tid, reason)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func (p *AccountDB) CountBlockUsers(uid uint64) (int64, error) {
+	query := `SELECT COUNT(*) FROM user_block WHERE uid = ? AND stat = 1`
+	var count int64
+	err := p.conndb.QueryRow(query, uid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (p *AccountDB) SetUnblock(uid, bid uint64) (int64, error) {
@@ -667,7 +693,7 @@ func (p *AccountDB) SetUnblock(uid, bid uint64) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserItem, error) {
+func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserItem, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -679,6 +705,15 @@ func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserI
 		offset = 0
 	}
 
+	// 1. Get total count of blocked users (stat=1)
+	var totalCount int64
+	countQuery := `SELECT COUNT(*) FROM user_block WHERE uid = ? AND stat = 1`
+	err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 2. Get paged list
 	query := `
 		SELECT ub.bid, COALESCE(u.nick, ''), COALESCE(u.thmb_pic, ''), COALESCE(ub.reason, ''), ub.at_update
 		FROM user_block ub
@@ -689,7 +724,7 @@ func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserI
 	`
 	rows, err := p.conndb.Query(query, uid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -697,11 +732,11 @@ func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserI
 	for rows.Next() {
 		var item ptc.BlockUserItem
 		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.Reason, &item.AtUpdate); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		list = append(list, item)
 	}
-	return &list, nil
+	return &list, totalCount, nil
 }
 
 func (p *AccountDB) IsBlockedPair(uidA, uidB uint64) (bool, error) {
@@ -726,11 +761,24 @@ func (p *AccountDB) IsBlockedPair(uidA, uidB uint64) (bool, error) {
 // ==== block =================================================================================
 
 // ==== favorite =================================================================================
-func (p *AccountDB) SetFavoriteUser(uid, targetUid uint64, enable bool) error {
-	if uid == 0 || targetUid == 0 {
+/*
+CREATE TABLE `user_fav` (
+  `uid` bigint unsigned NOT NULL COMMENT '즐겨찾기 한 사용자 uid',
+  `tid` bigint unsigned NOT NULL COMMENT '즐겨찾기 대상 uid',
+  `stat` tinyint NOT NULL DEFAULT '1' COMMENT '1=active, 0=removed',
+  `at_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `at_upd` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`uid`,`tid`),
+  KEY `idx_user_stat_upd` (`uid`,`stat`,`at_upd` DESC),
+  KEY `idx_user_target_stat_owner` (`tid`,`stat`,`uid`),
+  CONSTRAINT `chk_user_not_self` CHECK ((`uid` <> `tid`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+*/
+func (p *AccountDB) SetFavoriteUser(uid, tid uint64, enable bool) error {
+	if uid == 0 || tid == 0 {
 		return fmt.Errorf("invalid uid")
 	}
-	if uid == targetUid {
+	if uid == tid {
 		return fmt.Errorf("cannot favorite self")
 	}
 	if enable {
@@ -741,33 +789,46 @@ func (p *AccountDB) SetFavoriteUser(uid, targetUid uint64, enable bool) error {
 				stat = 1,
 				at_upd = NOW()
 		`
-		_, err := p.conndb.Exec(query, uid, targetUid)
+		_, err := p.conndb.Exec(query, uid, tid)
 		if err != nil {
 			return fmt.Errorf("set favorite failed: %v", err)
 		}
 		return nil
 	}
+
 	query := `
 		UPDATE user_fav
 		SET stat = 0, at_upd = NOW()
 		WHERE uid = ? AND tid = ? AND stat = 1
 	`
-	_, err := p.conndb.Exec(query, uid, targetUid)
+	_, err := p.conndb.Exec(query, uid, tid)
 	if err != nil {
 		return fmt.Errorf("unset favorite failed: %v", err)
 	}
 	return nil
 }
 
-func (p *AccountDB) GetFavoriteUsers(uid uint64, limit, offset int) ([]ptc.FavoriteUserItem, error) {
+func (p *AccountDB) GetFavoriteUsers(uid uint64, page, limit int) ([]ptc.FavoriteUserItem, int, error) {
 	if uid == 0 {
-		return nil, fmt.Errorf("invalid owner uid")
+		return nil, 0, fmt.Errorf("invalid owner uid")
 	}
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
+
+	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
+	}
+
+	countQuery := `
+		SELECT COUNT(1)
+		FROM user_fav uf
+		INNER JOIN user_info u ON u.uid = uf.tid
+		WHERE uf.uid = ?
+		  AND uf.stat = 1
+		  AND u.stat <> 4
+	`
+	var totalCount int
+	if err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, fmt.Errorf("get favorites count failed: %v", err)
 	}
 
 	query := `
@@ -784,7 +845,7 @@ func (p *AccountDB) GetFavoriteUsers(uid uint64, limit, offset int) ([]ptc.Favor
 	`
 	rows, err := p.conndb.Query(query, uid, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("get favorites query failed: %v", err)
+		return nil, 0, fmt.Errorf("get favorites query failed: %v", err)
 	}
 	defer rows.Close()
 
@@ -797,16 +858,16 @@ func (p *AccountDB) GetFavoriteUsers(uid uint64, limit, offset int) ([]ptc.Favor
 			&item.UID, &item.SID, &item.Nick, &item.Gender, &birthday, &area,
 			&item.MainPic, &item.ThumbPic, &item.SPIntro, &item.FavAt,
 		); err != nil {
-			return nil, fmt.Errorf("get favorites scan failed: %v", err)
+			return nil, 0, fmt.Errorf("get favorites scan failed: %v", err)
 		}
 		item.Area = ptc.GetAreaName(area)
 		item.Age = utils.CalcBirth2Age(birthday)
 		result = append(result, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("get favorites rows error: %v", err)
+		return nil, 0, fmt.Errorf("get favorites rows error: %v", err)
 	}
-	return result, nil
+	return result, totalCount, nil
 }
 
 func (p *AccountDB) CountFavoriteUsers(uid uint64) (int, error) {

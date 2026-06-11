@@ -468,8 +468,45 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 			validFiles = append(validFiles, fileHeader)
 		}
 
+		// 동영상용 썸네일(선택). 이미지 타입만 허용한다.
+		imageOnlyTypes := map[string]bool{
+			"image/jpeg": true,
+			"image/jpg":  true,
+			"image/png":  true,
+			"image/gif":  true,
+			"image/webp": true,
+		}
+		thumbnails := form.File["thbnl"]
+		validThumbs := make([]*multipart.FileHeader, 0, len(thumbnails))
+		for _, thumbHeader := range thumbnails {
+			if thumbHeader.Size > maxSize {
+				p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s exceeds %dMB limit", thumbHeader.Filename, size), http.StatusBadRequest)
+				return
+			}
+
+			ct := strings.TrimSpace(thumbHeader.Header.Get("Content-Type"))
+			if idx := strings.Index(ct, ";"); idx >= 0 {
+				ct = strings.TrimSpace(ct[:idx])
+			}
+			if ct == "" || ct == "application/octet-stream" {
+				detected, err := detectContentTypeFromFile(thumbHeader)
+				if err != nil {
+					p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s: could not determine type", thumbHeader.Filename), http.StatusBadRequest)
+					return
+				}
+				ct = detected
+			}
+			if !imageOnlyTypes[ct] {
+				p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s has invalid type. Only image files are allowed", thumbHeader.Filename), http.StatusBadRequest)
+				return
+			}
+
+			validThumbs = append(validThumbs, thumbHeader)
+		}
+
 		// Store validated files in context
-		c.Set("uploadedFiles", validFiles)
+		c.Set("upFiles", validFiles)
+		c.Set("upThumb", validThumbs)
 		if encParam {
 			c.Set("sinfo", form.Value["data"][0])
 		} else {

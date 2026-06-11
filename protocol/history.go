@@ -266,19 +266,19 @@ func GetAreaCode(area string) int {
 		return 3
 	case "busan", "부산":
 		return 4
-	case "daejeon", "sejong", "chungnam", "대전/세종/충남", "대전", "세종", "충남":
+	case "daejeon", "sejong", "chungnam", "daejeon/sejong/chungnam", "대전/세종/충남", "대전", "세종", "충남":
 		return 5
-	case "chungbuk", "cheonju", "chungju", "충북/청주/충주", "충북", "청주", "충주":
+	case "chungbuk", "cheonju", "chungju", "chungbuk/cheonju/chungju", "충북/청주/충주", "충북", "청주", "충주":
 		return 6
-	case "daegu", "gyeongbuk", "대구/경북", "대구", "경북":
+	case "daegu", "gyeongbuk", "daegu/gyeongbuk", "대구/경북", "대구", "경북":
 		return 7
-	case "gyeongnam", "ulsan", "경남/울산", "경남", "울산":
+	case "gyeongnam", "ulsan", "gyeongnam/ulsan", "경남/울산", "경남", "울산":
 		return 8
-	case "gwangju", "jeonnam", "광주/전남", "광주", "전남":
+	case "gwangju", "jeonnam", "gwangju/jeonnam", "광주/전남", "광주", "전남":
 		return 9
-	case "jeonbuk", "jeonju", "전북/전주", "전북", "전주":
+	case "jeonbuk", "jeonju", "jeonbuk/jeonju", "전북/전주", "전북", "전주":
 		return 10
-	case "gangwon", "chuncheon", "강원/춘천", "강원", "춘천":
+	case "gangwon", "chuncheon", "gangwon/chuncheon", "강원/춘천", "강원", "춘천":
 		return 11
 	case "jeju", "제주":
 		return 12

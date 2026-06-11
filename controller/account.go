@@ -249,7 +249,7 @@ func (p *AccountController) getUid() uint64 {
 //	}
 //
 // @Example response (failure):
-// {"result": 104,"resultString": "failed to login user","data": null}
+// {"result": 104,"msg": "failed to login user","data": null}
 //
 // @Note x-meta header format:
 // uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro
@@ -884,7 +884,7 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 }
 
 // @Summary Get user information
-// @Description Get user information
+// @Description Get user from sid information
 // @Tags user
 // @Accept json
 // @Produce json
@@ -893,7 +893,7 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 // @Failure 400 {object} protocol.RespHeader "Invalid request"
 // @Failure 114 {object} protocol.RespHeader "Failed to get user info"
 // @Router /inserv/v01/info/{id} [get]
-func (p *AccountController) GetUserInfo(c *gin.Context) {
+func (p *AccountController) GetSidUserInfo(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "id is required")
@@ -901,6 +901,38 @@ func (p *AccountController) GetUserInfo(c *gin.Context) {
 	}
 
 	user, err := p.adb.GetUserInfo(id)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserInfoFailed, "failed to get user info"), http.StatusBadRequest, err)
+		return
+	}
+
+	p.ctl.SendResponse(c, http.StatusOK, user)
+}
+
+// @Summary Get user information by UID
+// @Description 주어진 UID로 사용자의 정보를 조회합니다.
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param tid path string true "Target User UID"
+// @Success 200 {object} protocol.UserInfoResp "User information"
+// @Failure 400 {object} protocol.RespHeader "Invalid request"
+// @Failure 114 {object} protocol.RespHeader "Failed to get user info"
+// @Router /inserv/v01/uinfo/{tid} [get]
+func (p *AccountController) GetUidFromInfo(c *gin.Context) {
+	tid := c.Param("tid")
+	if tid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	uidUint, err := strconv.ParseUint(tid, 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserInfoFailed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	user, err := p.adb.GetUserInfoByUID(uidUint)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserInfoFailed, "failed to get user info"), http.StatusBadRequest, err)
 		return
@@ -964,10 +996,6 @@ func (p *AccountController) DeleteUser(c *gin.Context) {
 //	  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
 //	  -H "x-meta: 8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!" \
 //	  -v
-//
-// @Example Response:
-//
-//	{"header": { "code": 0,"message": "success" }, "body": "success"}
 func (p *AccountController) ModifyMainPic(c *gin.Context) {
 	fileInfo, ok := c.Get("uploadedFiles")
 	if !ok {
@@ -1071,4 +1099,460 @@ func (p *AccountController) TestSpecificStunServer(c *gin.Context) {
 	result := TestStunServer(req.StunURL, 5*time.Second)
 
 	p.ctl.SendResponse(c, http.StatusOK, result)
+}
+
+/*
+// Followser 나를 팔로우 하는 사용자 목록 조회
+// Followee 내가 팔로우 하는 사용자 목록 조회
+// Blocker 나를 차단한 사용자 목록 조회
+// Blockee 내가 차단한 사용자 목록 조회
+
+// FollowUser 나를 팔로우 하는 사용자 목록 조회
+// UnfollowUser 내가 팔로우 하는 사용자 목록 조회
+// BlockUser 나를 차단한 사용자 차단
+// UnblockUser 내가 차단한 사용자 차단 해제
+
+*/ // 내가(현재 유저) - 해당 사용자를 즐겨찾기 등록
+
+// SetFavoriteUser godoc
+// @Summary      즐겨찾기 등록
+// @Description  현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에 추가합니다.
+// @Description  request : POST /account/v01/favorite/set/{tid}
+// @Description  response : {"result":0,"msg":"Success"}
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Param        tid   path      string  true  "즐겨찾기 등록 대상 사용자 uid"
+// @Success      200   {object}  map[string]interface{}
+// @Failure      400   {object}  map[string]string
+// @Failure      401   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /account/v01/favorite/set/{tid} [post]
+func (p *AccountController) SetFavoriteUser(c *gin.Context) {
+	tid := c.Param("tid")
+	if tid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is required")
+		return
+	}
+
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	tid64, err := strconv.ParseUint(tid, 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse tid"), http.StatusBadRequest, err)
+		return
+	}
+
+	err = p.adb.SetFavoriteUser(uid64, tid64, true)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to set favorite user"), http.StatusInternalServerError, err)
+		return
+	}
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+	})
+}
+
+// UnfavoriteUser godoc
+// @Summary      즐겨찾기 해제
+// @Description  현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에서 제거합니다.
+// @Description  request : POST /account/v01/favorite/cancel/{tid}
+// @Description  response : {"result":0,"msg":"Success"}
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Param        tid   path      string  true  "즐겨찾기 해제 대상 사용자 uid"
+// @Success      200   {object}  map[string]interface{}
+// @Failure      400   {object}  map[string]string
+// @Failure      401   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /account/v01/favorite/cancel/{tid} [post]
+func (p *AccountController) UnfavoriteUser(c *gin.Context) {
+	tid := c.Param("tid")
+	if tid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is required")
+		return
+	}
+
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	tid64, err := strconv.ParseUint(tid, 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse tid"), http.StatusBadRequest, err)
+		return
+	}
+
+	// 즐겨찾기 해제 처리 (enable=false)
+	err = p.adb.SetFavoriteUser(uid64, tid64, false)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to unfavorite user"), http.StatusInternalServerError, err)
+		return
+	}
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+	})
+}
+
+/*
+// 나를(현재 유저) - 팔로우 하는 사용자 목록 조회
+// 내 uid 로 나를 팔로우하는 개별 사용자 목록 조회 (페이지 단위), 사용자 정보(닉네임, 나이, 젠더, 프로필사진, 소개글, 지역, 등록시간, 영상통화 가능여부)
+// 내가 즐겨찾기 한 사용자 목록 조회 (페이지 단위), 사용자 정보(닉네임, 나이, 젠더, 프로필사진, 소개글, 지역, 등록시간, 영상통화 가능여부)
+*/
+
+// GetFavoriteList
+// @Summary 즐겨찾기한 사용자 목록 조회
+// @Description 내가 즐겨찾기한 사용자 목록을 페이지 단위로 조회합니다. (페이지네이션 지원)
+//
+// @Tags Favorite
+// @Security BearerAuth
+// @Produce json
+//
+// @Param page query int false "페이지 번호 (기본값 1)"
+// @Param limit query int false "페이지당 항목 수 (기본값 10)"
+// @Success 200 {object} map[string]interface{} "result, msg, count, list"
+// @Description 요청 예시: GET /fav/v01/list?page=1&limit=10 (Authorization: Bearer)
+// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":35,\"list\":[...]}
+// @Failure 400 {object} object "잘못된 요청(파라미터 에러) 또는 사용자 정보 없음 예시: {\"result\":400, \"msg\":\"bad request\"}"
+// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
+// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
+//
+// @Router /fav/v01/list [get]
+func (p *AccountController) GetFavoriteList(c *gin.Context) {
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "10")
+
+	pageInt, err := strconv.Atoi(page)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse page"), http.StatusBadRequest, err)
+		return
+	}
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse limit"), http.StatusBadRequest, err)
+		return
+	}
+
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	list, count, err := p.adb.GetFavoriteUsers(uid64, pageInt, limitInt)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get favorite list"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+		"list":   list,
+	})
+}
+
+// 해당 사용자를 팔로우 하는 사용자 수
+
+// GetFavoriteCount
+// @Summary 즐겨찾기 한 사용자 수 조회
+// @Description 해당 사용자를 즐겨찾기 한 사용자의 총 개수를 반환합니다.
+// @Tags Favorite
+// @Produce json
+// @Success 200 {object} object "성공 예시: {\"result\":0, \"msg\":\"Success\", \"count\":5}"
+// @Failure 400 {object} object "잘못된 요청(파라미터 에러) 예시: {\"result\":400, \"msg\":\"bad request\"}"
+// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
+// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
+// @Router /fav/v01/count [get]
+// @Description 요청 예시: GET /fav/v01/count (Authorization: Bearer)
+// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+func (p *AccountController) GetFavoriteCount(c *gin.Context) {
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := p.adb.CountFavoriteUsers(uid64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get favorite count"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+	})
+}
+
+// --------------------- user block ---------------------
+// 내가(현재 유저) - 해당 사용자를 차단
+
+// SetBlockUser godoc
+// @Summary 사용자 차단하기 (Block a User)
+// @Description 현재 로그인한 사용자가 대상 사용자를 차단합니다. reason 값이 없으면 "etc"로 처리됩니다.
+// @Tags Account
+// @Accept json
+// @Produce json
+// @Param tid path string true "차단할 대상 사용자 ID (target user id)"
+// @Param reason body object true "차단 사유 JSON {\"reason\":\"욕설\"}"
+// @Success 200 {object} object "성공 예시: {\"result\":0, \"msg\":\"Success\", \"count\":5}"
+// @Failure 400 {object} object "잘못된 요청(파라미터/바디 오류) 예시: {\"result\":400, \"msg\":\"bad request\"}"
+// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
+// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
+// @Router /block/v01/add/{tid} [post]
+// @Description 요청 예시: POST /block/v01/add/125 Body {\"reason\":\"욕설\"}
+// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+func (p *AccountController) SetBlockUser(c *gin.Context) {
+	tid := c.Param("tid")
+	if tid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	tid64, err := strconv.ParseUint(tid, 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		Rsn string `json:"reason" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.JsonParseFailed, "failed to parse JSON"), http.StatusBadRequest, err)
+		return
+	}
+
+	reason := req.Rsn
+	// Validate the required fields
+	if req.Rsn == "" {
+		reason = "etc"
+	}
+
+	/* 	reason := c.DefaultQuery("reason", "")
+	   	if reason == "" {
+	   		reason = "etc"
+	   	}
+	*/
+	_, err = p.adb.SetBlockUser(uid64, tid64, reason)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to set block user"), http.StatusInternalServerError, err)
+		return
+	}
+
+	count, err := p.adb.CountBlockUsers(uid64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get block count"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+	})
+}
+
+// 해당 사용자를 차단 해제
+
+// UnblockUser godoc
+// @Summary 차단 해제 (Unblock User)
+// @Description 지정된 상대방(tid)에 대한 차단을 해제합니다. 성공 시 unblock 후 현재 차단 유저수(count)를 반환합니다.
+// @Tags Account
+// @Accept  json
+// @Produce  json
+// @Param tid path string true "차단 해제 대상 유저 ID (Target User ID)"
+// @Success 200 {object} map[string]interface{} "차단 해제 성공 - result=0, msg=Success, count=차단 유저수"
+// @Failure 400 {object} protocol.RespHeader "잘못된 요청 (tid/uid 변환 오류)"
+// @Failure 401 {object} protocol.RespHeader "인증 실패 (user not found in context)"
+// @Failure 500 {object} protocol.RespHeader "서버 에러 (차단 해제 실패 또는 블록 카운트 조회 실패)"
+// @Router /account/v01/unblock/{tid} [post]
+// @Security Bearer
+// @Description 요청 예시: POST /account/v01/unblock/7
+// @Description 응답 예시: {"result":0,"msg":"Success","count":2}
+func (p *AccountController) UnblockUser(c *gin.Context) {
+	tid := c.Param("tid")
+	if tid == "" {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	tid64, err := strconv.ParseUint(tid, 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	_, err = p.adb.SetUnblock(uid64, tid64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to unblock user"), http.StatusInternalServerError, err)
+		return
+	}
+
+	count, err := p.adb.CountBlockUsers(uid64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get block count"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+	})
+}
+
+// @Summary Get blocked user list
+// @Description Retrieves the list of users blocked by the authenticated user, with paging.
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Number of results per page" default(10)
+// @Success 200 {object} map[string]interface{} "list: blocked user list, count: 총 차단 인원"
+// @Failure 400 {object} protocol.RespHeader "파라미터 오류 혹은 파싱 에러"
+// @Failure 401 {object} protocol.RespHeader "인증 실패 (user not found in context)"
+// @Failure 500 {object} protocol.RespHeader "서버 에러 (차단 리스트 조회 실패)"
+// @Router /block/v01/list/{page}/{limit} [get]
+// @Security Bearer
+// @Description 요청 예시: GET /block/v01/list/1/10
+// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":2,\"list\":[...]}
+func (p *AccountController) GetBlockUser(c *gin.Context) {
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "10")
+
+	pageInt, err := strconv.Atoi(page)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse page"), http.StatusBadRequest, err)
+		return
+	}
+
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse limit"), http.StatusBadRequest, err)
+		return
+	}
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	list, count, err := p.adb.GetBlockList(uid64, pageInt, limitInt)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get block list"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+		"list":   list,
+	})
+}
+
+// GetBlockCount godoc
+// @Summary      Get blocked user count
+// @Description  Returns the total number of users blocked by the authenticated user.
+// @Tags         account
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {object}  map[string]interface{} "Blocked user count"
+// @Failure      401  {object}  map[string]interface{} "user not found in context"
+// @Failure      400  {object}  map[string]interface{} "failed to parse uid"
+// @Failure      500  {object}  map[string]interface{} "failed to get block count"
+// @Router       /account/block/count [get]
+// @Param        Authorization header string true "Bearer Token"
+// @Description 요청 예시: GET /account/block/count (Authorization: Bearer)
+// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+func (p *AccountController) GetBlockCount(c *gin.Context) {
+	uid, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	uid64, err := strconv.ParseUint(uid.(string), 10, 64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse uid"), http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := p.adb.CountBlockUsers(uid64)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to get block count"), http.StatusInternalServerError, err)
+		return
+	}
+
+	p.ctl.SendResponse(c, http.StatusOK, gin.H{
+		"result": 0,
+		"msg":    "Success",
+		"count":  count,
+	})
 }

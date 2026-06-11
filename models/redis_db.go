@@ -45,8 +45,8 @@ type ChatRoomData struct {
 // ChatMessageData Redis에 저장되는 채팅 메시지 데이터 구조체
 type ChatMessageData struct {
 	ID        string    `json:"id"`
-	RoomID    string    `json:"roomId"`
-	UserID    string    `json:"userId"`
+	RoomID    string    `json:"room_id"`
+	UserID    string    `json:"user_id"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
@@ -990,21 +990,21 @@ func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 
 // SaveChatMessage 채팅 메시지 저장
 // SaveChatMessage HSet을 사용하여 채팅 메시지 저장
-func (r *RedisDB) SaveChatMessage(roomID, userID, content, callMode string) error {
+func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 	// messageID := utils.GenUuid()
-	messageID, err := utils.Gen6DigitCode()
-	if err != nil {
-		return err
-	}
-	now := time.Now()
+	// messageID, err := utils.Gen6DigitCode()
+	// if err != nil {
+	// 	return err
+	// }
+	// now := time.Now()
 
 	message := ChatMessageData{
-		ID:        messageID,
-		RoomID:    roomID,
-		UserID:    userID,
-		Content:   content,
-		Type:      callMode,
-		Timestamp: now,
+		ID:        msg.MsgID,
+		RoomID:    msg.RoomID,
+		UserID:    msg.From,
+		Content:   msg.Content,
+		Type:      msg.Type,
+		Timestamp: time.Unix(msg.Timestamp, 0),
 	}
 
 	// 메시지 JSON으로 변환
@@ -1015,7 +1015,7 @@ func (r *RedisDB) SaveChatMessage(roomID, userID, content, callMode string) erro
 
 	// Redis key 구성: 채팅방별 메시지 리스트
 	// 요청 정책: chat:rooms:{roomID} 키에 메시지 내역 저장
-	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+	listKey := fmt.Sprintf("chat:rooms:%s:msg", msg.RoomID)
 
 	// 트랜잭션 사용하여 저장 및 TTL 설정
 	pipe := r.client.TxPipeline()

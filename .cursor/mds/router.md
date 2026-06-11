@@ -12,7 +12,7 @@
 
 ### Data Processing Middleware
 - `GetReqXMeta()`: Middleware that parses user metadata from x-meta header and stores it in context
-- `ValidateFileUpload()`: File upload validation middleware that verifies uploaded file count, size, and type; stores normalized `sinfo` in context (`stat`/`sbody` or `sinfo[stat]`/`sinfo[sbody]` both accepted)
+- `ValidateFileUpload()`: File upload validation middleware that verifies uploaded file count, size, and type; stores normalized `sinfo` in context (`stat`/`sbody` or `sinfo[stat]`/`sinfo[sbody]` both accepted). Also parses optional `thumbnails` field (image-only) into `uploadedThumbnails` context for video thumbnails.
 - `AesEncrypt()`: Middleware that encrypts response data using AES GCM mode for transmission
 - `AesDecrypt()`: Middleware that decrypts request data using AES GCM mode for processing
 

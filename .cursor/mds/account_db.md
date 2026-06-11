@@ -36,7 +36,7 @@
 - `SetUnblock()`: Function to deactivate block relation
 - `GetBlockList()`: Function to retrieve blocked users with pagination (`page`, `limit`)
 - `IsBlockedPair()`: Function to check active block relation in either direction
-- `SetFavoriteUser()`, `GetFavoriteUsers()`, `IsFavoriteUser()`, `CountFavoriteUsers()`: Favorite user management functions
+- `SetFavoriteUser()`, `GetFavoriteUsers()`, `IsFavoriteUser()`, `CountFavoriteUsers()`: Favorite user management functions (`GetFavoriteUsers` returns both paged list and `total_count` via separate `COUNT(*)` query)
 
 ## Utility Functions
 - `updatedLastest()`: Internal function to update user's last update time to current time

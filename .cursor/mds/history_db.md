@@ -152,7 +152,7 @@ CREATE TABLE `anuc_his` (
 - `GetDMRoom(ridx int64)`: idx 기준 단건 조회
 - `GetDMRoomByPair(uid, tid uint64)`: 사용자 쌍 **양방향** 조회 (`(uid=A AND tid=B) OR (uid=B AND tid=A)`)
 - `GetDMRoomByRid(rid string)`: room_id 문자열 기준 단건 조회
-- `GetDMRoomsByUser(uid uint64)`: 사용자 참여 DM 방 목록 조회 (uid 또는 tid로 참여한 방 UNION, 최신 업데이트순)
+- `GetDMRoomsByUser(uid uint64, page int)`: 사용자 참여 DM 방 목록 조회 (uid/tid UNION, 최신 업데이트순, pageSize=10). 반환 `(rooms, totalCount, error)` — `totalCount`는 COUNT 쿼리 전체 건수
 - `SoftDeleteDMRoom(ridx int64)`: idx 기준 soft delete(`st_chat=0`)
 - `SoftDeleteDMRoomsByUser(uid, tid uint64)`: room_id 기준 soft delete
 - `ActivateDMRoomByPair(uid, tid uint64)`: 기존 soft-deleted DM 방 **양방향** 재활성화(`st_chat=1`)

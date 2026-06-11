@@ -178,10 +178,35 @@ func (p *Router) Idx() *gin.Engine {
 		// 회원 탈퇴
 		pfset.POST("/leave", p.acc.LeaveUser)
 		// 회원 정보 조회
-		pfset.GET("/info/:id", p.acc.GetUserInfo)
+		pfset.GET("/info/:id", p.acc.GetSidUserInfo)
+
+		pfset.GET("/uinfo/:tid", p.acc.GetUidFromInfo)
 
 		// 회원 정보 삭제
 		pfset.POST("/delete/:id", p.acc.DeleteUser)
+	}
+
+	binfo := e.Group("block/v01", p.SecurityHeaders(), p.JwtAuth())
+	{
+		// block user
+		// TODO : reason 추가 post test
+		binfo.POST("/set/:tid", p.acc.SetBlockUser)
+		binfo.POST("/cancel/:tid", p.acc.UnblockUser)
+
+		// get block list
+		binfo.GET("/list/:page/:limit", p.acc.GetBlockUser)
+		binfo.GET("/count", p.acc.GetBlockCount)
+	}
+
+	fwbinfo := e.Group("fav/v01", p.SecurityHeaders(), p.JwtAuth())
+	{
+		// follow user
+		fwbinfo.POST("/set/:tid", p.acc.SetFavoriteUser)
+		fwbinfo.POST("/cancel/:tid", p.acc.UnfavoriteUser)
+
+		// get follower list
+		fwbinfo.GET("/list/:page/:limit", p.acc.GetFavoriteList)
+		fwbinfo.GET("/count", p.acc.GetFavoriteCount)
 	}
 
 	user := e.Group("user/v01", p.SecurityHeaders(), liteAuth())
@@ -251,13 +276,14 @@ func (p *Router) Idx() *gin.Engine {
 
 		// ------------- like/follow/block -------------
 		story.POST("/like/toggle", p.st.ToggleStoryLike)
-		story.POST("/follow/create", p.st.FollowUser)
-		story.POST("/follow/cancel", p.st.UnfollowUser)
-		story.GET("/follow/follower/:uid/:page", p.st.GetFollowerList)
-		story.GET("/follow/following/:uid/:page", p.st.GetFollowingList)
-		story.POST("/block/create", p.st.BlockUser)
+		story.POST("/follow/set/:tid", p.JwtAuth(), p.st.FollowUser)
+		story.POST("/follow/cancel/:tid", p.JwtAuth(), p.st.UnfollowUser)
+		story.GET("/follower/list/:page/:limit", p.JwtAuth(), p.st.GetFollowerList)
+		story.GET("/following/list/:page/:limit", p.JwtAuth(), p.st.GetFollowingList)
+		/* story.POST("/block/create", p.st.BlockUser)
 		story.POST("/block/cancel", p.st.UnblockUser)
-		story.GET("/block/list/:uid/:page/:limit", p.st.GetBlockList)
+		story.GET("/block/list/:uid/:page/:limit", p.st.GetBlockList) */
+
 	}
 
 	//누드, 음모 확인 기능
@@ -292,13 +318,16 @@ func (p *Router) Idx() *gin.Engine {
 		// 채팅방 생성
 		chat.POST("/mkroom/:pid", p.chat.CreateChatRoom)
 
+		// 채팅방 삭제
+		chat.POST("/rmroom/:room_id", p.chat.DeleteChatRoom)
+
 		// 사용자의 채팅방 목록 조회
 		chat.GET("/list/:page", p.chat.GetChatRooms)
 
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)
 
-		chat.POST("/history/:roomId/:page/:limit", p.chat.GetChatList)
+		chat.POST("/history/:room_id/:page/:limit", p.chat.GetChatList)
 		/*
 			// 메시지 전송 (REST API)
 			// chat.POST("/message", p.chat.SendMessage)

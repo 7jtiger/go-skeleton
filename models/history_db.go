@@ -510,6 +510,5 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, e
 		}
 		rooms = append(rooms, dm)
 	}
-	// totalCount 값을 사용해 반환 타입 확장 필요시 구조체 등으로 반환하거나, caller 측에서 사용할 수 있도록 조치 필요
-	return &rooms, len(rooms), nil
+	return &rooms, totalCount, nil
 }

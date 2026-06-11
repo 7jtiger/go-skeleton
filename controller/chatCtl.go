@@ -98,7 +98,7 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 // @Description  5) read-receipt : 특정 채팅방 입장시 미읽음 초기화
 // @Description  5-1) Type : "read-receipt", To : 수신자 UID, RoomID : 채팅방 ID
 // @Description  6) text-message : 텍스트 메시지 전송
-// @Description  6-1) Type : "text-message", To : 수신자 UID, Content : 텍스트 메시지, MsgID : 메시지 식별자(m-{timestamp(unixtime)})
+// @Description  6-1) Type : "text-message", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값
 // @Description  6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
 // @Description  7) 로그아웃 : 로그아웃시 ws disconnect
 // @Description  7-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
@@ -324,7 +324,8 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptc.ChatMes
 	}
 	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
 
-	if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content, msg.CallMode); err != nil {
+	// if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content, msg.CallMode); err != nil {
+	if err := cc.rdb.SaveChatMessage(msg); err != nil {
 		log.Error("Failed to save chat message:", err)
 		return
 	}
@@ -607,6 +608,49 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 	cc.ctl.SendDataResponse(c, http.StatusOK, resp)
 }
 
+// DeleteChatRoom godoc
+// @Summary      Delete chat room
+// @Description  Deletes the specified chat (DM) room. The user must be authenticated and have access to the given room. Performs a soft delete (status-based).
+// @Tags         chat
+// @Accept       json
+// @Produce      json
+// @Param        room_id  path    int    true  "Room ID"
+// @Success      200  {object}  map[string]interface{}  "Chat room deleted successfully"
+// @Failure      400  {object}  map[string]string       "Bad Request"
+// @Failure      401  {object}  map[string]string       "Unauthorized"
+// @Failure      500  {object}  map[string]string       "Internal Server Error"
+// @Router       /dm/v01/rmroom/{room_id} [post]
+//
+// @Example Success Response:
+// HTTP/1.1 200 OK
+//
+//	{
+//	  "result":0,
+//	  "resultString":"Success",
+//	  "data":{"msg":"success"}
+//	}
+func (cc *ChatController) DeleteChatRoom(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists || user == nil {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	roomID, err := strconv.ParseInt(c.Param("room_id"), 10, 64)
+	if err != nil {
+		cc.ctl.SimpleError(c, http.StatusBadRequest, "room_id required")
+		return
+	}
+
+	err = cc.hdb.SoftDeleteDMRoom(roomID)
+	if err != nil {
+		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to delete dm room", err)
+		return
+	}
+
+	cc.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+}
+
 // GetChatRooms godoc
 // @Summary      Get User DM Chat Rooms
 // @Description  Retrieves the list of direct message chat rooms that the currently authenticated user is participating in. Note: 'userId' query parameter is no longer required or used. Room list is based on the authenticated session.
@@ -645,7 +689,7 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 
 	page := c.Param("page")
 	pageInt, err := strconv.Atoi(page)
-	if err != nil {
+	if err != nil || pageInt < 1 {
 		pageInt = 1
 	}
 
@@ -667,17 +711,17 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 		}
 
 		tcnt, messages, err := cc.rdb.GetChatMessages(strconv.FormatInt(rm.Idx, 10), 0, 1)
-		if err != nil {
-			if tcnt != 1 {
-				messages = &[]models.ChatMessageData{}
-			}
+		lastMsg := ""
+		if err == nil && messages != nil && len(*messages) > 0 {
+			lastMsg = (*messages)[0].Content
 		}
 
 		unread, _ := cc.rdb.GetUnread(uid64, rm.Idx)
 		resp = append(resp, ptc.DMRoomResp{
 			RoomID:   rm.Idx,
 			Partner:  partner,
-			LastMsg:  (*messages)[0].Content,
+			LastMsg:  lastMsg,
+			Total:    int(tcnt),
 			Unread:   int(unread),
 			AtCreate: rm.AtCrtCHAT.Format(time.RFC3339),
 			AtUpdate: rm.AtUpdate.Format(time.RFC3339),
@@ -748,45 +792,41 @@ func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 // GetChatList godoc
 // @Summary      채팅 기록 조회
 // @Description  특정 채팅방의 메시지 기록을 조회합니다.
-// @Description  request : POST /dm/v01/history/10/1/20 HTTP/1.1
-// @Description  response : {"result":0,"resultString":"Success","data":{"messages":[{"id":"527073","roomId":"10","userId":"4033287471439576593","content":"asf","type":"","timestamp":"2026-05-14T22:29:06.189288106+09:00"},{"id":"086572","roomId":"10","userId":"4033287471439576593","content":"gfv","type":"","timestamp":"2026-05-14T22:29:00.694804181+09:00"}],"total_count":109}}
+// @Description
+// @Description  [요청 예시]
+// @Description    POST /dm/v01/history/10/1/20 HTTP/1.1
+// @Description    Authorization: Bearer {access_token}
+// @Description    Host: localhost:8080
+// @Description
+// @Description  [응답 예시]
+// @Description    {
+// @Description      "result": 0,
+// @Description      "resultString": "Success",
+// @Description      "data": {
+// @Description        "messages": [
+// @Description          {"id":"527073","roomId":"10","userId":"4033287471439576593","content":"asf","type":"","timestamp":"2026-05-14T22:29:06.189288106+09:00"},
+// @Description          {"id":"086572","roomId":"10","userId":"4033287471439576593","content":"gfv","type":"","timestamp":"2026-05-14T22:29:00.694804181+09:00"}
+// @Description        ],
+// @Description        "total_count": 109
+// @Description      }
+// @Description    }
 // @Tags         chat
 // @Accept       json
 // @Produce      json
-// @Param        roomId  path      string  true  "Chat Room ID"
-// @Param        page    path      int     true  "Page number (1-based); path 우선, 없으면 query page (default 1)"
-// @Param        limit   path      int     true  "Items per page; path 우선, 없으면 query limit (default 20), pgSize로 상한"
-// @Param        pgSize  query     int     false "페이지당 최대 개수 상한 (default 50, min 1)"
-// @Success      200  {object}  map[string]interface{}
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /dm/v01/history/{roomId}/{page}/{limit} [post]
-//
-// @example request
-//
-//	POST /dm/v01/history/10/1/20 HTTP/1.1
-//	Host: localhost:8080
-//	Authorization: Bearer {access_token}
-//
-// @example success response
-//
-//	HTTP/1.1 200 OK
-//	Content-Type: application/json
-//	{
-//	  "result": 0,
-//	  "resultString": "Success",
-//	  "data": {
-//	    "messages": [
-//	      {"id":"527073","roomId":"10","userId":"4033287471439576593","content":"asf","type":"","timestamp":"2026-05-14T22:29:06.189288106+09:00"},
-//	      {"id":"086572","roomId":"10","userId":"4033287471439576593","content":"gfv","type":"","timestamp":"2026-05-14T22:29:00.694804181+09:00"}
-//	    ],
-//	    "total_count": 109
-//	  }
-//	}
+// @Param        roomId  path      string  true  "채팅방 ID (경로 파라미터)"
+// @Param        page    path      int     true  "페이지 번호 (1-base, 경로 파라미터가 우선, 없으면 query 사용; default: 1)"
+// @Param        limit   path      int     true  "페이지당 항목 개수 (경로 파라미터가 우선, 없으면 query 사용; default: 20, pgSize 제한 적용)"
+// @Param        pgSize  query     int     false "페이지당 최대 개수 상한 (default: 50, min: 1)"
+// @Success      200  {object}  map[string]interface{} "messages: 메시지 리스트, total_count: 전체 메시지 개수"
+// @Failure      400  {object}  map[string]string "잘못된 요청"
+// @Failure      500  {object}  map[string]string "서버 에러"
+// @Router       /dm/v01/history/{room_id}/{page}/{limit} [post]
+// @Description  요청 예시: POST /dm/v01/history/10/1/20 (Authorization: Bearer)
+// @Description  응답 예시: result/resultString/data.messages/data.total_count
 func (cc *ChatController) GetChatList(c *gin.Context) {
-	roomID := c.Param("roomId")
+	roomID := c.Param("room_id")
 	if roomID == "" {
-		cc.ctl.SimpleError(c, http.StatusBadRequest, "roomId required")
+		cc.ctl.SimpleError(c, http.StatusBadRequest, "room_id required")
 		return
 	}
 
@@ -805,9 +845,6 @@ func (cc *ChatController) GetChatList(c *gin.Context) {
 	if err != nil {
 		pageNum = 1
 	}
-	if pageNum < 1 {
-		pageNum = 1
-	}
 
 	limitNum, err := strconv.Atoi(limit)
 	if err != nil {
@@ -818,12 +855,7 @@ func (cc *ChatController) GetChatList(c *gin.Context) {
 	if err != nil {
 		pgSizeNum = 50
 	}
-	if pgSizeNum < 1 {
-		pgSizeNum = 50
-	}
-	if limitNum < 1 {
-		limitNum = 20
-	}
+
 	if limitNum > pgSizeNum {
 		limitNum = pgSizeNum
 	}

@@ -218,7 +218,7 @@
 - `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
 - `GetStoryList()`: Retrieves all public stories (stat=1 or 0) for a user, ordered by creation time descending
 - `GetStoryDetail()`: Retrieves detailed story information including all comments for a specific story index
-- `CreateStory()`: Uploads story images/videos to Cloudflare Images (max 5 files, 5MB each), builds media type, and saves story with authenticated user profile fields
+- `CreateStory()`: Uploads story images/videos to Cloudflare Images (max 5 files, 5MB each), builds media type, and saves story with authenticated user profile fields. Accepts optional `thumbnails` (image-only) matched 1:1 to videos in `files` order; stored in `str_img` as `thumb<N>` keys (e.g. `{"1":"videoUrl","thumb1":"thumbUrl"}`). Requires a thumbnail per video (400 otherwise).
 
 ### Story Update Functions
 - `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
@@ -236,7 +236,7 @@
 ### Story Social Functions (2026-04)
 - `ToggleStoryLike()`: story like/unlike 토글, 트랜잭션 기반 카운트 반영
 - `FollowUser()`, `UnfollowUser()`: 팔로우/언팔로우 처리
-- `GetFollowerList()`, `GetFollowingList()`: 팔로워/팔로잉 페이지 조회
+- `GetFollowerList()`, `GetFollowingList()`: 팔로워/팔로잉 페이지 조회 (`GetFollowerList` 응답: `total_count`, `followers`)
 - `BlockUser()`, `UnblockUser()`, `GetBlockList()`: 차단/해제/목록 조회 (`uid/page/limit`, page starts at 1, limit 1~100)
 
 ### Cloudflare Integration
@@ -278,7 +278,7 @@
 
 ### Chat Room Management (HTTP API)
 - `CreateChatRoom()`: Creates new chat room with name, creator, and privacy settings
-- `GetChatRooms()`: Retrieves user's chat room list
+- `GetChatRooms()`: Retrieves user's chat room list (`page` 1 미만이면 1로 정규화). Redis 메시지가 없는 방은 `last_msg` 빈 문자열·`total` 0으로 반환(panic 방지). `total_count`는 DB 전체 방 수
 - `GetChatHistory()`: Retrieves paginated chat history for a room
 - `SendMessage()`: REST API endpoint for sending messages (alternative to WebSocket)
 

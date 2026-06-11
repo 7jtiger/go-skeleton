@@ -118,8 +118,14 @@ Retrieves condition-based story map (`idx -> first image url`) with dynamic filt
 **Notes:**
 - `stories` map is initialized before scan loop
 - `orderQuery` should be built from whitelist mapping (e.g. `protocol.GetOrderQuery`) to avoid invalid SQL
-- `str_img` JSON is parsed and the first URL is selected by the smallest numeric key (`"1"`, `"2"`, ...).  
+- `str_img` JSON is parsed and the representative URL is selected by the smallest numeric key (`"1"`, `"2"`, ...).  
+  If a matching `thumb<N>` key exists (video thumbnail), it is returned instead of the raw media URL.  
   If JSON parsing fails, the raw DB value is returned as fallback.
+
+#### str_img key convention
+- `"N"`: N-th media URL (image or video), 1-based, follows upload order
+- `"thumb<N>"`: thumbnail URL for the N-th media when it is a video
+- Legacy rows in plain `{"1":"url"}` form remain compatible (no `thumb<N>` keys)
 
 #### GetStory
 ```go
@@ -379,6 +385,7 @@ type StrComment struct {
 ### Added repository methods
 - `ToggleStoryLikeTx()`: transactional like toggle + `story.qt_good` sync
 - `SetFollow()`, `SetUnfollow()`, `GetFollowerList()`, `GetFollowingList()`
+- `GetFollowerList()`: returns follower page list and `total_count` via separate `COUNT(*)` on `user_follow` (`followee_uid`, `stat=1`)
 - `SetBlock()`, `SetUnblock()`, `GetBlockList()`, `IsBlockedPair()`
 - `GetStoryOwnerUID()` for ownership lookup in block checks
 

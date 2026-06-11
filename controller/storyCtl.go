@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"ms-gateway/conf"
 	"ms-gateway/models"
+	ptc "ms-gateway/protocol"
 	"net/http"
 	"strconv"
 
@@ -102,24 +103,26 @@ func (p *StoryController) GetStoryDefaultList(c *gin.Context) {
 	p.ctl.SendDataResponse(c, http.StatusOK, storyList)
 }
 
+// @Param type query string false "타입(img=이미지, vdo=비디오, all=이미지+비디오, rsv=예약). 기본값: img"
+
 // GetStoryConditionList godoc
 // @Summary 스토리(Story) 조건부 리스트 조회
 // @Description 다양한 조건(area/stat/type/order/gen/page/limit)으로 스토리 리스트를 조회합니다.
 // @Tags Story
 // @Accept  json
 // @Produce json
-// @Param area query string false "지역(all, seoul, gyeonggi, incheon, busan, daejeon/sejong/chungnam, chungbuk/cheonju/chungju, daegu/gyeongbuk, gyeongnam/ulsan, gwangju/jeonnam, jeonbuk/jeonju, gangwon/chuncheon, jeju). 기본값: all"
-// @Param stat query string false "상태(pub=전체공개, flw=팔로워전용, pay=유료, prv=비공개, del=삭제, rsv=예약). 기본값: pub"
-// @Param type query string false "타입(img=이미지, vdo=비디오, all=이미지+비디오, rsv=예약). 기본값: img"
-// @Param order query string false "정렬(new=최신순, cmt=댓글많음, god=좋아요많음, view=조회수많음, rsv=예약). 기본값: new"
-// @Param gen query string false "성별(0=여성, 1=남성, 2=예약). 기본값: 1"
-// @Param page query int false "페이지 번호(1부터 시작). 기본값: 1"
-// @Param limit query int false "페이지 당 데이터 개수. 기본값: 10"
+// @Param area query string false "지역" Enums(all,seoul,gyeonggi,incheon,busan,daejeon/sejong/chungnam,chungbuk/cheonju/chungju,daegu/gyeongbuk,gyeongnam/ulsan,gwangju/jeonnam,jeonbuk/jeonju,gangwon/chuncheon,jeju) default(all)
+// @Param stat query string false "상태" Enums(pub(전체공개),flw(팔로워전용),pay(유료),prv(비공개),del(삭제),rsv(예약)) default(pub)
+// @Param type query string false "타입" Enums(img(이미지),vdo(비디오),all(이미지+비디오),rsv(예약)) default(img)
+// @Param order query string false "정렬" Enums(new(최신순),cmt(댓글많음),god(좋아요많음),view(조회수많음),rsv(예약)) default(new)
+// @Param gen query string false "성별" Enums(0(여성),1(남성),2(예약)) default(1)
+// @Param page query int false "페이지 번호(1부터 시작)" default(1)
+// @Param limit query int false "페이지 당 데이터 개수" default(10)
 // @Success 200 {object} protocol.RespDataHeader "성공적으로 스토리 리스트를 반환합니다. story_home_list 필드는 인덱스별 이미지 URL 정보를 포함합니다."
 // @Failure 400 {object} protocol.RespHeader "잘못된 파라미터 입력 시 반환"
 // @Failure 500 {object} protocol.RespHeader "서버 에러 시 반환"
-// @Router /story/v01/cond-list [get]
-// @Example Request: GET /story/v01/cond-list?area=seoul&stat=pub&type=img&order=new&gen=0&page=1&limit=10
+// @Router /story/v01/condition/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit} [get]
+// @Example Request: GET /story/v01/condition/list/seoul/pub/img/new/0/1/10
 // @Example Response: {"result":0,"resultString":"Success","data":{"story_home_list":{"{story idx}":"{img_url}","{story idx}":"image url","{story index}":"image url", ....}}}
 // @Example Response: {"result":0,"resultString":"Success","data":{"story_home_list":{"1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","2":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","3":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5512db27-6340-43cd-b5ab-85d7b9bd4800/public"}}}
 func (p *StoryController) GetStoryConditionList(c *gin.Context) {
@@ -269,9 +272,10 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param files formData file true "스토리 이미지 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가"
+// @Param files formData file true "스토리 미디어 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가"
+// @Param thumbnails formData file false "동영상 썸네일 이미지 (동영상 개수만큼 필요, 이미지 타입만 허용, files의 동영상 순서와 1:1 매칭)"
 // @Param sbody formData string true "스토리 본문 (최대 512자, 필수)"
-// @Param stat formData int true "스토리 공개 상태 (0:del, 1:pub, 2:private, 3:limit, 4:resv). 숫자만 허용 (필수)"
+// @Param stat formData int true "스토리 공개 상태 (0=del, 1=pub, 2=private, 3=limit, 4=resv)" Enums(0,1,2,3,4)
 //
 //	@Example curl -X POST http://localhost:8080/story/v01/upload \
 //	  -H "Authorization: Bearer {jwt-access-token}" \
@@ -289,7 +293,7 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 // @Router /story/v01/upload [post]
 // @Example Response : Status: 200, Response: {"msg":"Successfully uploaded story picture","lastID":5}
 func (p *StoryController) CreateStory(c *gin.Context) {
-	fileInfo, ok := c.Get("uploadedFiles")
+	fileInfo, ok := c.Get("upFiles")
 	if !ok {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "No files uploaded")
 		return
@@ -316,33 +320,64 @@ func (p *StoryController) CreateStory(c *gin.Context) {
 	}
 
 	files := fileInfo.([]*multipart.FileHeader)
-	// cldFlrInfos, err := p.uploadCldFlr(files)
+
+	// 동영상용 썸네일(선택) — 미들웨어에서 이미지 타입만 통과시킨다.
+	var thumbnails []*multipart.FileHeader
+	if thumbInfo, exists := c.Get("upThumb"); exists {
+		thumbnails, _ = thumbInfo.([]*multipart.FileHeader)
+	}
+
+	// 동영상 개수만큼 썸네일이 필요하다. (순서대로 1:1 매칭)
+	videoCount := 0
+	for _, f := range files {
+		if utils.GetFileType(f.Filename) == 1 {
+			videoCount++
+		}
+	}
+	if videoCount > len(thumbnails) {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Thumbnail is required for each video")
+		return
+	}
+
+	// 본편 업로드 (이미지/동영상)
 	cldFlrInfos, err := utils.UploadCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
-	//map[bc1.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/39fe52be-b53a-4103-5f32-db402d986100/public bc2.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/6238b8a7-cf66-445e-48f3-64f93d1fb900/public bc3.jpg:https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/59895828-7bed-4690-3721-1e38331c0c00/public]
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story picture", err)
 		return
 	}
 
+	// 썸네일 업로드 (Cloudflare Images)
+	var thumbInfos *map[string]string
+	if len(thumbnails) > 0 {
+		thumbInfos, err = utils.UploadCldFlr(thumbnails, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload thumbnail", err)
+			return
+		}
+	}
+
+	// files 순서를 유지하면서 str_img 구성.
+	// - "N"      : N번째 미디어 URL
+	// - "thumbN" : N번째 미디어(동영상)의 썸네일 URL
 	dix := map[string]string{}
-	i := 1
 	var hasImg, hasVid bool
-	for key, value := range *cldFlrInfos {
-		tmpftyp := utils.GetFileType(key)
-		switch tmpftyp {
+	thumbIdx := 0
+	for i, f := range files {
+		idx := strconv.Itoa(i + 1)
+		dix[idx] = (*cldFlrInfos)[f.Filename]
+
+		switch utils.GetFileType(f.Filename) {
 		case 0:
 			hasImg = true
 		case 1:
 			hasVid = true
-		default:
-			hasImg = false
-			hasVid = false
+			// 동영상은 순서대로 썸네일 1장을 매칭한다.
+			if thumbInfos != nil && thumbIdx < len(thumbnails) {
+				thumbFile := thumbnails[thumbIdx]
+				dix["thumb"+idx] = (*thumbInfos)[thumbFile.Filename]
+				thumbIdx++
+			}
 		}
-
-		idx := strconv.Itoa(i)
-		dix[idx] = value
-
-		i++
 	}
 
 	simg := &ptl.StoryImage{}
@@ -354,8 +389,6 @@ func (p *StoryController) CreateStory(c *gin.Context) {
 
 	if hasImg && hasVid {
 		simg.MType = 2
-	} else if hasImg {
-		simg.MType = 0
 	} else if hasVid {
 		simg.MType = 1
 	} else {
@@ -640,8 +673,14 @@ func (p *StoryController) DeleteStrPic(c *gin.Context) {
 
 	durl := mImg[sPic]
 	mImgBak[sPic] = durl
-
 	delete(mImg, sPic)
+
+	// 동영상 썸네일(thumb<N>)이 있으면 함께 백업/삭제한다.
+	thumbKey := "thumb" + sPic
+	if turl, ok := mImg[thumbKey]; ok {
+		mImgBak[thumbKey] = turl
+		delete(mImg, thumbKey)
+	}
 
 	// mImgBytes, err := json.Marshal(mImg)
 	mImgBytes, err := json.Marshal(mImg)
@@ -674,7 +713,7 @@ func (p *StoryController) DeleteStrPic(c *gin.Context) {
 // @Param str_idx query string true "Story index"
 // @Param wuid query string true "Writer user ID"
 // @Param nick query string true "Nickname"
-// @Param stat query string true "Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)"
+// @Param stat query string true "Status" Enums(0(default),1(private),2(reserved),3(reserved),4(deleted))
 // @Param body query string true "Comment body (max 256 characters)"
 // @Param data body protocol.StrCmtCreateReq true "Comment data"
 // @Success 200 {object} map[string]interface{} "Successfully created str comment"
@@ -756,7 +795,7 @@ func (p *StoryController) CreateStrComment(c *gin.Context) {
 
 // UpdateStrStatComment godoc
 // @Summary Update story comment status
-// @Description Update the status of a story comment (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)
+// @Description Update the status of a story comment "Status" Enums(0(default),1(private),2(reserved),3(reserved),4(deleted))
 // @Tags Story
 // @Accept json
 // @Produce json
@@ -901,53 +940,48 @@ func (p *StoryController) ToggleStoryLike(c *gin.Context) {
 }
 
 // FollowUser godoc
-// @Summary Follow user
-// @Description Create or reactivate follow relation between users
-// @Tags Story
-// @Accept json
-// @Produce json
-// @Param request body protocol.FollowReq true "Follow request"
-// @Success 200 {object} map[string]interface{} "Successfully followed user"
-// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
-// @Failure 403 {object} map[string]interface{} "Forbidden - blocked relation"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /story/v01/follow/create [post]
+// @Summary      팔로우(팔로잉) 설정
+// @Description  JWT 인증된 사용자가 지정 대상(tid)의 팔로우를 생성하거나 다시 활성화합니다. 자기 자신은 팔로우할 수 없습니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Param        tid     path    string true  "팔로우할 대상 유저의 uid (followeeUid)"
+// @Success      200     {object} map[string]interface{} "msg: 성공 메시지, affected: 실제 반영된 row count"
+// @Failure      400     {object} map[string]interface{} "잘못된 요청 파라미터 또는 자기자신 팔로우 시도"
+// @Failure      401     {object} map[string]interface{} "인증되지 않은 사용자"
+// @Failure      500     {object} map[string]interface{} "내부 서버 에러"
+// @Router       /story/v01/follow/set/{tid} [post]
 func (p *StoryController) FollowUser(c *gin.Context) {
-	var req ptl.FollowReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+	// followerUid = jwt uid, followeeUid = path param tid
+	// follower 내가 팔로우하는 사람
+	// followee 내가 팔로우 받는 사람
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-	if req.FollowerUid == "" || req.FolloweeUid == "" {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid and FolloweeUid are required")
-		return
-	}
-	followerUid, err := strconv.ParseUint(req.FollowerUid, 10, 64)
+	followerUid := user.(*ptc.UserInfoResp).Uid
+
+	followeeUid, err := strconv.ParseUint(c.Param("tid"), 10, 64)
 	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid is invalid")
-		return
-	}
-	followeeUid, err := strconv.ParseUint(req.FolloweeUid, 10, 64)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FolloweeUid is invalid")
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is invalid")
 		return
 	}
 	if followerUid == followeeUid {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "self follow is not allowed")
 		return
 	}
+	// 블락 상태 체크 기능이 필요하면 아래 주석을 해제하면 됩니다.
+	// isBlocked, err := p.sdb.IsBlockedPair(followerUid, followeeUid)
+	// if err != nil {
+	// 	p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check block relation", err)
+	// 	return
+	// }
+	// if isBlocked {
+	// 	p.ctl.SimpleError(c, http.StatusForbidden, "blocked relation")
+	// 	return
+	// }
 
-	/*
-		isBlocked, err := p.sdb.IsBlockedPair(followerUid, followeeUid)
-		if err != nil {
-			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to check block relation", err)
-			return
-		}
-		if isBlocked {
-			p.ctl.SimpleError(c, http.StatusForbidden, "blocked relation")
-			return
-		}
-	*/
 	affected, err := p.sdb.SetFollow(followerUid, followeeUid)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to follow user", err)
@@ -957,34 +991,32 @@ func (p *StoryController) FollowUser(c *gin.Context) {
 }
 
 // UnfollowUser godoc
-// @Summary Unfollow user
-// @Description Deactivate follow relation between users
-// @Tags Story
-// @Accept json
-// @Produce json
-// @Param request body protocol.FollowReq true "Unfollow request"
-// @Success 200 {object} map[string]interface{} "Successfully unfollowed user"
-// @Failure 400 {object} map[string]interface{} "Bad request - invalid parameters"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /story/v01/follow/cancel [post]
+// @Summary      언팔로우 처리
+// @Description  JWT 인증된 사용자가 지정 대상(tid) 유저에 대한 팔로우 관계를 비활성화(언팔로우)합니다. 자기 자신은 언팔로우할 수 없습니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Param        tid     path    string true  "언팔로우할 대상 유저의 uid (followeeUid)"
+// @Success      200     {object} map[string]interface{} "msg: 성공 메시지, affected: 실제로 언팔로우 반영된 row 수"
+// @Failure      400     {object} map[string]interface{} "잘못된 요청 파라미터 또는 자기자신 언팔로우 시도"
+// @Failure      401     {object} map[string]interface{} "인증되지 않은 사용자"
+// @Failure      500     {object} map[string]interface{} "내부 서버 에러"
+// @Router       /story/v01/follow/cancel/{tid} [post]
 func (p *StoryController) UnfollowUser(c *gin.Context) {
-	var req ptl.FollowReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-	if req.FollowerUid == "" || req.FolloweeUid == "" {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid and FolloweeUid are required")
-		return
-	}
-	followerUid, err := strconv.ParseUint(req.FollowerUid, 10, 64)
+	followerUid := user.(*ptc.UserInfoResp).Uid
+
+	followeeUid, err := strconv.ParseUint(c.Param("tid"), 10, 64)
 	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FollowerUid is invalid")
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is invalid")
 		return
 	}
-	followeeUid, err := strconv.ParseUint(req.FolloweeUid, 10, 64)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "FolloweeUid is invalid")
+	if followerUid == followeeUid {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "self unfollow is not allowed")
 		return
 	}
 	affected, err := p.sdb.SetUnfollow(followerUid, followeeUid)
@@ -996,40 +1028,57 @@ func (p *StoryController) UnfollowUser(c *gin.Context) {
 }
 
 // GetFollowerList godoc
-// @Summary Get follower list
-// @Description Retrieve follower list by uid with pagination
-// @Tags Story
-// @Accept json
-// @Produce json
-// @Param uid path string true "User ID"
-// @Param page path string true "Page number"
-// @Success 200 {object} protocol.RespDataHeader "Successfully retrieved follower list"
-// @Failure 400 {object} protocol.RespHeader "Bad request - invalid parameters"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /story/v01/follow/follower/{uid}/{page} [get]
+// @Summary      팔로워 목록 조회
+// @Description  JWT 인증된 사용자의 팔로워 목록을 페이지네이션과 함께 조회합니다. 결과는 전체 팔로워 수와 팔로워 사용자 개별 정보(UID, Nick, ThumbPic, AtUpdate) 리스트로 반환됩니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page  path  int    false "페이지 번호 (기본값: 1)"
+// @Param        limit path  int    false "페이지당 항목 개수 (기본값: 20)"
+// @Success      200 {object} map[string]interface{} "data: total_count(전체 팔로워 수), followers(팔로워 목록 배열). followers 예시: [{Uid, Nick, ThumbPic, AtUpdate}]"
+// @Failure      400 {object} map[string]interface{} "잘못된 요청 파라미터"
+// @Failure      401 {object} map[string]interface{} "인증되지 않은 사용자"
+// @Failure      500 {object} map[string]interface{} "내부 서버 에러"
+// @Router       /story/v01/follower/list [get]
+// @Description  요청 예시: GET /story/v01/follower/list/1/20 (Authorization: Bearer)
+// @Description  응답 예시: data.total_count, data.followers[]
 func (p *StoryController) GetFollowerList(c *gin.Context) {
-	uid := c.Param("uid")
-	page := c.Param("page")
-	uidInt, err := strconv.ParseUint(uid, 10, 64)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
+
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "20")
+
 	pageInt, err := strconv.Atoi(page)
 	if err != nil || pageInt <= 0 {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
 		return
 	}
-	list, err := p.sdb.GetFollowerList(uidInt, pageInt)
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt <= 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Limit is invalid")
+		return
+	}
+
+	list, totalCount, err := p.sdb.GetFollowerList(uid64, pageInt, limitInt)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get follower list", err)
 		return
 	}
-	p.ctl.SendDataResponse(c, http.StatusOK, list)
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"total_count": totalCount,
+		"list":        *list,
+	})
 }
 
 // GetFollowingList godoc
-// @Summary Get following list
+// @Summary      팔로잉 목록 조회
 // @Description Retrieve following list by uid with pagination
 // @Tags Story
 // @Accept json
@@ -1039,28 +1088,39 @@ func (p *StoryController) GetFollowerList(c *gin.Context) {
 // @Success 200 {object} protocol.RespDataHeader "Successfully retrieved following list"
 // @Failure 400 {object} protocol.RespHeader "Bad request - invalid parameters"
 // @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /story/v01/follow/following/{uid}/{page} [get]
+// @Router /story/v01/following/list/{page}/{limit} [get]
 func (p *StoryController) GetFollowingList(c *gin.Context) {
-	uid := c.Param("uid")
-	page := c.Param("page")
-	uidInt, err := strconv.ParseUint(uid, 10, 64)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is invalid")
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "20")
 	pageInt, err := strconv.Atoi(page)
 	if err != nil || pageInt <= 0 {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
 		return
 	}
-	list, err := p.sdb.GetFollowingList(uidInt, pageInt)
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt <= 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Limit is invalid")
+		return
+	}
+	list, totalCount, err := p.sdb.GetFollowingList(uid64, pageInt, limitInt)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get following list", err)
 		return
 	}
-	p.ctl.SendDataResponse(c, http.StatusOK, list)
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"total_count": totalCount,
+		"list":        *list,
+	})
 }
 
+/*
 // BlockUser godoc
 // @Summary Block user
 // @Description Create or reactivate block relation between users
@@ -1097,7 +1157,7 @@ func (p *StoryController) BlockUser(c *gin.Context) {
 		return
 	}
 
-	affected, err := p.adb.SetBlock(uid, bid, req.Reason)
+	affected, err := p.adb.SetBlockUser(uid, bid, req.Reason)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to block user", err)
 		return
@@ -1187,7 +1247,7 @@ func (p *StoryController) GetBlockList(c *gin.Context) {
 	}
 	p.ctl.SendDataResponse(c, http.StatusOK, list)
 }
-
+*/
 /*
 func (p *StoryController) GetStrCommentList(c *gin.Context) {
 	strIdx := c.Query("str_idx")

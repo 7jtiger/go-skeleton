@@ -553,9 +553,65 @@ const docTemplate = `{
                 }
             }
         },
-        "/dm/v01/history/{roomId}/{page}/{limit}": {
+        "/account/block/count": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the total number of users blocked by the authenticated user.\n요청 예시: GET /account/block/count (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Get blocked user count",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer Token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Blocked user count",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse uid",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "user not found in context",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get block count",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v01/favorite/cancel/{tid}": {
             "post": {
-                "description": "특정 채팅방의 메시지 기록을 조회합니다.\nrequest : POST /dm/v01/history/10/1/20 HTTP/1.1\nresponse : {\"result\":0,\"resultString\":\"Success\",\"data\":{\"messages\":[{\"id\":\"527073\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"asf\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:06.189288106+09:00\"},{\"id\":\"086572\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"gfv\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:00.694804181+09:00\"}],\"total_count\":109}}",
+                "description": "현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에서 제거합니다.\nrequest : POST /account/v01/favorite/cancel/{tid}\nresponse : {\"result\":0,\"msg\":\"Success\"}",
                 "consumes": [
                     "application/json"
                 ],
@@ -563,36 +619,16 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "account"
                 ],
-                "summary": "채팅 기록 조회",
+                "summary": "즐겨찾기 해제",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chat Room ID",
-                        "name": "roomId",
+                        "description": "즐겨찾기 해제 대상 사용자 uid",
+                        "name": "tid",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number (1-based); path 우선, 없으면 query page (default 1)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page; path 우선, 없으면 query limit (default 20), pgSize로 상한",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지당 최대 개수 상한 (default 50, min 1)",
-                        "name": "pgSize",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -612,8 +648,326 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v01/favorite/set/{tid}": {
+            "post": {
+                "description": "현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에 추가합니다.\nrequest : POST /account/v01/favorite/set/{tid}\nresponse : {\"result\":0,\"msg\":\"Success\"}",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "즐겨찾기 등록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "즐겨찾기 등록 대상 사용자 uid",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v01/unblock/{tid}": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "지정된 상대방(tid)에 대한 차단을 해제합니다. 성공 시 unblock 후 현재 차단 유저수(count)를 반환합니다.\n요청 예시: POST /account/v01/unblock/7\n응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":2}",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "차단 해제 (Unblock User)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "차단 해제 대상 유저 ID (Target User ID)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "차단 해제 성공 - result=0, msg=Success, count=차단 유저수",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청 (tid/uid 변환 오류)",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 (user not found in context)",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 에러 (차단 해제 실패 또는 블록 카운트 조회 실패)",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/block/v01/add/{tid}": {
+            "post": {
+                "description": "현재 로그인한 사용자가 대상 사용자를 차단합니다. reason 값이 없으면 \"etc\"로 처리됩니다.\n요청 예시: POST /block/v01/add/125 Body {\\\"reason\\\":\\\"욕설\\\"}\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "사용자 차단하기 (Block a User)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "차단할 대상 사용자 ID (target user id)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "차단 사유 JSON {\\",
+                        "name": "reason",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "성공 예시: {\\\"result\\\":0, \\\"msg\\\":\\\"Success\\\", \\\"count\\\":5}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청(파라미터/바디 오류) 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/block/v01/list/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Retrieves the list of users blocked by the authenticated user, with paging.\n요청 예시: GET /block/v01/list/1/10\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":2,\\\"list\\\":[...]}",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Get blocked user list",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "list: blocked user list, count: 총 차단 인원",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "파라미터 오류 혹은 파싱 에러",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 (user not found in context)",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 에러 (차단 리스트 조회 실패)",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/dm/v01/history/{room_id}/{page}/{limit}": {
+            "post": {
+                "description": "특정 채팅방의 메시지 기록을 조회합니다.\n\n[요청 예시]\nPOST /dm/v01/history/10/1/20 HTTP/1.1\nAuthorization: Bearer {access_token}\nHost: localhost:8080\n\n[응답 예시]\n{\n\"result\": 0,\n\"resultString\": \"Success\",\n\"data\": {\n\"messages\": [\n{\"id\":\"527073\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"asf\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:06.189288106+09:00\"},\n{\"id\":\"086572\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"gfv\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:00.694804181+09:00\"}\n],\n\"total_count\": 109\n}\n}\n요청 예시: POST /dm/v01/history/10/1/20 (Authorization: Bearer)\n응답 예시: result/resultString/data.messages/data.total_count",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "채팅 기록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "채팅방 ID (경로 파라미터)",
+                        "name": "roomId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호 (1-base, 경로 파라미터가 우선, 없으면 query 사용; default: 1)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지당 항목 개수 (경로 파라미터가 우선, 없으면 query 사용; default: 20, pgSize 제한 적용)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지당 최대 개수 상한 (default: 50, min: 1)",
+                        "name": "pgSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "messages: 메시지 리스트, total_count: 전체 메시지 개수",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "서버 에러",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -737,6 +1091,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/dm/v01/rmroom/{room_id}": {
+            "post": {
+                "description": "Deletes the specified chat (DM) room. The user must be authenticated and have access to the given room. Performs a soft delete (status-based).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Delete chat room",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Room ID",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Chat room deleted successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/dm/v01/total/unread": {
             "get": {
                 "description": "Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts. (변경사항 반영됨: userId 파라미터는 더 이상 필요하지 않음, 인증된 사용자 기준)\nrequest : GET /dm/v01/total/unread HTTP/1.1\nresponse : {\"result\":0,\"resultString\":\"Success\",\"data\":{\"rooms\":{\"10\":133},\"total_count\":133}}",
@@ -781,7 +1195,7 @@ const docTemplate = `{
         },
         "/dm/v01/ws": {
             "get": {
-                "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 특정 채팅방 입장시 미읽음 초기화\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : 메시지 식별자(m-{timestamp(unixtime)})\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 로그아웃 : 로그아웃시 ws disconnect\n7-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
+                "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 특정 채팅방 입장시 미읽음 초기화\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 로그아웃 : 로그아웃시 ws disconnect\n7-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
                 "produces": [
                     "application/json"
                 ],
@@ -815,6 +1229,102 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/fav/v01/count": {
+            "get": {
+                "description": "해당 사용자를 즐겨찾기 한 사용자의 총 개수를 반환합니다.\n요청 예시: GET /fav/v01/count (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorite"
+                ],
+                "summary": "즐겨찾기 한 사용자 수 조회",
+                "responses": {
+                    "200": {
+                        "description": "성공 예시: {\\\"result\\\":0, \\\"msg\\\":\\\"Success\\\", \\\"count\\\":5}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청(파라미터 에러) 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/fav/v01/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "내가 즐겨찾기한 사용자 목록을 페이지 단위로 조회합니다. (페이지네이션 지원)\n요청 예시: GET /fav/v01/list?page=1\u0026limit=10 (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":35,\\\"list\\\":[...]}",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorite"
+                ],
+                "summary": "즐겨찾기한 사용자 목록 조회",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호 (기본값 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지당 항목 수 (기본값 10)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "result, msg, count, list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청(파라미터 에러) 또는 사용자 정보 없음 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -926,7 +1436,7 @@ const docTemplate = `{
         },
         "/inserv/v01/info/{id}": {
             "get": {
-                "description": "Get user information",
+                "description": "Get user from sid information",
                 "consumes": [
                     "application/json"
                 ],
@@ -1126,6 +1636,50 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "error: error message",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/inserv/v01/uinfo/{tid}": {
+            "get": {
+                "description": "주어진 UID로 사용자의 정보를 조회합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Get user information by UID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target User UID",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "114": {
+                        "description": "Failed to get user info",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "200": {
+                        "description": "User information",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.UserInfoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1411,162 +1965,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/story/v01/block/cancel": {
-            "post": {
-                "description": "Deactivate block relation between users",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "Unblock user",
-                "parameters": [
-                    {
-                        "description": "Unblock request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.BlockReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully unblocked user",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - invalid parameters",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/block/create": {
-            "post": {
-                "description": "Create or reactivate block relation between users",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "Block user",
-                "parameters": [
-                    {
-                        "description": "Block request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.BlockReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully blocked user",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - invalid parameters",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/block/list/{uid}/{page}/{limit}": {
-            "get": {
-                "description": "Retrieve blocked user list by uid with pagination",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "Get block list",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "uid",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Page number (start at 1)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Page size (1~100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved block list",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespDataHeader"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - invalid parameters",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
         "/story/v01/comment/create": {
             "post": {
                 "description": "Create a new comment for a story",
@@ -1603,8 +2001,11 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "enum": [
+                            "0(default"
+                        ],
                         "type": "string",
-                        "description": "Status (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)",
+                        "description": "Status",
                         "name": "stat",
                         "in": "query",
                         "required": true
@@ -1702,7 +2103,7 @@ const docTemplate = `{
         },
         "/story/v01/comment/updstat": {
             "post": {
-                "description": "Update the status of a story comment (0:default, 1:private, 2:reserved, 3:reserved, 4:deleted)",
+                "description": "Update the status of a story comment \"Status\" Enums(0(default),1(private),2(reserved),3(reserved),4(deleted))",
                 "consumes": [
                     "application/json"
                 ],
@@ -1793,6 +2194,119 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error - failed to get story comments",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/condition/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit}": {
+            "get": {
+                "description": "다양한 조건(area/stat/type/order/gen/page/limit)으로 스토리 리스트를 조회합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "스토리(Story) 조건부 리스트 조회",
+                "parameters": [
+                    {
+                        "enum": [
+                            "all",
+                            "seoul",
+                            "gyeonggi",
+                            "incheon",
+                            "busan",
+                            "daejeon/sejong/chungnam",
+                            "chungbuk/cheonju/chungju",
+                            "daegu/gyeongbuk",
+                            "gyeongnam/ulsan",
+                            "gwangju/jeonnam",
+                            "jeonbuk/jeonju",
+                            "gangwon/chuncheon",
+                            "jeju"
+                        ],
+                        "type": "string",
+                        "default": "all",
+                        "description": "지역",
+                        "name": "area",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pub(전체공개"
+                        ],
+                        "type": "string",
+                        "default": "pub",
+                        "description": "상태",
+                        "name": "stat",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "img(이미지"
+                        ],
+                        "type": "string",
+                        "default": "img",
+                        "description": "타입",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "new(최신순"
+                        ],
+                        "type": "string",
+                        "default": "new",
+                        "description": "정렬",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "0(여성"
+                        ],
+                        "type": "string",
+                        "default": "1",
+                        "description": "성별",
+                        "name": "gen",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "페이지 번호(1부터 시작)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "페이지 당 데이터 개수",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "성공적으로 스토리 리스트를 반환합니다. story_home_list 필드는 인덱스별 이미지 URL 정보를 포함합니다.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 파라미터 입력 시 반환",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 에러 시 반환",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1893,9 +2407,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/story/v01/follow/cancel": {
+        "/story/v01/follow/cancel/{tid}": {
             "post": {
-                "description": "Deactivate follow relation between users",
+                "description": "JWT 인증된 사용자가 지정 대상(tid) 유저에 대한 팔로우 관계를 비활성화(언팔로우)합니다. 자기 자신은 언팔로우할 수 없습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1905,35 +2419,40 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "Unfollow user",
+                "summary": "언팔로우 처리",
                 "parameters": [
                     {
-                        "description": "Unfollow request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.FollowReq"
-                        }
+                        "type": "string",
+                        "description": "언팔로우할 대상 유저의 uid (followeeUid)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully unfollowed user",
+                        "description": "msg: 성공 메시지, affected: 실제로 언팔로우 반영된 row 수",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request - invalid parameters",
+                        "description": "잘못된 요청 파라미터 또는 자기자신 언팔로우 시도",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증되지 않은 사용자",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 서버 에러",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1942,9 +2461,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/story/v01/follow/create": {
+        "/story/v01/follow/set/{tid}": {
             "post": {
-                "description": "Create or reactivate follow relation between users",
+                "description": "JWT 인증된 사용자가 지정 대상(tid)의 팔로우를 생성하거나 다시 활성화합니다. 자기 자신은 팔로우할 수 없습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1954,42 +2473,40 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "Follow user",
+                "summary": "팔로우(팔로잉) 설정",
                 "parameters": [
                     {
-                        "description": "Follow request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.FollowReq"
-                        }
+                        "type": "string",
+                        "description": "팔로우할 대상 유저의 uid (followeeUid)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully followed user",
+                        "description": "msg: 성공 메시지, affected: 실제 반영된 row count",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request - invalid parameters",
+                        "description": "잘못된 요청 파라미터 또는 자기자신 팔로우 시도",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
-                    "403": {
-                        "description": "Forbidden - blocked relation",
+                    "401": {
+                        "description": "인증되지 않은 사용자",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 서버 에러",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1998,9 +2515,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/story/v01/follow/follower/{uid}/{page}": {
+        "/story/v01/follower/list": {
             "get": {
-                "description": "Retrieve follower list by uid with pagination",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증된 사용자의 팔로워 목록을 페이지네이션과 함께 조회합니다. 결과는 전체 팔로워 수와 팔로워 사용자 개별 정보(UID, Nick, ThumbPic, AtUpdate) 리스트로 반환됩니다.\n요청 예시: GET /story/v01/follower/list/1/20 (Authorization: Bearer)\n응답 예시: data.total_count, data.followers[]",
                 "consumes": [
                     "application/json"
                 ],
@@ -2010,46 +2532,54 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "Get follower list",
+                "summary": "팔로워 목록 조회",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "uid",
-                        "in": "path",
-                        "required": true
+                        "type": "integer",
+                        "description": "페이지 번호 (기본값: 1)",
+                        "name": "page",
+                        "in": "path"
                     },
                     {
-                        "type": "string",
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
+                        "type": "integer",
+                        "description": "페이지당 항목 개수 (기본값: 20)",
+                        "name": "limit",
+                        "in": "path"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved follower list",
+                        "description": "data: total_count(전체 팔로워 수), followers(팔로워 목록 배열). followers 예시: [{Uid, Nick, ThumbPic, AtUpdate}]",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespDataHeader"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request - invalid parameters",
+                        "description": "잘못된 요청 파라미터",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증되지 않은 사용자",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 서버 에러",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
             }
         },
-        "/story/v01/follow/following/{uid}/{page}": {
+        "/story/v01/following/list/{page}/{limit}": {
             "get": {
                 "description": "Retrieve following list by uid with pagination",
                 "consumes": [
@@ -2061,7 +2591,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "Get following list",
+                "summary": "팔로잉 목록 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -2158,7 +2688,7 @@ const docTemplate = `{
         },
         "/story/v01/list/{uid}": {
             "get": {
-                "description": "Retrieve list of stories for a specific user",
+                "description": "디폴트, 최신순 스토리 리스트 출력",
                 "consumes": [
                     "application/json"
                 ],
@@ -2305,7 +2835,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload story picture to Cloudflare Images",
+                "description": "최대 5개의 이미지(각 5MB 이하, 총 본문 길이 512자 제한)를 업로드합니다. 인증된 사용자가 Cloudflare Images에 스토리 이미지를 업로드하며, 업로드 성공 시 db에 저장합니다.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -2315,64 +2845,67 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "Upload story picture",
+                "summary": "업로드 스토리 이미지 (Cloudflare Images)",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Story image files (max 5MB each, max 5 files, max body length 512)",
+                        "description": "스토리 미디어 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가",
                         "name": "files",
                         "in": "formData",
                         "required": true
                     },
                     {
+                        "type": "file",
+                        "description": "동영상 썸네일 이미지 (동영상 개수만큼 필요, 이미지 타입만 허용, files의 동영상 순서와 1:1 매칭)",
+                        "name": "thumbnails",
+                        "in": "formData"
+                    },
+                    {
                         "type": "string",
-                        "description": "User ID",
-                        "name": "uid",
+                        "description": "스토리 본문 (최대 512자, 필수)",
+                        "name": "sbody",
                         "in": "formData",
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Story body",
-                        "name": "sbody",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Nickname",
-                        "name": "nick",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Story status (0: del, 1: pub, 2: private, 3: limit, 4: resv)",
+                        "enum": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4
+                        ],
+                        "type": "integer",
+                        "description": "스토리 공개 상태 (0=del, 1=pub, 2=private, 3=limit, 4=resv)",
                         "name": "stat",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "TOTP token for authentication",
-                        "name": "X-Totp",
-                        "in": "header"
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully uploaded story picture",
+                        "description": "업로드 성공 시: {\\\"msg\\\": \\\"Successfully uploaded story picture\\\", \\\"lastID\\\":5}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request - no files uploaded",
+                        "description": "요청 파라미터 누락 또는 파일 미첨부 시 에러",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 시",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal server error - upload failed",
+                        "description": "Cloudflare 업로드 오류 또는 서버 내부 오류",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2637,20 +3170,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.BlockReq": {
-            "type": "object",
-            "properties": {
-                "bid": {
-                    "type": "string"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "uid": {
-                    "type": "string"
-                }
-            }
-        },
         "protocol.DMRoomResp": {
             "type": "object",
             "properties": {
@@ -2658,6 +3177,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "at_update": {
+                    "type": "string"
+                },
+                "last_msg": {
                     "type": "string"
                 },
                 "partner": {
@@ -2681,17 +3203,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pic_idx": {
-                    "type": "string"
-                }
-            }
-        },
-        "protocol.FollowReq": {
-            "type": "object",
-            "properties": {
-                "followee_uid": {
-                    "type": "string"
-                },
-                "follower_uid": {
                     "type": "string"
                 }
             }

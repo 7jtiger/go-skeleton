@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -233,7 +234,8 @@ func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []int
 			return nil, err
 		}
 
-		// str_img JSON에서 첫 번째(가장 작은 숫자 키 우선) URL만 추출한다.
+		// str_img JSON에서 대표 썸네일 URL을 추출한다.
+		// 키 규칙: "N"=N번째 미디어 URL, "thumbN"=N번째 동영상 썸네일 URL.
 		var imgMap map[string]string
 		err = json.Unmarshal([]byte(strImg), &imgMap)
 		if err != nil {
@@ -242,15 +244,32 @@ func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []int
 			continue
 		}
 
-		// 가장 작은 키(문자열이므로 int로 변환해서 정렬)값의 URL을 선택
-		var minKey string
+		// 숫자 키 중 가장 작은 값을 대표 미디어로 선택한다.
+		minNum := 0
+		hasNum := false
 		for k := range imgMap {
-			if minKey == "" || k < minKey {
-				minKey = k
+			if strings.HasPrefix(k, "thumb") {
+				continue
+			}
+			n, convErr := strconv.Atoi(k)
+			if convErr != nil {
+				continue
+			}
+			if !hasNum || n < minNum {
+				minNum = n
+				hasNum = true
 			}
 		}
-		stories[idx] = imgMap[minKey]
 
+		if hasNum {
+			primary := strconv.Itoa(minNum)
+			// 동영상이면 썸네일을 우선 노출한다.
+			if thumb, ok := imgMap["thumb"+primary]; ok && thumb != "" {
+				stories[idx] = thumb
+			} else {
+				stories[idx] = imgMap[primary]
+			}
+		}
 	}
 
 	return &stories, nil
@@ -581,11 +600,20 @@ func (p *StoryDB) SetUnfollow(followerUid, followeeUid uint64) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) GetFollowerList(uid uint64, page int) (*[]ptl.FollowUserItem, error) {
-	const pageSize = 20
-	offset := (page - 1) * pageSize
+func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptl.FollowUserItem, int, error) {
+	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
+	}
+
+	countQuery := `
+		SELECT COUNT(1)
+		FROM user_follow uf
+		WHERE uf.followee_uid = ? AND uf.stat = 1
+	`
+	var totalCount int
+	if err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, err
 	}
 
 	query := `
@@ -596,28 +624,40 @@ func (p *StoryDB) GetFollowerList(uid uint64, page int) (*[]ptl.FollowUserItem, 
 		ORDER BY uf.at_update DESC
 		LIMIT ? OFFSET ?
 	`
-	rows, err := p.conndb.Query(query, uid, pageSize, offset)
+	rows, err := p.conndb.Query(query, uid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, totalCount, err
 	}
 	defer rows.Close()
 
-	list := []ptl.FollowUserItem{}
+	list := make([]ptl.FollowUserItem, 0, limit)
 	for rows.Next() {
 		var item ptl.FollowUserItem
 		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
-			return nil, err
+			return nil, totalCount, err
 		}
 		list = append(list, item)
 	}
-	return &list, nil
+	if err = rows.Err(); err != nil {
+		return nil, totalCount, err
+	}
+	return &list, totalCount, nil
 }
 
-func (p *StoryDB) GetFollowingList(uid uint64, page int) (*[]ptl.FollowUserItem, error) {
-	const pageSize = 20
-	offset := (page - 1) * pageSize
+func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptl.FollowUserItem, int, error) {
+	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
+	}
+
+	countQuery := `
+		SELECT COUNT(1)
+		FROM user_follow uf
+		WHERE uf.follower_uid = ? AND uf.stat = 1
+	`
+	var totalCount int
+	if err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, err
 	}
 
 	query := `
@@ -628,21 +668,26 @@ func (p *StoryDB) GetFollowingList(uid uint64, page int) (*[]ptl.FollowUserItem,
 		ORDER BY uf.at_update DESC
 		LIMIT ? OFFSET ?
 	`
-	rows, err := p.conndb.Query(query, uid, pageSize, offset)
+	rows, err := p.conndb.Query(query, uid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, totalCount, err
 	}
 	defer rows.Close()
 
-	list := []ptl.FollowUserItem{}
+	list := make([]ptl.FollowUserItem, 0, limit)
 	for rows.Next() {
 		var item ptl.FollowUserItem
 		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
-			return nil, err
+			return nil, totalCount, err
 		}
 		list = append(list, item)
 	}
-	return &list, nil
+
+	if err = rows.Err(); err != nil {
+		return nil, totalCount, err
+	}
+
+	return &list, totalCount, nil
 }
 
 func (p *StoryDB) GetStoryOwnerUID(storyIdx int) (uint64, error) {
