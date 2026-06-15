@@ -16,7 +16,7 @@
 - `task()`: Task dispatcher that executes specific functions based on task name (depositcheck, makeexceldaily, 1min, etc.)
 - `tmp()`: Placeholder function for temporary task execution (currently empty implementation)
 - `MsgWorker()`: `msg_remove` 작업에서 Redis DM 메시지 정리 함수(`PruneExpiredRoomMessages(24h)`)를 호출
-- `Stop()`: `sync.Once` 기반 idempotent 종료를 수행하며 `context cancel`, `quit` 채널 종료, 각 job `ticker/quit` 안전 종료를 보장
+- `Stop()`: `sync.Once` + `WaitGroup` 기반 idempotent 종료 — `context cancel` → job goroutine 종료 대기 → 각 job `ticker/quit` 1회만 `close` (`runJob` defer에서 중복 close 하지 않음)
 
 ---
 

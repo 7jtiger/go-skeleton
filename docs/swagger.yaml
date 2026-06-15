@@ -1213,6 +1213,49 @@ paths:
       summary: Get total unread message count for user
       tags:
       - chat
+  /dm/v01/upload/img:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대
+        5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).
+      parameters:
+      - description: 업로드할 채팅 이미지 파일 (여러 개 가능, 최대 5개 첨부)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 성공 응답 예시
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 요청 형식 오류 예시
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: 인증 오류 예시
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: 서버 에러 예시
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 채팅 이미지 업로드
+      tags:
+      - chat
   /dm/v01/ws:
     get:
       description: |-

@@ -45,8 +45,8 @@ type Schedule struct {
 	firstStat string
 	ctx       context.Context
 	cancel    context.CancelFunc
-	quit      chan struct{}
 	stopOnce  sync.Once
+	wg        sync.WaitGroup
 }
 
 func getDuration(start int) time.Duration {
@@ -91,7 +91,6 @@ func NewScheduler(cfg *conf.Config, hch *haredis.HAChecker, rep *models.Reposito
 		Item:   make(map[string]*item),
 		ctx:    ctx,
 		cancel: cancel,
-		quit:   make(chan struct{}),
 	}
 
 	if err := rep.Get(&s.adb, &s.rdb); err != nil {
@@ -130,6 +129,7 @@ func (s *Schedule) addJob(ejob conf.Works) error {
 	}
 
 	s.Item[ejob.Name] = it
+	s.wg.Add(1)
 	go s.runJob(it)
 	log.Info("Job added: ", ejob.Name, " in ", tick, " desc : ", ejob.Desc, " args : ", ejob.Args)
 	return nil
@@ -152,11 +152,11 @@ func (s *Schedule) setBaseDay(stat string) {
 }
 
 func (s *Schedule) runJob(it *item) {
+	defer s.wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			log.Info("Recovered from panic in job %s: %v", it.name, r)
 		}
-		s.close(it)
 	}()
 
 	// firstExec := true
@@ -212,15 +212,20 @@ func (s *Schedule) close(item *item) {
 
 func (s *Schedule) Stop() {
 	s.stopOnce.Do(func() {
-		s.Lock()
-		defer s.Unlock()
-
 		if s.cancel != nil {
 			s.cancel()
 		}
-		close(s.quit)
-		for _, item := range s.Item {
-			s.close(item)
+		s.wg.Wait()
+
+		s.Lock()
+		items := make([]*item, 0, len(s.Item))
+		for _, it := range s.Item {
+			items = append(items, it)
+		}
+		s.Unlock()
+
+		for _, it := range items {
+			s.close(it)
 		}
 	})
 }

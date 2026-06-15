@@ -328,6 +328,8 @@ func (p *Router) Idx() *gin.Engine {
 		chat.GET("/total/unread", p.chat.GetTotalUnread)
 
 		chat.POST("/history/:room_id/:page/:limit", p.chat.GetChatList)
+
+		chat.POST("/upload/img", p.simpleImgUploadCF(5, 5), p.chat.UploadImage)
 		/*
 			// 메시지 전송 (REST API)
 			// chat.POST("/message", p.chat.SendMessage)

@@ -187,7 +187,7 @@ func runServer(cf *conf.Config) error {
 		select {
 		case sig := <-quit:
 			logger.Warn("Shutdown signal received", "signal", sig.String())
-			return fmt.Errorf("received signal: %v %v", sig, gracefulShutdown(server, scheduler, cancel))
+			return fmt.Errorf("received signal: %v", sig)
 		case <-gctx.Done():
 			return gctx.Err()
 		}

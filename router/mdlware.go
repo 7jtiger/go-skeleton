@@ -415,7 +415,7 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 		for k := range form.File {
 			formKeys = append(formKeys, k)
 		}
-		logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
+		// logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
 
 		if len(files) == 0 {
 			logger.Warn("ValidateFileUpload: No files in 'files' field")
@@ -525,6 +525,98 @@ func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 // EncParamFileUpload validates file upload and extracts encrypted parameter from form data
 func (p *Router) EncParamFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 	return p.validateFileUploadImpl(maxFiles, size, true)
+}
+
+func (p *Router) simpleImgUploadCF(maxFiles int, size int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		contentType := c.GetHeader("Content-Type")
+		if !strings.HasPrefix(contentType, "multipart/form-data") {
+			logger.Warn("ValidateFileUpload: Invalid content type", "content-type", contentType)
+			p.ctl.RespError(c, "Invalid content type. Expected multipart/form-data", http.StatusBadRequest)
+			return
+		}
+
+		form, err := c.MultipartForm()
+		if err != nil {
+			logger.Warn("ValidateFileUpload: Failed to parse multipart form", "error", err.Error())
+			if strings.Contains(err.Error(), "request body too large") {
+				p.ctl.RespError(c, "Request body too large. Maximum size exceeded", http.StatusRequestEntityTooLarge)
+			} else {
+				p.ctl.RespError(c, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+			}
+			return
+		}
+
+		if form == nil || form.File == nil {
+			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
+			return
+		}
+
+		// Get files from form
+		files := form.File["files"]
+		formKeys := make([]string, 0, len(form.File))
+		for k := range form.File {
+			formKeys = append(formKeys, k)
+		}
+		// logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
+
+		if len(files) == 0 {
+			logger.Warn("ValidateFileUpload: No files in 'files' field")
+			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
+			return
+		}
+
+		if len(files) > maxFiles {
+			p.ctl.RespError(c, "Too many files. Maximum allowed is "+strconv.Itoa(maxFiles), http.StatusBadRequest)
+			return
+		}
+
+		maxSize := size << 20
+		allowedTypes := map[string]bool{
+			"image/jpeg": true,
+			"image/jpg":  true,
+			"image/png":  true,
+			"image/gif":  true,
+			"image/webp": true,
+			"video/mp4":  false,
+		}
+
+		validFiles := make([]*multipart.FileHeader, 0, len(files))
+
+		for _, fileHeader := range files {
+			if fileHeader.Size > maxSize {
+				p.ctl.RespError(c, fmt.Sprintf("File %s exceeds %dMB limit", fileHeader.Filename, size), http.StatusBadRequest)
+				return
+			}
+
+			ct := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+			if idx := strings.Index(ct, ";"); idx >= 0 {
+				ct = strings.TrimSpace(ct[:idx])
+			}
+
+			if ct == "" || ct == "application/octet-stream" {
+				detected, err := detectContentTypeFromFile(fileHeader)
+				if err != nil {
+					logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
+					p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)
+					return
+				}
+				ct = detected
+			}
+			if !allowedTypes[ct] {
+				p.ctl.RespError(c, fmt.Sprintf("File %s has invalid type. Only JPG, PNG, GIF, WEBP (images) and MP4 (video) files are allowed", fileHeader.Filename), http.StatusBadRequest)
+				return
+			}
+
+			validFiles = append(validFiles, fileHeader)
+		}
+
+		// Store validated files in context
+		c.Set("upFiles", validFiles)
+		c.Set("sinfo", normalizeFormSinfo(form.Value))
+
+		c.Next()
+	}
 }
 
 func (p *Router) AesEncrypt() gin.HandlerFunc {

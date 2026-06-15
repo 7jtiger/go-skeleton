@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"sync"
@@ -302,8 +303,10 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptc.ChatMes
 		log.Warn(fmt.Sprintf("target user %d not found in DB, delivering message without room: %v", toUID, tUserErr))
 	}
 
+	now := time.Now().Unix()
 	if roomID != "" {
 		msg.RoomID = roomID
+		msg.Timestamp = now
 	}
 
 	delivered := cc.sendToUser(msg.To, msg)
@@ -320,7 +323,8 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptc.ChatMes
 		RoomID:    msg.RoomID,
 		MsgID:     msg.MsgID,
 		Unread:    int(unreadCnt),
-		Timestamp: time.Now().Unix(),
+		CallMode:  msg.CallMode,
+		Timestamp: now,
 	}
 	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
 
@@ -698,6 +702,10 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get dm rooms", err)
 		return
 	}
+	if rooms == nil {
+		cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{"total_count": 0, "rooms": []ptc.DMRoomResp{}})
+		return
+	}
 
 	resp := make([]ptc.DMRoomResp, 0, len(*rooms))
 	for _, rm := range *rooms {
@@ -911,6 +919,78 @@ func (cc *ChatController) SendDMNotification(toUserID string, msg *ptc.ChatMessa
 	cp.Type = "dm-incoming"
 	cp.To = toUserID
 	cc.sendToUser(toUserID, &cp)
+}
+
+// UploadImage 채팅 이미지 업로드 (Cloudflare Images)
+// @Summary 채팅 이미지 업로드
+// @Description 인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대 5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).
+// @Tags chat
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param file formData file true "업로드할 채팅 이미지 파일 (여러 개 가능, 최대 5개 첨부)"
+//
+// @Example		{multipart-form}
+//
+//	curl -X POST "http://localhost:8080/dm/v01/upload/img" \
+//	  -H "Authorization: Bearer {jwt-access-token}" \
+//	  -F "file=@/home/tmp/chat1.jpg" \
+//	  -F "file=@/home/tmp/chat2.jpg"
+//
+// @Success 200 {object} map[string]interface{} "성공 응답 예시"
+// @Example response 성공
+//
+// "{\"result\":0,\"resultString\":\"Success\",\"data\":{\"data\":{\"rewq.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1356a6c4-6a5a-4627-a316-268a452d1700/public\",\"wet1.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4ec7eb26-a181-43fd-efdd-caf8f8669b00/public\"},\"msg\":\"success\"}}"
+//
+// @Failure 400 {object} map[string]string "요청 형식 오류 예시"
+// @Example response 400
+//
+//	{
+//	  "error": "file required"
+//	}
+//
+// @Failure 401 {object} map[string]string "인증 오류 예시"
+// @Example response 401
+//
+//	{
+//	  "error": "User not authenticated"
+//	}
+//
+// @Failure 500 {object} map[string]string "서버 에러 예시"
+// @Example response 500
+//
+//	{
+//	  "error": "Failed to upload image"
+//	}
+//
+// @Router /dm/v01/upload/img [post]
+func (cc *ChatController) UploadImage(c *gin.Context) {
+	// JWT 인증 검사
+	_, exists := c.Get("user")
+	if !exists {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// 파일 파라미터 취득
+	files, ok := c.Get("upFiles")
+	if !ok {
+		cc.ctl.SimpleError(c, http.StatusBadRequest, "file required")
+		return
+	}
+
+	fps := files.([]*multipart.FileHeader)
+	// Cloudflare에 이미지 업로드
+	cldFlrInfos, err := utils.UploadCldFlr(fps, cc.cfg.Server.CfId, cc.cfg.Server.CfToken)
+	if err != nil {
+		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload image", err)
+		return
+	}
+
+	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"msg":  "success",
+		"data": cldFlrInfos, // 업로드된 Cloudflare 이미지 URL (파일명: URL 맵)
+	})
 }
 
 /*

@@ -1193,6 +1193,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/dm/v01/upload/img": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대 5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "채팅 이미지 업로드",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "업로드할 채팅 이미지 파일 (여러 개 가능, 최대 5개 첨부)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "성공 응답 예시",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식 오류 예시",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "인증 오류 예시",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "서버 에러 예시",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/dm/v01/ws": {
             "get": {
                 "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 특정 채팅방 입장시 미읽음 초기화\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 로그아웃 : 로그아웃시 ws disconnect\n7-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
