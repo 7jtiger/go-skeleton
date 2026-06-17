@@ -22,7 +22,6 @@ import (
 	rt "ms-gateway/router"
 	schd "ms-gateway/scheduler"
 
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -154,7 +153,7 @@ func runServer(cf *conf.Config) error {
 	logger.Info("Router initialized successfully")
 
 	// Context 생성 (graceful shutdown용)
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// HTTP 서버 설정
@@ -167,63 +166,87 @@ func runServer(cf *conf.Config) error {
 		MaxHeaderBytes: serverMaxHeaderBytes,
 	}
 
-	// errgroup으로 고루틴 관리
-	g, gctx := errgroup.WithContext(ctx)
-
-	// HTTP 서버 고루틴
-	g.Go(func() error {
+	serverErr := make(chan error, 1)
+	go func() {
 		logger.Info("HTTP server starting", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("HTTP server error: %w", err)
+			serverErr <- fmt.Errorf("HTTP server error: %w", err)
+			return
 		}
-		return nil
-	})
+		serverErr <- nil
+	}()
 
-	// 종료 시그널 대기 고루틴
-	g.Go(func() error {
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-		select {
-		case sig := <-quit:
-			logger.Warn("Shutdown signal received", "signal", sig.String())
-			return fmt.Errorf("received signal: %v", sig)
-		case <-gctx.Done():
-			return gctx.Err()
+	select {
+	case sig := <-quit:
+		logger.Warn("Shutdown signal received", "signal", sig.String())
+	case err := <-serverErr:
+		if err != nil {
+			return err
 		}
-	})
-
-	// 에러 발생 시 graceful shutdown 시작
-	if err := g.Wait(); err != nil {
-		logger.Warn("Initiating graceful shutdown...", "reason", err.Error())
+		logger.Warn("HTTP server stopped unexpectedly")
 	}
 
-	// Graceful shutdown 수행
-	return gracefulShutdown(server, scheduler, cancel)
+	return gracefulShutdown(&shutdownDeps{
+		server:     server,
+		cancel:     cancel,
+		scheduler:  scheduler,
+		controller: controller,
+		hch:        hch,
+		mod:        mod,
+	})
+}
+
+type shutdownDeps struct {
+	server     *http.Server
+	cancel     context.CancelFunc
+	scheduler  interface{}
+	controller *ctl.Controller
+	hch        *haredis.HAChecker
+	mod        *models.Repositories
 }
 
 // gracefulShutdown 서버를 안전하게 종료합니다
-func gracefulShutdown(server *http.Server, scheduler interface{}, cancel context.CancelFunc) error {
+func gracefulShutdown(deps *shutdownDeps) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	// 1. 백그라운드 서비스 종료
-	logger.Info("Stopping background services...")
-	cancel()
+	logger.Info("Initiating graceful shutdown...")
 
-	// 2. 스케줄러 종료 (인터페이스 확인)
-	if s, ok := scheduler.(interface{ Stop() }); ok {
-		logger.Info("Stopping scheduler...")
-		s.Stop()
+	if deps.cancel != nil {
+		deps.cancel()
 	}
 
-	// 3. HTTP 서버 종료
+	if deps.controller != nil {
+		logger.Info("Closing WebSocket connections...")
+		deps.controller.Shutdown()
+	}
+
+	if deps.scheduler != nil {
+		if s, ok := deps.scheduler.(interface{ Stop() }); ok {
+			logger.Info("Stopping scheduler...")
+			s.Stop()
+		}
+	}
+
+	if deps.hch != nil {
+		logger.Info("Stopping HA checker...")
+		deps.hch.Shutdown()
+	}
+
 	logger.Info("Shutting down HTTP server...")
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err := deps.server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP server shutdown error:", err)
-		return fmt.Errorf("server shutdown failed: %w", err)
+	} else {
+		logger.Info("HTTP server shutdown successfully")
 	}
 
-	logger.Info("HTTP server shutdown successfully")
+	if deps.mod != nil {
+		logger.Info("Stopping repositories...")
+		deps.mod.Shutdown()
+	}
+
 	return nil
 }

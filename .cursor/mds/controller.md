@@ -5,6 +5,7 @@
 ### Controller Initialization
 - `NewCTL()`: Creates main controller instance, initializes sub-controllers (Account, Profile), and sets up repository connections
 - `NewCTL()`: FCMPusher 활성화 포함(초기화 실패 시 부팅 에러 반환)
+- `Shutdown()`: graceful 종료 시 `ChatCtl.Shutdown`(DM WS), `Signaling.Shutdown`(WebRTC WS·워커), `FCMPusher.Terminate` 호출
 
 ### Response Management Functions
 - `SimpleRespOK()`: Sends simple HTTP 200 OK response with JSON payload

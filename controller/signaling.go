@@ -186,9 +186,10 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 		},
 		wrkQueue: make(chan WorkItem, WORKER_QUEUE_SIZE),
 		brcQueue: make(chan *BroadcastJob, BROADCAST_QUEUE_SIZE),
-		ctx:      context.Background(),
-		cancel:   context.CancelFunc(func() {}),
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.ctx = ctx
+	r.cancel = cancel
 
 	for i := 0; i < NUM_WORKERS; i++ {
 		go r.msgWorker()
@@ -201,6 +202,29 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 	go r.roomCleaner()
 
 	return r, nil
+}
+
+// Shutdown은 graceful 종료 시 context·WebSocket·워커를 정리합니다.
+func (p *SignalingController) Shutdown() {
+	if p.cancel != nil {
+		p.cancel()
+	}
+
+	p.waitingRoom.mu.Lock()
+	for _, client := range p.waitingRoom.Clients {
+		client.conn.Close()
+	}
+	p.waitingRoom.mu.Unlock()
+
+	p.roomsMu.RLock()
+	for _, room := range p.rooms {
+		room.mu.RLock()
+		for client := range room.Clients {
+			client.conn.Close()
+		}
+		room.mu.RUnlock()
+	}
+	p.roomsMu.RUnlock()
 }
 
 // messageWorker 메시지 처리 워커

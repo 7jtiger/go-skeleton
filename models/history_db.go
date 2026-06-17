@@ -485,17 +485,30 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, e
 	if err != nil {
 		return nil, 0, err
 	}
+	/*
+		query := `
+			SELECT * FROM (
+				SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+				FROM chat_his WHERE st_chat = 1 AND uid = ?
+				UNION
+				SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+				FROM chat_his WHERE st_chat = 1 AND tid = ?
+			) AS T
+			ORDER BY at_update DESC
+			LIMIT ? OFFSET ?`
+	*/
 
 	query := `
 		SELECT * FROM (
-			SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+			SELECT idx, uid, tid, room_id, at_crtchat, at_update
 			FROM chat_his WHERE st_chat = 1 AND uid = ?
 			UNION
-			SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
+			SELECT idx, uid, tid, room_id, at_crtchat, at_update
 			FROM chat_his WHERE st_chat = 1 AND tid = ?
 		) AS T
 		ORDER BY at_update DESC
 		LIMIT ? OFFSET ?`
+
 	rows, err := p.conndb.Query(query, uid, uid, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
@@ -505,7 +518,7 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, e
 	rooms := make([]DMRoomRow, 0)
 	for rows.Next() {
 		var dm DMRoomRow
-		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.AtCrtCHAT, &dm.AtUpdate); err != nil {
 			return nil, 0, err
 		}
 		rooms = append(rooms, dm)

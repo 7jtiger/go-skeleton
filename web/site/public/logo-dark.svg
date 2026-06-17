@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none">
+  <path d="M24 4L40.7846 13.5V32.5L24 42L7.21539 32.5V13.5L24 4Z" stroke="#5EEAD4" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M15 17H33M15 24H26M15 31H33M26 24V31" stroke="#5EEAD4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="30" cy="17" r="1.5" fill="#5EEAD4"/>
+  <circle cx="18" cy="31" r="1.5" fill="#5EEAD4"/>
+  <text x="56" y="32" fill="#FFFFFF" font-family="Pretendard, Arial, sans-serif" font-size="22" font-weight="800" letter-spacing="3">LIVEIN</text>
+</svg>

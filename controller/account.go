@@ -874,6 +874,7 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 	}
 
 	// Register the user
+	//TODO : 변경시 레디스도 업데이트 필요요
 	err := p.adb.ModifyUserInfo(req.ID, req.Uid, req.Email, req.Cate, req.Value)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserChangePWFailed, "failed to change pw"), http.StatusBadRequest, err)

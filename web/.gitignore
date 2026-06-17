@@ -1,0 +1,6 @@
+dist/
+site/node_modules/
+.pnpm-store/
+*.local
+.DS_Store
+server/livein-web

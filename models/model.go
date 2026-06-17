@@ -116,3 +116,20 @@ func (p *Repositories) Get(rs ...interface{}) error {
 
 	return nil
 }
+
+// Shutdown은 등록된 repository heartbeat를 종료하고 DB 연결을 닫습니다.
+func (p *Repositories) Shutdown() {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	for t, e := range p.elems {
+		repo, ok := e.Interface().(IRepository)
+		if !ok {
+			continue
+		}
+		repo.Terminate()
+		if err := repo.Close(); err != nil {
+			log.Error("repository close failed", "type", t, "error", err)
+		}
+	}
+}

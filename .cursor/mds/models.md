@@ -9,6 +9,7 @@
 
 ### Repository Management Functions
 - `NewModel()`: Creates and initializes all repository instances (AccountDB, HistoryDB, ItemDB, RedisDB) with connection validation
+- `Shutdown()`: 모든 repository `Terminate()` + `Close()` (graceful 종료 시 `main.gracefulShutdown`에서 호출)
 - `Register()`: Registers repository constructor by calling it and storing the instance in type-indexed map
 - `Get()`: Thread-safe retrieval of repository instances by type, returns error if repository not found
 

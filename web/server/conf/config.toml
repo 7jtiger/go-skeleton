@@ -1,0 +1,14 @@
+[server]
+port = ":3000"
+mode = "dev"
+staticDir = "../dist"
+
+[admin]
+username = "admin"
+password = "changeme"
+jwtSecret = "livein-web-jwt-secret-change-in-production"
+jwtExpireMin = 480
+
+[data]
+contentPath = "./data/content.json"
+inquiryPath = "./data/inquiries.json"

@@ -446,7 +446,7 @@ func (cc *ChatController) buildPartnerInfoByUID(uid uint64) (*ptc.PartnerInfo, e
 		Nick:     info.Nick,
 		ThumbPic: info.ThumbPic,
 		Gender:   info.Gender,
-		Age:      strconv.Itoa(utils.CalcBirth2Age(info.Birth)),
+		Age:      info.Age,
 		Area:     info.Area,
 	}, nil
 }
@@ -709,13 +709,37 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 
 	resp := make([]ptc.DMRoomResp, 0, len(*rooms))
 	for _, rm := range *rooms {
+		// 내가 보낸 채팅방
+		// uid와 요청 uid가 같으면, 내가 요청한 채팅방,
+		///- db내 파트너 정보를 그대로 전송, tid 기준으로 레디스 조회, 정보입력
+		// tid가 요청 uid와 같으면, 내가 받은 채팅방,
+		/// - db내 파트너 정보가 없어서 uid 정보를 레디스에서 조회, 정보입력
+		var res ptc.UserInfoResp
+		var err error
+		if rm.UID == uid64 {
+			// uid가 본인
+			// res, err := cc.rdb.GetUserInfoByUID(rm.TID)
+			res, err = cc.adb.GetUserInfoByUID(rm.TID)
+			if err != nil {
+				cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get target user info", err)
+				return
+			}
+		} else {
+			// 내가 초대 받은 채팅방방 tid가 본인
+			res, err = cc.adb.GetUserInfoByUID(rm.UID)
+			if err != nil {
+				cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get user info", err)
+				return
+			}
+		}
+
 		partner := &ptc.PartnerInfo{
-			PID:      rm.TID,
-			Nick:     rm.TNick,
-			ThumbPic: rm.TThumbUrl,
-			Gender:   strconv.Itoa(rm.TGender),
-			Age:      strconv.Itoa(rm.TAge),
-			Area:     rm.TArea,
+			PID:      res.Uid,
+			Nick:     res.Nick,
+			ThumbPic: res.ThumbPic,
+			Gender:   res.Gender,
+			Age:      res.Age,
+			Area:     res.Area,
 		}
 
 		tcnt, messages, err := cc.rdb.GetChatMessages(strconv.FormatInt(rm.Idx, 10), 0, 1)
@@ -890,6 +914,20 @@ func (cc *ChatController) SendCallNotification(msg *ptc.ChatMessage) {
 	log.Info(fmt.Sprintf("Call notification sent: %s -> %s (type: %s)", msg.From, msg.To, msg.Type))
 }
 
+// Shutdown은 graceful 종료 시 모든 DM WebSocket 연결을 닫습니다.
+func (cc *ChatController) Shutdown() {
+	cc.clientsMu.Lock()
+	clients := make([]*ChatClient, 0, len(cc.clients))
+	for _, client := range cc.clients {
+		clients = append(clients, client)
+	}
+	cc.clientsMu.Unlock()
+
+	for _, client := range clients {
+		client.conn.Close()
+	}
+}
+
 // IsUserOnline 채팅 WS 온라인 여부 반환
 func (cc *ChatController) IsUserOnline(userID string) bool {
 	uid, err := strconv.ParseUint(userID, 10, 64)
@@ -921,7 +959,7 @@ func (cc *ChatController) SendDMNotification(toUserID string, msg *ptc.ChatMessa
 	cc.sendToUser(toUserID, &cp)
 }
 
-// UploadImage 채팅 이미지 업로드 (Cloudflare Images)
+// UploadImage 채팅 이미지 업로드
 // @Summary 채팅 이미지 업로드
 // @Description 인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대 5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).
 // @Tags chat

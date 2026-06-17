@@ -157,3 +157,16 @@ func (p *Controller) GetRedis() *models.RedisDB {
 func (p *Controller) GetHAChecker() *haredis.HAChecker {
 	return p.hchecker
 }
+
+// Shutdown은 graceful 종료 시 WebSocket·FCM 등 컨트롤러 백그라운드 리소스를 정리합니다.
+func (p *Controller) Shutdown() {
+	if p.ChatCtl != nil {
+		p.ChatCtl.Shutdown()
+	}
+	if p.Signaling != nil {
+		p.Signaling.Shutdown()
+	}
+	if p.FCMPusher != nil {
+		p.FCMPusher.Terminate()
+	}
+}

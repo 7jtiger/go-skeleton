@@ -79,11 +79,6 @@ func (p *FCMPusher) Terminate() {
 	fin := make(chan struct{})
 	p.stop <- fin
 	<-fin
-
-	if p.ctl != nil {
-		p.stop <- fin
-	}
-
 	log.Info("terminated instance FCMPusher")
 }
 
