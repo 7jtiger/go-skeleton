@@ -109,8 +109,8 @@ func Test_GetChatList(t *testing.T) {
 		t.Skip("set -dm_token and -dm_uid to run dm chat list test")
 	}
 
-	qurl := "/dm/v01/history/" + "10/" + "1/" + "20"
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	qurl := "/dm/v01/history/10?limit=20"
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
 	if err != nil {
 		t.Errorf("Failed to get chat list: %v", err)
 		return
@@ -320,8 +320,8 @@ func Test_chatProcess(t *testing.T) {
 	}
 	fmt.Println("dm unread:", res)
 
-	qurl = "/dm/v01/history/10/1/20"
-	res, err = PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	qurl = "/dm/v01/history/10?limit=20"
+	res, err = GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
 	if err != nil {
 		t.Errorf("Failed to get chat list: %v", err)
 		return

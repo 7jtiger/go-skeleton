@@ -327,7 +327,7 @@ func (p *Router) Idx() *gin.Engine {
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)
 
-		chat.POST("/history/:room_id/:page/:limit", p.chat.GetChatList)
+		chat.GET("/history/:room_id", p.chat.GetChatList)
 
 		chat.POST("/upload/img", p.simpleImgUploadCF(5, 5), p.chat.UploadImage)
 		/*

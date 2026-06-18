@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -124,4 +125,34 @@ type CallResponse struct {
 	To       string `json:"to"`       // 요청자 ID
 	RoomID   string `json:"roomId"`   // 채팅방 ID
 	Accepted bool   `json:"accepted"` // 수락 여부
+}
+
+func CvtParamAtoi(param string, ty int) int {
+	switch ty {
+	case 1: // page default 1
+		paramInt, err := strconv.Atoi(param)
+		if err != nil || paramInt < 1 {
+			return 1
+		}
+		return paramInt
+	case 2: // limit default 20
+		paramInt, err := strconv.Atoi(param)
+		if err != nil {
+			return 20
+		}
+		return paramInt
+	case 3: // pgSize default 50
+		paramInt, err := strconv.Atoi(param)
+		if err != nil {
+			return 50
+		}
+		return paramInt
+	case 4: // limit default 10
+		paramInt, err := strconv.Atoi(param)
+		if err != nil {
+			return 10
+		}
+		return paramInt
+	}
+	return 0
 }

@@ -419,7 +419,7 @@
 - `handleReadReceipt()`에서 unread 초기화(`ResetUnread`) 후 상대에게 전달
 - 신규 통화 브릿지: `handleCallRequestFromDM`, `handleCallAcceptFromDM`, `handleCallCancel`
 - 신규 공개 메서드: `IsUserOnline`, `SendDMNotification`, `GetTotalUnread`
-- `GetChatList`: 라우트 path의 `page`/`limit`를 우선 사용(없으면 query), `pgSize` query로 `limit` 상한; 응답 `total_count`는 해당 방 Redis 리스트 전체 길이(`LLen`), 빈 페이지·offset 초과 시에도 동일
+- `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; 응답 `messages`, `total_count`, `next_cursor`, `has_more`. 신규 메시지는 WS, HTTP는 과거 구간 보완
 
 ### SignalingController (`signaling.go`)
 - 대기실 메시지 타입에 `call-cancel` 추가

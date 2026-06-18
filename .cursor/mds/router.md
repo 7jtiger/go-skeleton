@@ -145,7 +145,7 @@
 - `GET /dm/v01/ws`: WebSocket endpoint for real-time text chat (query param: userId)
 - `POST /dm/v01/create`: Endpoint to create/reuse DM room (`CreateChatRoom`, request body: `uid`, `tid`)
 - `GET /dm/v01/rooms`: Endpoint to retrieve user's DM room list (**JWT required**)
-- `GET /dm/v01/history/:roomId`: Endpoint to retrieve paginated chat history
+- `GET /dm/v01/history/:room_id`: DM 채팅 히스토리 (커서 페이지네이션, query: `limit`, `cursor`, `pgSize`)
 - `POST /dm/v01/message`: REST API endpoint to send message (alternative to WebSocket)
 - `GET /dm/v01/mlistvd`: Endpoint to retrieve male video chat list
 - `GET /dm/v01/wlistvd`: Endpoint to retrieve female video chat list

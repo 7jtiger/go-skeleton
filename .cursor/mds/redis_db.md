@@ -54,7 +54,8 @@
 
 ## Chat Message Management Functions
 - `SaveChatMessage()`: Function to save chat message and update chat room activity time
-- `GetChatMessages()`: Retrieves messages for a room with newest-first paging. The first return value is always the room’s total message count (`LLen`), including when `limit<=0`, when `offset` is past the end, or when the list is empty; the second return is an empty slice in those cases (not `nil` when `err==nil`).
+- `GetChatMessages()`: offset 기반 (방 목록 last_msg 등 내부용)
+- `GetChatMessagesByCursor(roomID, cursor, limit)`: 커서 기반 조회 — `cursor==""` 최신 N건, `cursor` 있으면 그 id보다 오래된 N건; 반환 `(total, messages, nextCursor, hasMore, err)`. 메시지는 최신순
 
 ## Chat Room Participant Management Functions
 - `AddUserToChatRoom()`: Function to add user to chat room participant list

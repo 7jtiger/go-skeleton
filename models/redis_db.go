@@ -1081,6 +1081,93 @@ func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) (int64, *[]C
 	return total, &messages, nil
 }
 
+// findMessageListIndex returns the Redis LIST index (0=oldest) for message id.
+func (r *RedisDB) findMessageListIndex(listKey, messageID string, total int64) (int64, bool, error) {
+	if messageID == "" || total == 0 {
+		return -1, false, nil
+	}
+	rawMessages, err := r.client.LRange(r.ctx, listKey, 0, total-1).Result()
+	if err != nil {
+		return -1, false, err
+	}
+	for i, messageJSON := range rawMessages {
+		var message ChatMessageData
+		if err := json.Unmarshal([]byte(messageJSON), &message); err != nil {
+			continue
+		}
+		if message.ID == messageID {
+			return int64(i), true, nil
+		}
+	}
+	return -1, false, nil
+}
+
+// parseChatMessagesRaw parses LRange result (oldest→newest) into newest-first slice.
+func parseChatMessagesRaw(rawMessages []string) []ChatMessageData {
+	tCnt := int64(len(rawMessages))
+	messages := make([]ChatMessageData, 0, tCnt)
+	for i := tCnt - 1; i >= 0; i-- {
+		var message ChatMessageData
+		if err := json.Unmarshal([]byte(rawMessages[i]), &message); err != nil {
+			continue
+		}
+		messages = append(messages, message)
+	}
+	return messages
+}
+
+// GetChatMessagesByCursor cursor 기반 메시지 조회 (최신순 반환).
+// cursor == "" → 최신 limit건. cursor != "" → 해당 메시지보다 오래된 limit건.
+// nextCursor는 이번 배치에서 가장 오래된 메시지 id (다음 요청 cursor로 사용).
+func (r *RedisDB) GetChatMessagesByCursor(roomID, cursor string, limit int) (int64, []ChatMessageData, string, bool, error) {
+	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+	total, err := r.client.LLen(r.ctx, listKey).Result()
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+
+	empty := []ChatMessageData{}
+	if limit <= 0 {
+		return total, empty, "", false, nil
+	}
+	if total == 0 {
+		return total, empty, "", false, nil
+	}
+
+	var endIdx int64 = total - 1
+	if cursor != "" {
+		cursorIdx, found, err := r.findMessageListIndex(listKey, cursor, total)
+		if err != nil {
+			return total, nil, "", false, err
+		}
+		if !found {
+			return total, nil, "", false, fmt.Errorf("invalid cursor: %s", cursor)
+		}
+		endIdx = cursorIdx - 1
+		if endIdx < 0 {
+			return total, empty, "", false, nil
+		}
+	}
+
+	startIdx := endIdx - int64(limit) + 1
+	if startIdx < 0 {
+		startIdx = 0
+	}
+
+	rawMessages, err := r.client.LRange(r.ctx, listKey, startIdx, endIdx).Result()
+	if err != nil {
+		return total, nil, "", false, err
+	}
+	if len(rawMessages) == 0 {
+		return total, empty, "", false, nil
+	}
+
+	messages := parseChatMessagesRaw(rawMessages)
+	nextCursor := messages[len(messages)-1].ID
+	hasMore := startIdx > 0
+	return total, messages, nextCursor, hasMore, nil
+}
+
 // PruneExpiredRoomMessages 채팅방별 만료 메시지 정리
 // 정책: chat:rooms:{roomID}:msg LIST에서 ttl 기준 이전 메시지 삭제
 func (r *RedisDB) Expired24hMsg(ttl time.Duration) (*ChatPruneResult, error) {

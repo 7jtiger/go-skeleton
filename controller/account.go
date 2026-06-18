@@ -12,6 +12,7 @@ import (
 	"ms-gateway/conf"
 	"ms-gateway/models"
 	"ms-gateway/protocol"
+	ptc "ms-gateway/protocol"
 	ptl "ms-gateway/protocol"
 	"net/http"
 	"strconv"
@@ -1241,19 +1242,8 @@ func (p *AccountController) UnfavoriteUser(c *gin.Context) {
 //
 // @Router /fav/v01/list [get]
 func (p *AccountController) GetFavoriteList(c *gin.Context) {
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "10")
-
-	pageInt, err := strconv.Atoi(page)
-	if err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse page"), http.StatusBadRequest, err)
-		return
-	}
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse limit"), http.StatusBadRequest, err)
-		return
-	}
+	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
+	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
 
 	uid, exists := c.Get("user")
 	if !exists {
@@ -1480,20 +1470,9 @@ func (p *AccountController) UnblockUser(c *gin.Context) {
 // @Description 요청 예시: GET /block/v01/list/1/10
 // @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":2,\"list\":[...]}
 func (p *AccountController) GetBlockUser(c *gin.Context) {
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "10")
+	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
+	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
 
-	pageInt, err := strconv.Atoi(page)
-	if err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse page"), http.StatusBadRequest, err)
-		return
-	}
-
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil {
-		p.ctl.RespError(c, ptl.NewRespHeader(ptl.Failed, "failed to parse limit"), http.StatusBadRequest, err)
-		return
-	}
 	uid, exists := c.Get("user")
 	if !exists {
 		p.ctl.SimpleError(c, http.StatusUnauthorized, "user not found in context")

@@ -691,11 +691,7 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 	}
 	uid64 := user.(*ptc.UserInfoResp).Uid
 
-	page := c.Param("page")
-	pageInt, err := strconv.Atoi(page)
-	if err != nil || pageInt < 1 {
-		pageInt = 1
-	}
+	pageInt := ptc.CvtParamAtoi(c.Param("page"), 1)
 
 	rooms, totalCount, err := cc.hdb.GetDMRoomsByUser(uid64, pageInt)
 	if err != nil {
@@ -822,39 +818,38 @@ func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 }
 
 // GetChatList godoc
-// @Summary      채팅 기록 조회
-// @Description  특정 채팅방의 메시지 기록을 조회합니다.
+// @Summary      채팅 기록 조회 (커서 페이지네이션)
+// @Description  특정 채팅방(room_id)의 과거 메시지 목록을 커서 기반으로 페이징하여 조회합니다.
+// @Description  실시간 신규 메시지는 WebSocket으로 수신하고, 본 API는 과거 구간(기록/이력) 보완용입니다.
+// @Description  cursor 미지정시 최신 limit개를 반환하며, 이전 응답의 next_cursor를 전달하면 해당 커서보다 오래된 메시지를 조회합니다.
 // @Description
 // @Description  [요청 예시]
-// @Description    POST /dm/v01/history/10/1/20 HTTP/1.1
+// @Description    GET /dm/v01/history/10?limit=20 HTTP/1.1
+// @Description    GET /dm/v01/history/10?limit=20&cursor=086572 HTTP/1.1
 // @Description    Authorization: Bearer {access_token}
-// @Description    Host: localhost:8080
 // @Description
 // @Description  [응답 예시]
 // @Description    {
 // @Description      "result": 0,
 // @Description      "resultString": "Success",
 // @Description      "data": {
-// @Description        "messages": [
-// @Description          {"id":"527073","roomId":"10","userId":"4033287471439576593","content":"asf","type":"","timestamp":"2026-05-14T22:29:06.189288106+09:00"},
-// @Description          {"id":"086572","roomId":"10","userId":"4033287471439576593","content":"gfv","type":"","timestamp":"2026-05-14T22:29:00.694804181+09:00"}
-// @Description        ],
-// @Description        "total_count": 109
+// @Description        "messages": [...],
+// @Description        "total_count": 109,
+// @Description        "next_cursor": "086572",
+// @Description        "has_more": true
 // @Description      }
 // @Description    }
-// @Tags         chat
-// @Accept       json
-// @Produce      json
-// @Param        roomId  path      string  true  "채팅방 ID (경로 파라미터)"
-// @Param        page    path      int     true  "페이지 번호 (1-base, 경로 파라미터가 우선, 없으면 query 사용; default: 1)"
-// @Param        limit   path      int     true  "페이지당 항목 개수 (경로 파라미터가 우선, 없으면 query 사용; default: 20, pgSize 제한 적용)"
-// @Param        pgSize  query     int     false "페이지당 최대 개수 상한 (default: 50, min: 1)"
-// @Success      200  {object}  map[string]interface{} "messages: 메시지 리스트, total_count: 전체 메시지 개수"
-// @Failure      400  {object}  map[string]string "잘못된 요청"
-// @Failure      500  {object}  map[string]string "서버 에러"
-// @Router       /dm/v01/history/{room_id}/{page}/{limit} [post]
-// @Description  요청 예시: POST /dm/v01/history/10/1/20 (Authorization: Bearer)
-// @Description  응답 예시: result/resultString/data.messages/data.total_count
+// @Tags           chat
+// @Accept         json
+// @Produce        json
+// @Param          room_id   path     string  true   "채팅방 ID"
+// @Param          limit     query    int     false  "가져올 메시지 개수 (기본값: 20, 최대 pgSize 제한)"
+// @Param          cursor    query    string  false  "이전 응답의 next_cursor 값"
+// @Param          pgSize    query    int     false  "limit의 최대값 상한 (기본 50)"
+// @Success        200 {object} map[string]interface{} "messages: 메시지 배열, total_count: 전체 메시지 수, next_cursor: 다음 커서, has_more: 더 있음 여부"
+// @Failure        400 {object} map[string]string "잘못된 요청(잘못된 cursor 등)"
+// @Failure        500 {object} map[string]string "서버 내부 에러"
+// @Router         /dm/v01/history/{room_id} [get]
 func (cc *ChatController) GetChatList(c *gin.Context) {
 	roomID := c.Param("room_id")
 	if roomID == "" {
@@ -862,50 +857,25 @@ func (cc *ChatController) GetChatList(c *gin.Context) {
 		return
 	}
 
-	// 페이지네이션: 라우트 path(/history/:roomId/:page/:limit) 우선, 없으면 query
-	page := c.Param("page")
-	if page == "" {
-		page = c.DefaultQuery("page", "1")
-	}
-	limit := c.Param("limit")
-	if limit == "" {
-		limit = c.DefaultQuery("limit", "20")
-	}
-	pgSize := c.DefaultQuery("pgSize", "50")
+	cursor := c.Query("cursor")
+	limitNum := ptc.CvtParamAtoi(c.Query("limit"), 2)
 
-	pageNum, err := strconv.Atoi(page)
+	tcnt, messages, nextCursor, hasMore, err := cc.rdb.GetChatMessagesByCursor(roomID, cursor, limitNum)
 	if err != nil {
-		pageNum = 1
-	}
-
-	limitNum, err := strconv.Atoi(limit)
-	if err != nil {
-		limitNum = 20
-	}
-
-	pgSizeNum, err := strconv.Atoi(pgSize)
-	if err != nil {
-		pgSizeNum = 50
-	}
-
-	if limitNum > pgSizeNum {
-		limitNum = pgSizeNum
-	}
-
-	offset := (pageNum - 1) * limitNum
-
-	// Redis에서 메시지 조회 (total_count = 방 전체 메시지 수)
-	tcnt, messages, err := cc.rdb.GetChatMessages(roomID, offset, limitNum)
-	if err != nil {
+		if cursor != "" {
+			cc.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get chat history", err)
 		return
 	}
 
-	var msgSlice []models.ChatMessageData
-	if messages != nil {
-		msgSlice = *messages
-	}
-	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{"total_count": tcnt, "messages": msgSlice})
+	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"total_count": tcnt,
+		"messages":    messages,
+		"next_cursor": nextCursor,
+		"has_more":    hasMore,
+	})
 }
 
 // SendCallNotification 통화 알림 전송 (SignalingController에서 호출)

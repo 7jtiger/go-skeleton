@@ -907,9 +907,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/dm/v01/history/{room_id}/{page}/{limit}": {
-            "post": {
-                "description": "특정 채팅방의 메시지 기록을 조회합니다.\n\n[요청 예시]\nPOST /dm/v01/history/10/1/20 HTTP/1.1\nAuthorization: Bearer {access_token}\nHost: localhost:8080\n\n[응답 예시]\n{\n\"result\": 0,\n\"resultString\": \"Success\",\n\"data\": {\n\"messages\": [\n{\"id\":\"527073\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"asf\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:06.189288106+09:00\"},\n{\"id\":\"086572\",\"roomId\":\"10\",\"userId\":\"4033287471439576593\",\"content\":\"gfv\",\"type\":\"\",\"timestamp\":\"2026-05-14T22:29:00.694804181+09:00\"}\n],\n\"total_count\": 109\n}\n}\n요청 예시: POST /dm/v01/history/10/1/20 (Authorization: Bearer)\n응답 예시: result/resultString/data.messages/data.total_count",
+        "/dm/v01/history/{room_id}": {
+            "get": {
+                "description": "특정 채팅방(room_id)의 과거 메시지 목록을 커서 기반으로 페이징하여 조회합니다.\n실시간 신규 메시지는 WebSocket으로 수신하고, 본 API는 과거 구간(기록/이력) 보완용입니다.\ncursor 미지정시 최신 limit개를 반환하며, 이전 응답의 next_cursor를 전달하면 해당 커서보다 오래된 메시지를 조회합니다.\n\n[요청 예시]\nGET /dm/v01/history/10?limit=20 HTTP/1.1\nGET /dm/v01/history/10?limit=20\u0026cursor=086572 HTTP/1.1\nAuthorization: Bearer {access_token}\n\n[응답 예시]\n{\n\"result\": 0,\n\"resultString\": \"Success\",\n\"data\": {\n\"messages\": [...],\n\"total_count\": 109,\n\"next_cursor\": \"086572\",\n\"has_more\": true\n}\n}",
                 "consumes": [
                     "application/json"
                 ],
@@ -919,46 +919,44 @@ const docTemplate = `{
                 "tags": [
                     "chat"
                 ],
-                "summary": "채팅 기록 조회",
+                "summary": "채팅 기록 조회 (커서 페이지네이션)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "채팅방 ID (경로 파라미터)",
-                        "name": "roomId",
+                        "description": "채팅방 ID",
+                        "name": "room_id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 번호 (1-base, 경로 파라미터가 우선, 없으면 query 사용; default: 1)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지당 항목 개수 (경로 파라미터가 우선, 없으면 query 사용; default: 20, pgSize 제한 적용)",
+                        "description": "가져올 메시지 개수 (기본값: 20, 최대 pgSize 제한)",
                         "name": "limit",
-                        "in": "path",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "이전 응답의 next_cursor 값",
+                        "name": "cursor",
+                        "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "페이지당 최대 개수 상한 (default: 50, min: 1)",
+                        "description": "limit의 최대값 상한 (기본 50)",
                         "name": "pgSize",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "messages: 메시지 리스트, total_count: 전체 메시지 개수",
+                        "description": "messages: 메시지 배열, total_count: 전체 메시지 수, next_cursor: 다음 커서, has_more: 더 있음 여부",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "잘못된 요청",
+                        "description": "잘못된 요청(잘못된 cursor 등)",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -967,7 +965,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "서버 에러",
+                        "description": "서버 내부 에러",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

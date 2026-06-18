@@ -639,8 +639,8 @@ func handleCommand(line string) {
 		}
 
 		roomID := sess.roomID
-		page := "1"
 		limit := "20"
+		cursor := ""
 
 		if arg != "" {
 			args := strings.Fields(arg)
@@ -648,26 +648,29 @@ func handleCommand(line string) {
 				roomID = args[0]
 			}
 			if len(args) >= 2 {
-				page = args[1]
+				limit = args[1]
 			}
 			if len(args) >= 3 {
-				limit = args[2]
+				cursor = args[2]
 			}
 		}
 
 		if roomID == "" {
-			errMsg("사용법: /chatlist <roomId> [page] [limit] 또는 /room 설정 후 /chatlist")
+			errMsg("사용법: /chatlist <roomId> [limit] [cursor] 또는 /room 설정 후 /chatlist")
 			return
 		}
 
-		qs := fmt.Sprintf("?page=%s&limit=%s", page, limit)
+		qs := fmt.Sprintf("?limit=%s", limit)
+		if cursor != "" {
+			qs += "&cursor=" + cursor
+		}
 		info("chatlist url: %s", apiBase()+"/dm/v01/history/"+roomID+qs)
-		code, body, err := doReq("POST", apiBase()+"/dm/v01/history/"+roomID, "page="+page+"&limit="+limit)
+		code, body, err := doReq("GET", apiBase()+"/dm/v01/history/"+roomID+qs, "")
 		if err != nil {
 			errMsg("요청 실패: %v", err)
 			return
 		}
-		info("chatlist status=%d room=%s page=%s limit=%s", code, roomID, page, limit)
+		info("chatlist status=%d room=%s limit=%s cursor=%s", code, roomID, limit, cursor)
 
 		data, _ := parseData(body)
 		if data != nil {

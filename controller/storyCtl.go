@@ -131,17 +131,10 @@ func (p *StoryController) GetStoryConditionList(c *gin.Context) {
 	mtype := c.DefaultQuery("type", "img")
 	order := c.DefaultQuery("order", "new")
 	gen := c.DefaultQuery("gen", "1")
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "10")
+	nPage := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
+	nLimit := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
 
-	/* 	uid, exists := c.Get("user")
-	   	if !exists {
-	   		p.ctl.SimpleError(c, http.StatusBadRequest, "Uid is required")
-	   		return
-	   	}
-
-	TODO: 블록 유저 조회
-	*/
+	// TODO: 블록 유저 조회
 
 	args := []interface{}{}
 	conds := []string{}
@@ -170,15 +163,6 @@ func (p *StoryController) GetStoryConditionList(c *gin.Context) {
 	args = append(args, nStat)
 
 	orderQuery := ptl.GetOrderQuery(order)
-	nPage, err := strconv.Atoi(page)
-	if err != nil {
-		nPage = 1
-	}
-	nLimit, err := strconv.Atoi(limit)
-	if err != nil {
-		nLimit = 10
-	}
-
 	offset := (nPage - 1) * nLimit
 	args = append(args, nLimit, offset)
 	storyList, err := p.sdb.GetCondStoryList(conds, orderQuery, args)
@@ -1051,20 +1035,8 @@ func (p *StoryController) GetFollowerList(c *gin.Context) {
 	}
 
 	uid64 := user.(*ptc.UserInfoResp).Uid
-
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "20")
-
-	pageInt, err := strconv.Atoi(page)
-	if err != nil || pageInt <= 0 {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
-		return
-	}
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil || limitInt <= 0 {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Limit is invalid")
-		return
-	}
+	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
+	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 2) //defaultQuery "20"
 
 	list, totalCount, err := p.sdb.GetFollowerList(uid64, pageInt, limitInt)
 	if err != nil {
@@ -1097,18 +1069,9 @@ func (p *StoryController) GetFollowingList(c *gin.Context) {
 	}
 	uid64 := user.(*ptc.UserInfoResp).Uid
 
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "20")
-	pageInt, err := strconv.Atoi(page)
-	if err != nil || pageInt <= 0 {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Page is invalid")
-		return
-	}
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil || limitInt <= 0 {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Limit is invalid")
-		return
-	}
+	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
+	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 2) //defaultQuery "20"
+
 	list, totalCount, err := p.sdb.GetFollowingList(uid64, pageInt, limitInt)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get following list", err)
