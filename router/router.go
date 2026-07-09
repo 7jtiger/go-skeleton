@@ -253,11 +253,11 @@ func (p *Router) Idx() *gin.Engine {
 		mission.GET("/detail/:id")
 	}
 
-	story := e.Group("story/v01", p.SecurityHeaders())
+	story := e.Group("story/v01", p.SecurityHeaders(), p.JwtAuth())
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
 		// story.GET("/home/:id")
-		story.POST("/create", p.JwtAuth(), p.ValidateFileUpload(5, 5), p.st.CreateStory)
+		story.POST("/create", p.ValidateFileUpload(5, 5), p.st.CreateStory)
 		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
 
 		story.GET("/list", p.st.GetStoryDefaultList)
@@ -276,10 +276,16 @@ func (p *Router) Idx() *gin.Engine {
 
 		// ------------- like/follow/block -------------
 		story.POST("/like/toggle", p.st.ToggleStoryLike)
-		story.POST("/follow/set/:tid", p.JwtAuth(), p.st.FollowUser)
-		story.POST("/follow/cancel/:tid", p.JwtAuth(), p.st.UnfollowUser)
-		story.GET("/follower/list/:page/:limit", p.JwtAuth(), p.st.GetFollowerList)
-		story.GET("/following/list/:page/:limit", p.JwtAuth(), p.st.GetFollowingList)
+		story.POST("/follow/set/:tid", p.st.FollowUser)
+		story.POST("/follow/cancel/:tid", p.st.UnfollowUser)
+
+		story.GET("/follower/list/:page/:limit", p.st.GetFollowerList)
+		story.GET("/following/list/:page/:limit", p.st.GetFollowingList)
+
+		story.POST("/cutout/set/:tid", p.st.SetCutoutUser)
+		story.POST("/cutout/cancel/:tid", p.st.UnsetCutoutUser)
+		story.POST("/cutout/count", p.st.GetCutoutCount)
+		story.GET("/cutout/list/:page/:limit", p.st.GetCutoutList)
 		/* story.POST("/block/create", p.st.BlockUser)
 		story.POST("/block/cancel", p.st.UnblockUser)
 		story.GET("/block/list/:uid/:page/:limit", p.st.GetBlockList) */
@@ -315,14 +321,17 @@ func (p *Router) Idx() *gin.Engine {
 		// WebSocket 메시징 엔드포인트
 		chat.GET("/ws", p.chat.HandleWebSocket)
 
-		// 채팅방 생성
+		// 채팅방 생성/재참여
 		chat.POST("/mkroom/:pid", p.chat.CreateChatRoom)
 
-		// 채팅방 삭제
+		// 채팅방 나가기 (1명 전이)
 		chat.POST("/rmroom/:room_id", p.chat.DeleteChatRoom)
 
 		// 사용자의 채팅방 목록 조회
 		chat.GET("/list/:page", p.chat.GetChatRooms)
+
+		// 사용자의 채팅방 목록 조회
+		chat.GET("/rinfo/:room_id", p.chat.GetChatRoomByRID)
 
 		//unread total count
 		chat.GET("/total/unread", p.chat.GetTotalUnread)

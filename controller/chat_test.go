@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"ms-gateway/models"
+
 	"github.com/gorilla/websocket"
 	// "gocv.io/x/gocv"
 )
@@ -22,11 +24,40 @@ import (
 var (
 	dmTargetHost = flag.String("dm_target", "localhost:8080", "dm test target server url")
 	// dmToken      = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjoxODEyNzc1ODQ5fQ.ZKkpklhevJVbMXKqPYHPu1sbp_sPtAaSuhTRpygLbOc", "dm test bearer token")
-	dmToken     = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE", "dm test bearer token")
-	dmUID       = flag.String("dm_uid", "8697414060736839837", "dm test uid (required for dm room/list/unread/ws query)")
-	dmPeerUID   = flag.String("dm_peer_uid", "4033287471439576593", "dm test peer uid (required for dm room create)")
+	//eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE
+	dmToken   = flag.String("dm_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE", "dm test bearer token")
+	dmUID     = flag.String("dm_uid", "8697414060736839837", "dm test uid (required for dm room/list/unread/ws query)")
+	dmPeerUID = flag.String("dm_peer_uid", "4033287471439576593", "dm test peer uid (required for dm room create)")
+	//eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI
 	dmPeerToken = flag.String("dm_peer_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI", "dm test peer bearer token (required for peer ws auth)")
+	dmRoomID    = flag.String("dm_room_id", "10", "dm test room id (chat_his.idx) for rinfo/history tests")
 )
+
+func Test_sortDMRoomsForInbox(t *testing.T) {
+	now := time.Now()
+	rooms := []models.DMRoomRow{
+		{Idx: 1, AtUpdate: now.Add(-3 * time.Hour)}, // read, old
+		{Idx: 2, AtUpdate: now.Add(-1 * time.Hour)}, // read, newer
+		{Idx: 3, AtUpdate: now.Add(-2 * time.Hour)}, // unread, older recv
+		{Idx: 4, AtUpdate: now.Add(-4 * time.Hour)}, // unread, latest recv
+	}
+	unreadInfo := map[string]models.UnreadInfo{
+		"3": {Count: 2, LastRecvAt: now.Add(-2 * time.Hour).Unix()},
+		"4": {Count: 1, LastRecvAt: now.Unix()},
+	}
+
+	sorted := sortDMRoomsForInbox(rooms, unreadInfo)
+	if len(sorted) != 4 {
+		t.Fatalf("expected 4 rooms, got %d", len(sorted))
+	}
+	// unread first: room 4 (latest ts) then room 3, then read by at_update: room 2 then room 1
+	want := []int64{4, 3, 2, 1}
+	for i, id := range want {
+		if sorted[i].Idx != id {
+			t.Errorf("sorted[%d]: want rid %d, got %d", i, id, sorted[i].Idx)
+		}
+	}
+}
 
 //"acTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc3NDYxMjI2fQ.em-dbS_WqiW3BWYj33cz0RjZfUEO2bRQF_GpVnCyVZ0",
 // "refTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc4NTg0NDI2fQ.eLgd6RLtddrNVwM_YrYhRahNKNL7qGQjP5-lr28cJ1I"
@@ -116,6 +147,34 @@ func Test_GetChatList(t *testing.T) {
 		return
 	}
 	fmt.Println("dm chat list:", res)
+}
+
+func Test_GetChatRoomByRID(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run dm room info test")
+	}
+
+	qurl := "/dm/v01/rinfo/" + *dmRoomID
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get dm room info: %v", err)
+		return
+	}
+	fmt.Println("dm room info:", res)
+}
+
+func Test_LeaveDMRoom(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" {
+		t.Skip("set -dm_token and -dm_uid to run dm room leave test")
+	}
+
+	qurl := "/dm/v01/rmroom/" + *dmRoomID
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to leave dm room: %v", err)
+		return
+	}
+	fmt.Println("leave dm room:", res)
 }
 
 func Test_SendDMMessage(t *testing.T) {

@@ -275,6 +275,8 @@ func handleIncoming(msg *ChatMessage) {
 		recv("%s 통화 취소 from=%s", ts(), msg.From)
 	case "call-info":
 		recv("%s 통화 안내: %s", ts(), msg.Content)
+	case "partner-left", "system-message":
+		recv("%s %s (room=%s)", ts(), msg.Content, msg.RoomID)
 	case "dm-incoming":
 		recv("%s DM 알림 from=%s content=%s", ts(), msg.From, msg.Content)
 	default:

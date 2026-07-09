@@ -453,6 +453,63 @@ func TestGetFollowingList(t *testing.T) {
 	fmt.Println(res)
 }
 
+// -------------------- user cut out ---------------------------------
+// ---- story cutout (JWT: -dm_token, 대상 uid: -dm_peer_uid, 서버: -dm_target) ----
+func Test_SetCutoutUser(t *testing.T) {
+	flag.Parse()
+	qurl := fmt.Sprintf("/story/v01/cutout/set/%s", *dmPeerUID)
+
+	// tk := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI"
+	// res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, tk)
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to set cutout user: %v", err)
+		return
+	}
+
+	fmt.Println(res)
+}
+
+func Test_UnsetCutoutUser(t *testing.T) {
+	flag.Parse()
+	qurl := fmt.Sprintf("/story/v01/cutout/cancel/%s", *dmPeerUID)
+
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to unset cutout user: %v", err)
+		return
+	}
+
+	fmt.Println(res)
+}
+
+func Test_GetCutoutCount(t *testing.T) {
+	flag.Parse()
+	qurl := "/story/v01/cutout/count"
+
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get cutout count: %v", err)
+		return
+	}
+
+	fmt.Println(res)
+}
+
+func Test_GetCutoutList(t *testing.T) {
+	flag.Parse()
+	qurl := "/story/v01/cutout/list/1/10"
+
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get cutout list: %v", err)
+		return
+	}
+
+	fmt.Println(res)
+}
+
+// -------------------- user cut out ---------------------------------
 // ---- story end ----
 
 // ---- file upload ----

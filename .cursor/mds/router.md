@@ -124,6 +124,10 @@
 - `POST /story/v01/follow/cancel`: Unfollow user endpoint
 - `GET /story/v01/follow/follower/:uid/:page`: Follower list endpoint
 - `GET /story/v01/follow/following/:uid/:page`: Following list endpoint
+- `POST /story/v01/cutout/set/:tid`: 스토리 cutout 설정 (대상 feed 숨김)
+- `POST /story/v01/cutout/cancel/:tid`: 스토리 cutout 해제
+- `POST /story/v01/cutout/count`: 활성 cutout 개수 조회
+- `GET /story/v01/cutout/list/:page/:limit`: 활성 cutout 목록 조회
 - `POST /story/v01/block/create`: Block user endpoint
 - `POST /story/v01/block/cancel`: Unblock user endpoint
 - `GET /story/v01/block/list/:uid/:page/:limit`: Blocked user list endpoint (page starts at 1, limit 1~100)
@@ -143,8 +147,10 @@
 
 ### dm/v01 - Text Chat Features (Security Headers)
 - `GET /dm/v01/ws`: WebSocket endpoint for real-time text chat (query param: userId)
-- `POST /dm/v01/create`: Endpoint to create/reuse DM room (`CreateChatRoom`, request body: `uid`, `tid`)
-- `GET /dm/v01/rooms`: Endpoint to retrieve user's DM room list (**JWT required**)
+- `POST /dm/v01/mkroom/:pid`: DM 방 생성/재참여 (`CreateChatRoom`)
+- `POST /dm/v01/rmroom/:room_id`: DM 방 나가기 — 1명만 전이 (`DeleteChatRoom`)
+- `GET /dm/v01/list/:page`: 사용자 DM 채팅방 목록 — 정렬: unread>0 우선 → `:ts` 최근 수신 → `at_update` (`partner_left` 포함)
+- `GET /dm/v01/rinfo/:room_id`: DM 채팅방 단건 조회 (상대방 정보, last_msg, unread, partner_left)
 - `GET /dm/v01/history/:room_id`: DM 채팅 히스토리 (커서 페이지네이션, query: `limit`, `cursor`, `pgSize`)
 - `POST /dm/v01/message`: REST API endpoint to send message (alternative to WebSocket)
 - `GET /dm/v01/mlistvd`: Endpoint to retrieve male video chat list

@@ -53,9 +53,11 @@
 - `ListActiveChatRooms()`: Function to retrieve active chat rooms ordered by recent activity
 
 ## Chat Message Management Functions
-- `SaveChatMessage()`: Function to save chat message and update chat room activity time
+- `SaveChatMessage()`: 채팅 메시지 LIST(`chat:rooms:{roomID}:msg`) 저장, TTL **3일** (`dmMsgRetention`)
 - `GetChatMessages()`: offset 기반 (방 목록 last_msg 등 내부용)
 - `GetChatMessagesByCursor(roomID, cursor, limit)`: 커서 기반 조회 — `cursor==""` 최신 N건, `cursor` 있으면 그 id보다 오래된 N건; 반환 `(total, messages, nextCursor, hasMore, err)`. 메시지는 최신순
+- `ExpiredMsg(ttl)` / `Expired24hMsg`: timestamp가 ttl 이전인 메시지 prune (기본/스케줄러 **3일**)
+- `GetLatestMessageID(roomID)`: 방 최신 메시지 mid 조회
 
 ## Chat Room Participant Management Functions
 - `AddUserToChatRoom()`: Function to add user to chat room participant list
@@ -85,10 +87,12 @@
 - `CleanupInactiveRooms()`: Function to clean up chat rooms inactive for certain period
 
 ## DM Unread / Online State Functions (2026-03)
-- `IncrUnread(uid, roomID)`: Redis Lua로 원자 실행 — `DM:UNREAD:{uid}:{roomId}` `INCR`, companion `...:ts`에 마지막 증가 시각(Unix 초) `SET`, 두 키 모두 **30일** `EXPIRE` 매 호출 갱신(스케줄러 없음).
+- `IncrUnread(uid, roomID)`: Redis Lua로 원자 실행 — `DM:UNREAD:{uid}:{roomId}` `INCR`, companion `...:ts`에 마지막 증가 시각(Unix 초) `SET`, 두 키 모두 **3일** `EXPIRE` 매 호출 갱신.
 - `GetUnread(uid, roomID)`: 단일 방 unread 조회 (키 미존재 시 0)
 - `ResetUnread(uid, roomID)`: 해당 방 카운터·`:ts` companion 동시 `DEL`
-- `GetAllUnreadForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` 기반 전체 unread 맵 (`:ts` 키 제외)
+- `GetAllUnreadInfoForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` — 방별 `Count` + `LastRecvAt`(`:ts`, Unix 초)
+- `GetAllUnreadForUser(uid)`: `GetAllUnreadInfoForUser` 기반 count-only 맵 (`:ts` 키 제외)
+- `GetLastReadMid` / `SetLastReadMid`: `DM:READ:{uid}:{roomID}` = mid (TTL **3일**). LIST index 기준 전진만 허용
 - `SetOnline(uid)`: `DM:ONLINE:{uid}` 키를 90초 TTL로 설정
 - `IsOnline(uid)`: 온라인 키 존재 여부로 상태 판별
 - `DeleteOnline(uid)`: 온라인 키 제거

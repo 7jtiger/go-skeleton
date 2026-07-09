@@ -142,26 +142,37 @@ CREATE TABLE `anuc_his` (
 
 ---
 
-## DM Room 추가 (2026-03)
+## DM Room (chat_his)
 
-### 신규 구조체
-- `DMRoomRow`: `dm_room` 테이블 로우 매핑 구조체
+### 스키마 (2026-06)
+```sql
+chat_his (idx, uid, tid, st_chat, at_crtchat, at_update, paid_point)
+```
+- API `room_id` = `chat_his.idx`
+- 상대 프로필은 AccountDB에서 조회 (chat_his에 캐시 없음)
+- 쌍 조회: `(uid=? AND tid=?) OR (uid=? AND tid=?)`
+- `at_update`: 마지막 채팅 활동 시각 (메시지 전송 시 `TouchDMRoomActivity`, 나가기/재참여 시 `UpdateDMRoomStatus`). 목록 정렬 3순위 fallback (`ORDER BY at_update DESC`는 `GetDMRoomsByUser` 레거시용)
 
-### 신규 함수
-- `CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp)`: DM 방 생성 (room_id는 uid 정렬로 자동 생성)
-- `GetDMRoom(ridx int64)`: idx 기준 단건 조회
-- `GetDMRoomByPair(uid, tid uint64)`: 사용자 쌍 **양방향** 조회 (`(uid=A AND tid=B) OR (uid=B AND tid=A)`)
-- `GetDMRoomByRid(rid string)`: room_id 문자열 기준 단건 조회
-- `GetDMRoomsByUser(uid uint64, page int)`: 사용자 참여 DM 방 목록 조회 (uid/tid UNION, 최신 업데이트순, pageSize=10). 반환 `(rooms, totalCount, error)` — `totalCount`는 COUNT 쿼리 전체 건수
-- `SoftDeleteDMRoom(ridx int64)`: idx 기준 soft delete(`st_chat=0`)
-- `SoftDeleteDMRoomsByUser(uid, tid uint64)`: room_id 기준 soft delete
-- `ActivateDMRoomByPair(uid, tid uint64)`: 기존 soft-deleted DM 방 **양방향** 재활성화(`st_chat=1`)
-- `UdtDMPaid(ridx int64, point float64)`: DM 방 paid_point 누적 업데이트
+### st_chat 상태
+| 값 | 의미 |
+|----|------|
+| 0 | 양쪽 나감 |
+| 1 | 양쪽 참여 |
+| 2 | uid만 나감 |
+| 3 | tid만 나감 |
 
-### 구현 규칙
-- `room_id` 생성 시 `min(uid,tid)_max(uid,tid)` 정규화 적용 (`getRoomID`)
-- 삭제는 hard delete가 아닌 `st_chat` 기반 soft delete 사용
-- **양방향 조회**: `GetDMRoomByPair`, `ActivateDMRoomByPair`는 A→B, B→A 양방향 검색 지원
+### 함수
+- `CreateDMRoom`, `GetDMRoom`, `GetDMRoomByPair`, `GetDMRoomByRid`, `GetAllDMRoomsByUser`, `GetDMRoomsByUser`
+- `TouchDMRoomActivity` — 메시지 저장 후 `at_update`만 갱신 (st_chat 유지)
+- `LeaveDMRoom`, `ActivateDMRoomSide`, `UpdateDMRoomStatus`
+- `SoftDeleteDMRoom`, `SoftDeleteDMRoomsByUser`, `ActivateDMRoomByPair`
+- `UdtDMPaid` — paid_point 컬럼 유지
+- 헬퍼: `IsUserInDMRoom`, `IsPartnerLeft`, `PartnerUIDOfRoom`, `PartnerLeftMsg`
+
+### 목록 필터
+- uid: `st_chat IN (1, 3)` / tid: `st_chat IN (1, 2)`
+
+---
 
 CREATE TABLE `app_push` (
   `idx` int NOT NULL AUTO_INCREMENT,
@@ -202,7 +213,7 @@ CREATE TABLE `inmsg_push` (
 
 ---
 *Created: 2025-09-15*
-*Last Updated: 2025-11-05*
+*Last Updated: 2026-06-11*
 *File Location: /home/jino/go/src/ms-gateway/models/history_db.go*
 
 ---

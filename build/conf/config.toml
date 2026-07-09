@@ -73,7 +73,7 @@ name = "rdb"
 # duration : seconds
 [[works]] #배열구조, jobs []job
 name = "msg_delete"
-desc = "Delete Redis messages older than 24 hours every hour"
+desc = "Delete Redis messages older than 3 days every hour"
 execute = "0"
 start = 1
 duration = 3600

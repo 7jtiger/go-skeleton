@@ -10,6 +10,10 @@ func StrToInt(s string) (int, error) {
 }
 
 func CalcBirth2Age(birth string) int {
+	birth = Time2StrDay(birth)
+	if birth == "" {
+		return 0
+	}
 	birthDate, err := time.Parse("2006-01-02", birth)
 	if err != nil {
 		return 0
@@ -30,10 +34,18 @@ func CalcBirth2Age(birth string) int {
 }
 
 func Time2StrDay(birth string) string {
-	// birth format: "1990-01-01T00:00:00Z"
-	birthDate, err := time.Parse("2006-01-02", birth[:10])
-	if err != nil {
+	if birth == "" {
 		return ""
 	}
-	return birthDate.Format("2006-01-02")
+	if len(birth) >= 10 {
+		if birthDate, err := time.Parse("2006-01-02", birth[:10]); err == nil {
+			return birthDate.Format("2006-01-02")
+		}
+	}
+	if len(birth) == 8 {
+		if birthDate, err := time.Parse("20060102", birth); err == nil {
+			return birthDate.Format("2006-01-02")
+		}
+	}
+	return ""
 }

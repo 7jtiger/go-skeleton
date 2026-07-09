@@ -15,7 +15,7 @@
 - `close()`: Cleanup function that stops the ticker for a specific scheduled task item
 - `task()`: Task dispatcher that executes specific functions based on task name (depositcheck, makeexceldaily, 1min, etc.)
 - `tmp()`: Placeholder function for temporary task execution (currently empty implementation)
-- `MsgWorker()`: `msg_remove` 작업에서 Redis DM 메시지 정리 함수(`PruneExpiredRoomMessages(24h)`)를 호출
+- `MsgWorker()` / `MsgDeleter()`: `msg_remove`/`msg_delete` 작업에서 Redis DM 메시지 정리(`ExpiredMsg(3일)`) 호출
 - `Stop()`: `sync.Once` + `WaitGroup` 기반 idempotent 종료 — `context cancel` → job goroutine 종료 대기 → 각 job `ticker/quit` 1회만 `close` (`runJob` defer에서 중복 close 하지 않음)
 
 ---
@@ -59,6 +59,7 @@
 
 ## Key Features
 - **Flexible Scheduling**: Supports daily, hourly, 5-minute interval, and custom second-based scheduling
+- **Interval Rule**: `start`는 첫 실행 시점 정렬용, `duration`(초)는 그 이후 반복 주기(`time.Duration(duration) * time.Second`)
 - **Concurrent Execution**: Uses goroutines for non-blocking task execution
 - **Configuration-Driven**: Tasks are loaded from configuration files with execute flags (run/exe/o for immediate, cron for cron-style)
 - **Database Integration**: Connected to AccountDB for data operations
@@ -72,7 +73,7 @@
 - **makeexceldaily**: Daily Excel report generation
 - **1min**: One-minute interval tasks
 - **Custom tasks**: Flexible task naming and execution
-- **msg_remove**: `chat:rooms:*:msg` 키를 스캔하여 24시간 초과 메시지 삭제
+- **msg_remove** / **msg_delete**: `chat:rooms:*:msg` 키를 스캔하여 **3일** 초과 메시지 삭제 (`ExpiredMsg`)
 
 ---
 *Created: 2025-09-15*

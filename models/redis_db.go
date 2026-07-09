@@ -726,19 +726,117 @@ func dmUnreadTSKey(uid uint64, roomID int64) string {
 	return dmUnreadKey(uid, roomID) + ":ts"
 }
 
-const dmUnreadKeyTTL = 30 * 24 * time.Hour
+func dmReadKey(uid uint64, roomID int64) string {
+	return fmt.Sprintf("DM:READ:%d:%d", uid, roomID)
+}
+
+// DM 메시지·읽음·미읽음 보관 기간 (3일)
+const (
+	dmMsgRetention = 3 * 24 * time.Hour
+	dmReadKeyTTL   = 3 * 24 * time.Hour
+	dmUnreadKeyTTL = 3 * 24 * time.Hour
+)
 
 func dmOnlineKey(uid uint64) string {
 	return fmt.Sprintf("DM:ONLINE:%d", uid)
 }
 
-// IncrUnread 읽지 않은 메시지 수 증가 (Lua: 카운터·companion 30일 TTL 매 호출 갱신)
+// IncrUnread 읽지 않은 메시지 수 증가 (Lua: 카운터·companion TTL 매 호출 갱신)
 func (r *RedisDB) IncrUnread(uid uint64, roomID int64) (int64, error) {
 	counterKey := dmUnreadKey(uid, roomID)
 	tsKey := dmUnreadTSKey(uid, roomID)
 	ttlSec := int64(dmUnreadKeyTTL.Seconds())
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	return incrUnreadLua.Run(r.ctx, r.client, []string{counterKey, tsKey}, ttlSec, ts).Int64()
+}
+
+// GetLastReadMid 사용자의 방별 마지막 읽은 mid 조회
+func (r *RedisDB) GetLastReadMid(uid uint64, roomID int64) (string, error) {
+	val, err := r.client.Get(r.ctx, dmReadKey(uid, roomID)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", nil
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+// SetLastReadMid mid 기준 읽음 워터마크 전진만 허용. TTL 3일.
+// updated=true 이면 mid가 새로 저장(또는 전진)됨.
+func (r *RedisDB) SetLastReadMid(uid uint64, roomID int64, mid string) (bool, error) {
+	if mid == "" {
+		return false, nil
+	}
+
+	oldMid, err := r.GetLastReadMid(uid, roomID)
+	if err != nil {
+		return false, err
+	}
+	if oldMid == mid {
+		// TTL 연장
+		_ = r.client.Expire(r.ctx, dmReadKey(uid, roomID), dmReadKeyTTL).Err()
+		return false, nil
+	}
+	if oldMid != "" {
+		newer, cmpErr := r.isNewerMid(strconv.FormatInt(roomID, 10), mid, oldMid)
+		if cmpErr != nil {
+			return false, cmpErr
+		}
+		if !newer {
+			return false, nil
+		}
+	}
+
+	if err := r.client.Set(r.ctx, dmReadKey(uid, roomID), mid, dmReadKeyTTL).Err(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// isNewerMid LIST index 기준 newMid가 oldMid보다 최신인지 판별.
+// new만 있으면 true, old만 있으면 false, 둘 다 없으면 timestamp/lex 없이 true(클라 주장 수용).
+func (r *RedisDB) isNewerMid(roomID, newMid, oldMid string) (bool, error) {
+	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+	total, err := r.client.LLen(r.ctx, listKey).Result()
+	if err != nil {
+		return false, err
+	}
+	newIdx, newOk, err := r.findMessageListIndex(listKey, newMid, total)
+	if err != nil {
+		return false, err
+	}
+	oldIdx, oldOk, err := r.findMessageListIndex(listKey, oldMid, total)
+	if err != nil {
+		return false, err
+	}
+	switch {
+	case newOk && oldOk:
+		return newIdx > oldIdx, nil
+	case newOk && !oldOk:
+		return true, nil
+	case !newOk && oldOk:
+		return false, nil
+	default:
+		return true, nil
+	}
+}
+
+// GetLatestMessageID 방 최신 메시지 mid (없으면 빈 문자열)
+func (r *RedisDB) GetLatestMessageID(roomID string) (string, error) {
+	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+	raw, err := r.client.LIndex(r.ctx, listKey, -1).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", nil
+		}
+		return "", err
+	}
+	var msg ChatMessageData
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		return "", err
+	}
+	return msg.ID, nil
 }
 
 // GetUnread 읽지 않은 메시지 수 조회
@@ -758,11 +856,19 @@ func (r *RedisDB) ResetUnread(uid uint64, roomID int64) error {
 	return r.client.Del(r.ctx, dmUnreadKey(uid, roomID), dmUnreadTSKey(uid, roomID)).Err()
 }
 
-// GetAllUnreadForUser 사용자의 전체 unread 맵 조회
-func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
+// UnreadInfo 방별 미읽음 개수 및 마지막 수신 시각(IncrUnread :ts)
+type UnreadInfo struct {
+	Count      int64
+	LastRecvAt int64 // Unix 초, 없으면 0
+}
+
+// GetAllUnreadInfoForUser 사용자 전체 unread + 마지막 수신 시각(:ts) 맵 (roomID string)
+func (r *RedisDB) GetAllUnreadInfoForUser(uid uint64) (map[string]UnreadInfo, error) {
 	pattern := fmt.Sprintf("DM:UNREAD:%d:*", uid)
 	cursor := uint64(0)
-	result := make(map[string]int64)
+	result := make(map[string]UnreadInfo)
+	prefix := fmt.Sprintf("DM:UNREAD:%d:", uid)
+	tsSuffix := ":ts"
 
 	for {
 		keys, nextCursor, err := r.client.Scan(r.ctx, cursor, pattern, 200).Result()
@@ -771,9 +877,11 @@ func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
 		}
 
 		for _, key := range keys {
-			if strings.HasSuffix(key, ":ts") {
+			roomPart := strings.TrimPrefix(key, prefix)
+			if roomPart == "" {
 				continue
 			}
+
 			val, getErr := r.client.Get(r.ctx, key).Result()
 			if getErr != nil {
 				if errors.Is(getErr, redis.Nil) {
@@ -782,16 +890,25 @@ func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
 				return nil, getErr
 			}
 
-			cnt, parseErr := strconv.ParseInt(val, 10, 64)
+			num, parseErr := strconv.ParseInt(val, 10, 64)
 			if parseErr != nil {
 				continue
 			}
 
-			prefix := fmt.Sprintf("DM:UNREAD:%d:", uid)
-			roomID := strings.TrimPrefix(key, prefix)
-			if roomID != "" {
-				result[roomID] = cnt
+			if strings.HasSuffix(roomPart, tsSuffix) {
+				roomID := strings.TrimSuffix(roomPart, tsSuffix)
+				if roomID == "" {
+					continue
+				}
+				info := result[roomID]
+				info.LastRecvAt = num
+				result[roomID] = info
+				continue
 			}
+
+			info := result[roomPart]
+			info.Count = num
+			result[roomPart] = info
 		}
 
 		cursor = nextCursor
@@ -800,6 +917,21 @@ func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
 		}
 	}
 
+	return result, nil
+}
+
+// GetAllUnreadForUser 사용자의 전체 unread 맵 조회
+func (r *RedisDB) GetAllUnreadForUser(uid uint64) (map[string]int64, error) {
+	infoMap, err := r.GetAllUnreadInfoForUser(uid)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int64, len(infoMap))
+	for roomID, info := range infoMap {
+		if info.Count > 0 {
+			result[roomID] = info.Count
+		}
+	}
 	return result, nil
 }
 
@@ -991,12 +1123,13 @@ func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 // SaveChatMessage 채팅 메시지 저장
 // SaveChatMessage HSet을 사용하여 채팅 메시지 저장
 func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
-	// messageID := utils.GenUuid()
-	// messageID, err := utils.Gen6DigitCode()
-	// if err != nil {
-	// 	return err
-	// }
-	// now := time.Now()
+	if msg.MsgID == "" {
+		ts := msg.Timestamp
+		if ts == 0 {
+			ts = time.Now().Unix()
+		}
+		msg.MsgID = fmt.Sprintf("sys-%d", ts)
+	}
 
 	message := ChatMessageData{
 		ID:        msg.MsgID,
@@ -1023,8 +1156,8 @@ func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 	// 1. 리스트에 시간 순서대로 메시지 추가 (최신 메시지가 뒤로)
 	pipe.RPush(r.ctx, listKey, messageJSON)
 
-	// 2. 리스트에 TTL 24시간(86400초) 설정 (기존에 값이 있으면 갱신만)
-	pipe.Expire(r.ctx, listKey, 24*time.Hour)
+	// 2. 리스트에 TTL 3일 설정 (새 메시지마다 갱신)
+	pipe.Expire(r.ctx, listKey, dmMsgRetention)
 
 	_, err = pipe.Exec(r.ctx)
 	return err
@@ -1168,11 +1301,11 @@ func (r *RedisDB) GetChatMessagesByCursor(roomID, cursor string, limit int) (int
 	return total, messages, nextCursor, hasMore, nil
 }
 
-// PruneExpiredRoomMessages 채팅방별 만료 메시지 정리
+// ExpiredMsg 채팅방별 만료 메시지 정리
 // 정책: chat:rooms:{roomID}:msg LIST에서 ttl 기준 이전 메시지 삭제
-func (r *RedisDB) Expired24hMsg(ttl time.Duration) (*ChatPruneResult, error) {
+func (r *RedisDB) ExpiredMsg(ttl time.Duration) (*ChatPruneResult, error) {
 	if ttl <= 0 {
-		return nil, fmt.Errorf("ttl must be greater than zero")
+		ttl = dmMsgRetention
 	}
 
 	cutoff := time.Now().Add(-ttl)
@@ -1238,6 +1371,11 @@ func (r *RedisDB) Expired24hMsg(ttl time.Duration) (*ChatPruneResult, error) {
 	}
 
 	return result, nil
+}
+
+// Expired24hMsg는 ExpiredMsg의 별칭 (하위 호환)
+func (r *RedisDB) Expired24hMsg(ttl time.Duration) (*ChatPruneResult, error) {
+	return r.ExpiredMsg(ttl)
 }
 
 /* ActivateChatRoom 채팅방 활성화

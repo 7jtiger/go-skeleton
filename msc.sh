@@ -8,4 +8,5 @@ rsync -av --delete \
 	--exclude 'bak/'	\
 	--exclude 'build/'	\
 	--exclude 'logs/'	\
+	--exclude 'web/'	\
 /home/jino/go/src/ms-gateway/ /mnt/d/sharp/ms-gateway/

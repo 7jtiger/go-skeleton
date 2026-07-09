@@ -2,8 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -25,21 +23,117 @@ type HistoryDB struct {
 	quitWait sync.WaitGroup
 }
 
-// DMRoomRow dm_room 정보 테이블 로우 구조체
+// DMRoomRow chat_his 테이블 로우 (API room_id = idx)
 type DMRoomRow struct {
-	Idx       int64     `json:"idx"`     //roomID
-	RoomID    string    `json:"room_id"` //roomID
+	Idx       int64     `json:"idx"`
 	UID       uint64    `json:"uid"`
 	TID       uint64    `json:"tid"`
-	TNick     string    `json:"tnick"`
-	TArea     string    `json:"tarea"`
-	TAge      int       `json:"tage"`
-	TGender   int       `json:"tgender"`
-	TThumbUrl string    `json:"tthumb_url"`
 	STChat    int       `json:"st_chat"`
 	AtCrtCHAT time.Time `json:"at_crtchat"`
-	PaidPoint float64   `json:"paid_point"`
 	AtUpdate  time.Time `json:"at_update"`
+	PaidPoint float64   `json:"paid_point"`
+}
+
+// DM 채팅방 참여 상태 (chat_his.st_chat)
+const (
+	STChatBothLeft = 0
+	STChatBothIn   = 1
+	STChatUIDLeft  = 2
+	STChatTIDLeft  = 3
+)
+
+const PartnerLeftMsg = "상대방이 대화를 종료하였습니다."
+
+const dmRoomSelectCols = "idx, uid, tid, st_chat, at_crtchat, at_update, paid_point"
+
+// IsUserInDMRoom viewer가 목록/방에 노출될 수 있는지
+func IsUserInDMRoom(st int, uid, tid, viewer uint64) bool {
+	switch st {
+	case STChatBothLeft:
+		return false
+	case STChatBothIn:
+		return viewer == uid || viewer == tid
+	case STChatUIDLeft:
+		return viewer == tid
+	case STChatTIDLeft:
+		return viewer == uid
+	default:
+		return false
+	}
+}
+
+// IsPartnerLeft viewer 기준 상대방이 나간 상태인지
+func IsPartnerLeft(st int, uid, tid, viewer uint64) bool {
+	if viewer == uid {
+		return st == STChatTIDLeft
+	}
+	if viewer == tid {
+		return st == STChatUIDLeft
+	}
+	return false
+}
+
+// PartnerUIDOfRoom viewer의 상대 UID
+func PartnerUIDOfRoom(room *DMRoomRow, viewer uint64) uint64 {
+	if viewer == room.UID {
+		return room.TID
+	}
+	return room.UID
+}
+
+func nextSTChatOnLeave(st int, leaverUID uint64, room *DMRoomRow) (int, error) {
+	if leaverUID == room.UID {
+		switch st {
+		case STChatBothIn:
+			return STChatUIDLeft, nil
+		case STChatTIDLeft:
+			return STChatBothLeft, nil
+		case STChatUIDLeft, STChatBothLeft:
+			return st, nil
+		}
+	} else if leaverUID == room.TID {
+		switch st {
+		case STChatBothIn:
+			return STChatTIDLeft, nil
+		case STChatUIDLeft:
+			return STChatBothLeft, nil
+		case STChatTIDLeft, STChatBothLeft:
+			return st, nil
+		}
+	}
+	return 0, fmt.Errorf("user %d is not a participant of room %d", leaverUID, room.Idx)
+}
+
+func nextSTChatOnRejoin(st int, joinerUID uint64, room *DMRoomRow) int {
+	if joinerUID == room.UID {
+		switch st {
+		case STChatBothLeft:
+			return STChatTIDLeft
+		case STChatUIDLeft:
+			return STChatBothIn
+		default:
+			return st
+		}
+	}
+	if joinerUID == room.TID {
+		switch st {
+		case STChatBothLeft:
+			return STChatUIDLeft
+		case STChatTIDLeft:
+			return STChatBothIn
+		default:
+			return st
+		}
+	}
+	return st
+}
+
+func scanDMRoomRow(row *sql.Row) (*DMRoomRow, error) {
+	var dm DMRoomRow
+	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.STChat, &dm.AtCrtCHAT, &dm.AtUpdate, &dm.PaidPoint); err != nil {
+		return nil, err
+	}
+	return &dm, nil
 }
 
 /*
@@ -47,14 +141,8 @@ CREATE TABLE `chat_his` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `uid` bigint unsigned NOT NULL,
   `tid` bigint unsigned NOT NULL,
-  `tnick` varchar(45) DEFAULT NULL,
-  `tarea` varchar(45) DEFAULT NULL,
-  `tage` int DEFAULT NULL,
-  `tgender` tinyint(1) DEFAULT NULL,
-  `tthumb_url` varchar(300) DEFAULT NULL,
   `st_chat` tinyint(1) DEFAULT NULL,
   `at_crtchat` datetime DEFAULT NULL,
-  `paid_point` double DEFAULT NULL,
   `at_update` datetime DEFAULT NULL,
   PRIMARY KEY (`idx`,`uid`,`tid`),
   UNIQUE KEY `idx_UNIQUE` (`idx`),
@@ -274,53 +362,12 @@ func (p *HistoryDB) GetNewMsgCount(uid uint64) (int, error) {
 	return count, nil
 }
 
-/*
-	Idx       int       `json:"idx"` //roomID
-	UID       uint64    `json:"uid"`	// myUID
-	TID       uint64    `json:"tid"`	// targetUID
-	TNick     string    `json:"tnick"`	// targetNick
-	TArea     string    `json:"tarea"`	// targetArea
-	TAge    int       `json:"tage"`	// targetAgent
-	TGender   int       `json:"tgender"`
-	TThumbUrl string    `json:"tthumb_url"`
-	STChat    int       `json:"st_chat"`	// status chat(1: active, 0: inactive)
-	AtCrtCHAT time.Time `json:"at_crtchat"`
-	PaidPoint float64   `json:"paid_point"`	// paid point
-	AtUpdate time.Time `json:"at_update"`	// update time
-
-*/
-
-func getRoomID(uid, tid uint64) string {
-	if uid < tid {
-		return fmt.Sprintf("%d_%d", uid, tid)
-	}
-
-	return fmt.Sprintf("%d_%d", tid, uid)
-}
-
-func getIdByRoomID(roomID string) (uint64, uint64) {
-	parts := strings.Split(roomID, "_")
-	if len(parts) != 2 {
-		return 0, 0
-	}
-
-	uid, err := strconv.ParseUint(parts[0], 10, 64)
-	if err != nil {
-		return 0, 0
-	}
-	tid, err := strconv.ParseUint(parts[1], 10, 64)
-	if err != nil {
-		return 0, 0
-	}
-	return uid, tid
-}
-
 // CreateDMRoom dm_room 생성
 func (p *HistoryDB) CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp) (int64, error) {
-	roomID := getRoomID(uid, tUser.Uid)
+	now := time.Now()
 	res, err := p.conndb.Exec(
-		"INSERT INTO chat_his (uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		uid, tUser.Uid, roomID, tUser.Nick, tUser.Area, tUser.Age, tUser.Gender, tUser.ThumbPic, 1, time.Now(), 0, time.Now(),
+		"INSERT INTO chat_his (uid, tid, st_chat, at_crtchat, at_update, paid_point) VALUES (?, ?, ?, ?, ?, ?)",
+		uid, tUser.Uid, STChatBothIn, now, now, 0,
 	)
 	if err != nil {
 		return 0, err
@@ -333,195 +380,199 @@ func (p *HistoryDB) CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp) (int64, er
 	return lastID, nil
 }
 
-// GetDMRoom room_id 기준 조회
+// GetDMRoom idx 기준 조회
 func (p *HistoryDB) GetDMRoom(ridx int64) (*DMRoomRow, error) {
 	row := p.conndb.QueryRow(
-		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE idx = ? LIMIT 1", ridx,
+		"SELECT "+dmRoomSelectCols+" FROM chat_his WHERE idx = ? LIMIT 1", ridx,
 	)
-	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
-		return nil, err
-	}
-	return &dm, nil
+	return scanDMRoomRow(row)
 }
 
-/*
-// GetDMRoom room_id 기준 조회
-func (p *HistoryDB) GetDMRoomByRid(rid string) (*DMRoomRow, error) {
-	row := p.conndb.QueryRow(
-		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1", rid,
-	)
-	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
-		return nil, err
-	}
-	return &dm, nil
-}
-*/
-// GetDMRoom By uid Pair 기준 조회
+// GetDMRoomByPair uid/tid 쌍 양방향 조회
 func (p *HistoryDB) GetDMRoomByPair(uid, tid uint64) (*DMRoomRow, error) {
-	rid := getRoomID(uid, tid)
 	row := p.conndb.QueryRow(
-		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1",
-		rid,
+		"SELECT "+dmRoomSelectCols+" FROM chat_his WHERE (uid = ? AND tid = ?) OR (uid = ? AND tid = ?) LIMIT 1",
+		uid, tid, tid, uid,
 	)
-	if row.Err() != nil {
-		return nil, row.Err()
-	}
-
-	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
-		return nil, err
-	}
-
-	return &dm, nil
+	return scanDMRoomRow(row)
 }
 
-// GetDMRoom By uid Pair 기준 조회
+// GetDMRoomByRid idx 문자열 기준 조회 (API room_id)
 func (p *HistoryDB) GetDMRoomByRid(rid string) (*DMRoomRow, error) {
 	row := p.conndb.QueryRow(
-		"SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE room_id = ? LIMIT 1",
-		rid,
+		"SELECT "+dmRoomSelectCols+" FROM chat_his WHERE idx = ? LIMIT 1", rid,
 	)
-	if row.Err() != nil {
-		return nil, row.Err()
-	}
+	return scanDMRoomRow(row)
+}
 
-	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
+// TouchDMRoomActivity 마지막 채팅 활동 시각 갱신 (st_chat 변경 없음)
+func (p *HistoryDB) TouchDMRoomActivity(ridx int64, at time.Time) error {
+	_, err := p.conndb.Exec("UPDATE chat_his SET at_update = ? WHERE idx = ?", at, ridx)
+	return err
+}
+
+// UpdateDMRoomStatus st_chat 갱신
+func (p *HistoryDB) UpdateDMRoomStatus(ridx int64, st int) error {
+	_, err := p.conndb.Exec("UPDATE chat_his SET st_chat = ?, at_update = ? WHERE idx = ?", st, time.Now(), ridx)
+	return err
+}
+
+// LeaveDMRoom 사용자 1명 나가기 (st_chat 전이)
+func (p *HistoryDB) LeaveDMRoom(ridx int64, leaverUID uint64) (*DMRoomRow, error) {
+	room, err := p.GetDMRoom(ridx)
+	if err != nil {
 		return nil, err
 	}
-
-	return &dm, nil
+	newSt, err := nextSTChatOnLeave(room.STChat, leaverUID, room)
+	if err != nil {
+		return nil, err
+	}
+	if newSt != room.STChat {
+		if err := p.UpdateDMRoomStatus(ridx, newSt); err != nil {
+			return nil, err
+		}
+		room.STChat = newSt
+		room.AtUpdate = time.Now()
+	}
+	return room, nil
 }
 
+// ActivateDMRoomSide joiner만 재참여 (mkroom/ensureDMRoom)
+func (p *HistoryDB) ActivateDMRoomSide(room *DMRoomRow, joinerUID uint64) (*DMRoomRow, error) {
+	newSt := nextSTChatOnRejoin(room.STChat, joinerUID, room)
+	if newSt == room.STChat {
+		return room, nil
+	}
+	if err := p.UpdateDMRoomStatus(room.Idx, newSt); err != nil {
+		return nil, err
+	}
+	room.STChat = newSt
+	room.AtUpdate = time.Now()
+	return room, nil
+}
+
+// SoftDeleteDMRoom 방 전체 비활성 (양쪽 나감)
 func (p *HistoryDB) SoftDeleteDMRoom(ridx int64) error {
-	row := p.conndb.QueryRow(
-		"UPDATE chat_his SET st_chat = 0 WHERE idx = ?", ridx,
-	)
-
-	if row.Err() != nil {
-		return row.Err()
-	}
-
-	return nil
+	return p.UpdateDMRoomStatus(ridx, STChatBothLeft)
 }
 
-// SoftDeleteDMRoomsByUser 사용자 기준 soft delete
+// SoftDeleteDMRoomsByUser 사용자 쌍 기준 양쪽 나감
 func (p *HistoryDB) SoftDeleteDMRoomsByUser(uid, tid uint64) error {
-	rid := getRoomID(uid, tid)
-	row := p.conndb.QueryRow(
-		"UPDATE chat_his SET st_chat = 0 WHERE room_id = ?", rid,
-	)
-
-	if row.Err() != nil {
-		return row.Err()
+	room, err := p.GetDMRoomByPair(uid, tid)
+	if err != nil {
+		return err
 	}
-
-	return nil
+	return p.UpdateDMRoomStatus(room.Idx, STChatBothLeft)
 }
 
-// ActivateDMRoomByPair 사용자 쌍 DM 방 재활성화
+// ActivateDMRoomByPair joiner(uid)만 재참여 — ensureDMRoom 호환
 func (p *HistoryDB) ActivateDMRoomByPair(uid, tid uint64) error {
-	rid := getRoomID(uid, tid)
-	_, err := p.conndb.Exec("UPDATE chat_his SET st_chat = 1 WHERE room_id = ?", rid)
+	room, err := p.GetDMRoomByPair(uid, tid)
+	if err != nil {
+		return err
+	}
+	_, err = p.ActivateDMRoomSide(room, uid)
 	return err
 }
 
 func (p *HistoryDB) UdtDMPaid(ridx int64, point float64) error {
-	row := p.conndb.QueryRow(
+	_, err := p.conndb.Exec(
 		"UPDATE chat_his SET paid_point = paid_point + ? WHERE idx = ?",
 		point, ridx,
 	)
-
-	if row.Err() != nil {
-		return row.Err()
-	}
-
-	return nil
+	return err
 }
 
-/* // GetDMRoomByPair 상대방 uid로 조회
-func (p *HistoryDB) GetDMRoomByUID(tid uint64) (*DMRoomRow, error) {
-	row := p.conndb.QueryRow(
-		"SELECT idx, uid, tid, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update FROM chat_his WHERE tid = ? LIMIT 1",
-		tid,
-	)
-	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.TNick, &dm.TArea, &dm.TAge, &dm.TGender, &dm.TThumbUrl, &dm.STChat, &dm.AtCrtCHAT, &dm.PaidPoint, &dm.AtUpdate); err != nil {
-		return nil, err
-	}
-	return &dm, nil
-}
-*/
-// GetDMRoomsByUser 사용자 기준 DM 방 목록 조회
-// 페이징 기능 추가와 쿼리 오류 수정
+const DMRoomListPageSize = 10
 
-// GetDMRoomsByUser retrieves a paginated list of DM rooms for the given user (as sender or receiver)
-// Note: union 서브쿼리에서 paging(ORDER BY, LIMIT)이 제대로 동작하지 않아 OUTER 쿼리에서 정렬 및 페이징 적용 필요
-func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, error) {
-	const pageSize = 10
-	offset := (page - 1) * pageSize
-	if offset < 0 {
-		offset = 0
-	}
-
-	// UNION 시 LIMIT/OFFSET을 각 서브쿼리에 개별 적용하면 전체에 정상 동작하지 않음
-	// 따라서 전체 union 한 뒤 OUTER 쿼리에서 order/limit/offset 처리:
-	// (SELECT ... WHERE st_chat=1 AND uid=?) UNION (SELECT ... WHERE st_chat=1 AND tid=?) -> as T
-	// SELECT * FROM ( ... ) as T ORDER BY at_update DESC LIMIT ? OFFSET ?
-
-	// 먼저 전체 row 갯수를 구한다.
+func (p *HistoryDB) countDMRoomsByUser(uid uint64) (int, error) {
 	countQuery := `
 		SELECT COUNT(*) FROM (
-			SELECT 1
-			FROM chat_his WHERE st_chat = 1 AND uid = ?
+			SELECT 1 FROM chat_his WHERE uid = ? AND st_chat IN (1, 3)
 			UNION
-			SELECT 1
-			FROM chat_his WHERE st_chat = 1 AND tid = ?
+			SELECT 1 FROM chat_his WHERE tid = ? AND st_chat IN (1, 2)
 		) AS T`
 	var totalCount int
 	err := p.conndb.QueryRow(countQuery, uid, uid).Scan(&totalCount)
+	return totalCount, err
+}
+
+func (p *HistoryDB) scanDMRoomRows(rows *sql.Rows) ([]DMRoomRow, error) {
+	rooms := make([]DMRoomRow, 0)
+	for rows.Next() {
+		var dm DMRoomRow
+		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.STChat, &dm.AtCrtCHAT, &dm.AtUpdate, &dm.PaidPoint); err != nil {
+			return nil, err
+		}
+		rooms = append(rooms, dm)
+	}
+	return rooms, nil
+}
+
+// GetAllDMRoomsByUser 사용자 참여 DM 방 전체 조회 (정렬·페이징은 호출측)
+func (p *HistoryDB) GetAllDMRoomsByUser(uid uint64) ([]DMRoomRow, int, error) {
+	totalCount, err := p.countDMRoomsByUser(uid)
 	if err != nil {
 		return nil, 0, err
 	}
-	/*
-		query := `
-			SELECT * FROM (
-				SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
-				FROM chat_his WHERE st_chat = 1 AND uid = ?
-				UNION
-				SELECT idx, uid, tid, room_id, tnick, tarea, tage, tgender, tthumb_url, st_chat, at_crtchat, paid_point, at_update
-				FROM chat_his WHERE st_chat = 1 AND tid = ?
-			) AS T
-			ORDER BY at_update DESC
-			LIMIT ? OFFSET ?`
-	*/
+	if totalCount == 0 {
+		return []DMRoomRow{}, 0, nil
+	}
 
 	query := `
 		SELECT * FROM (
-			SELECT idx, uid, tid, room_id, at_crtchat, at_update
-			FROM chat_his WHERE st_chat = 1 AND uid = ?
+			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			FROM chat_his WHERE uid = ? AND st_chat IN (1, 3)
 			UNION
-			SELECT idx, uid, tid, room_id, at_crtchat, at_update
-			FROM chat_his WHERE st_chat = 1 AND tid = ?
-		) AS T
-		ORDER BY at_update DESC
-		LIMIT ? OFFSET ?`
+			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			FROM chat_his WHERE tid = ? AND st_chat IN (1, 2)
+		) AS T`
 
-	rows, err := p.conndb.Query(query, uid, uid, pageSize, offset)
+	rows, err := p.conndb.Query(query, uid, uid)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	rooms := make([]DMRoomRow, 0)
-	for rows.Next() {
-		var dm DMRoomRow
-		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.RoomID, &dm.AtCrtCHAT, &dm.AtUpdate); err != nil {
-			return nil, 0, err
-		}
-		rooms = append(rooms, dm)
+	rooms, err := p.scanDMRoomRows(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return rooms, totalCount, nil
+}
+
+// GetDMRoomsByUser 사용자 기준 DM 방 목록 조회 (at_update DESC, DB 페이징 — 레거시/테스트용)
+func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, error) {
+	offset := (page - 1) * DMRoomListPageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	totalCount, err := p.countDMRoomsByUser(uid)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT * FROM (
+			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			FROM chat_his WHERE uid = ? AND st_chat IN (1, 3)
+			UNION
+			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			FROM chat_his WHERE tid = ? AND st_chat IN (1, 2)
+		) AS T
+		ORDER BY at_update DESC
+		LIMIT ? OFFSET ?`
+
+	rows, err := p.conndb.Query(query, uid, uid, DMRoomListPageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	rooms, err := p.scanDMRoomRows(rows)
+	if err != nil {
+		return nil, 0, err
 	}
 	return &rooms, totalCount, nil
 }

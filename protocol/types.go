@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -88,18 +89,19 @@ type PartnerInfo struct {
 }
 
 type DMRoomResp struct {
-	RoomID   int64        `json:"rid"`
-	Partner  *PartnerInfo `json:"partner"`
-	LastMsg  string       `json:"last_msg"`
-	Total    int          `json:"total"`
-	Unread   int          `json:"unread"`
-	AtCreate string       `json:"at_crtchat"`
-	AtUpdate string       `json:"at_update"`
+	RoomID      int64        `json:"rid"`
+	Partner     *PartnerInfo `json:"partner"`
+	LastMsg     string       `json:"last_msg"`
+	PartnerLeft bool         `json:"partner_left"`
+	Total       int          `json:"total"`
+	Unread      int          `json:"unread"`
+	AtCreate    string       `json:"at_crtchat"`
+	AtUpdate    string       `json:"at_update"`
 }
 
 // ChatMessage 텍스트 채팅 메시지 구조체
 type ChatMessage struct {
-	Type      string       `json:"type"`               // text-message, typing, read-receipt, call-*
+	Type      string       `json:"type"`               // text-message, typing, read-receipt, partner-left, system-message, call-*
 	From      string       `json:"from"`               // 발신자 ID
 	To        string       `json:"to"`                 // 수신자 ID
 	RoomID    string       `json:"roomId"`             // 채팅방 ID
@@ -125,6 +127,21 @@ type CallResponse struct {
 	To       string `json:"to"`       // 요청자 ID
 	RoomID   string `json:"roomId"`   // 채팅방 ID
 	Accepted bool   `json:"accepted"` // 수락 여부
+}
+
+type CutoutUserItem struct {
+	Idx      int       `json:"idx"`
+	Tid      uint64    `json:"tid"`
+	Stat     int       `json:"stat"`
+	Tnick    string    `json:"tnick"`
+	Tgen     int       `json:"tgen"`
+	Tbirth   string    `json:"tbirth"`
+	Age      int       `json:"age"`
+	TspIntro string    `json:"tsp_intro"`
+	Tarea    int       `json:"tarea"`
+	TthmbPic string    `json:"tthmb_pic"`
+	AtCreate time.Time `json:"at_crt"`
+	AtUpdate time.Time `json:"at_upd"`
 }
 
 func CvtParamAtoi(param string, ty int) int {

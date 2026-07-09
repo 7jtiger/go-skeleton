@@ -381,6 +381,7 @@ type StrComment struct {
 - `story_like`: like/unlike ledger (`stat`) with unique `(story_idx, uid)`
 - `user_follow`: follow/unfollow ledger (`stat`) with unique `(follower_uid, followee_uid)`
 - `user_block`: block/unblock ledger (`stat`) with unique `(blocker_uid, blocked_uid)`
+- `str_cutout`: story feed cutout ledger (`stat`) with unique `(uid, tid)` and profile snapshot columns
 
 ### Added repository methods
 - `ToggleStoryLikeTx()`: transactional like toggle + `story.qt_good` sync
@@ -388,6 +389,10 @@ type StrComment struct {
 - `GetFollowerList()`: returns follower page list and `total_count` via separate `COUNT(*)` on `user_follow` (`followee_uid`, `stat=1`)
 - `SetBlock()`, `SetUnblock()`, `GetBlockList()`, `IsBlockedPair()`
 - `GetStoryOwnerUID()` for ownership lookup in block checks
+- `SetCutoutUser()`: upsert 방식으로 cutout 활성화 및 대상 프로필 스냅샷 갱신
+- `UnsetCutoutUser()`: cutout 비활성화(`stat=0`)
+- `GetCutoutCount()`, `GetCutoutList()`: 활성 cutout 개수/페이지 목록 조회
+- `GetActiveCutoutTIDs()`: 조건부 스토리 조회 시 제외 대상 UID 목록 조회
 
 ## Future Enhancements
 - [ ] Implement view tracking (`qt_checked`)

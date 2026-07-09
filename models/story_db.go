@@ -13,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	log "ms-gateway/common/logger"
+	"ms-gateway/common/utils"
 	"ms-gateway/conf"
 	ptl "ms-gateway/protocol"
 )
@@ -78,6 +79,27 @@ CREATE TABLE `user_follow` (
   KEY `idx_follower_stat` (`follower_uid`, `stat`, `at_update`),
   KEY `idx_followee_stat` (`followee_uid`, `stat`, `at_update`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE `str_cutout` (
+  `idx` bigint NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `tid` bigint NOT NULL,
+  `stat` tinyint NOT NULL DEFAULT '1' COMMENT 'active:1, cancel:0',
+  `tnick` varchar(20) DEFAULT NULL,
+  `tgen` tinyint DEFAULT NULL,
+  `tbirth` date DEFAULT NULL,
+  `tsp_intro` varchar(100) DEFAULT NULL,
+  `tarea` tinyint DEFAULT NULL,
+  `tthmb_pic` varchar(145) DEFAULT NULL,
+  `at_crt` datetime NOT NULL,
+  `at_upd` datetime NOT NULL,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `uk_cutout_pair` (`uid`,`tid`),
+  KEY `idx_cutout_uid_stat` (`uid`,`stat`,`at_upd` DESC),
+  CONSTRAINT `chk_cutout_not_self` CHECK ((`uid` <> `tid`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 
 */
 
@@ -698,3 +720,133 @@ func (p *StoryDB) GetStoryOwnerUID(storyIdx int) (uint64, error) {
 	}
 	return uid, nil
 }
+
+//-------------------- user cut out ---------------------------------
+
+func (p *StoryDB) SetCutoutUser(uid uint64, cutout *ptl.CutoutUserItem) (int64, error) {
+	tbirth := utils.Time2StrDay(cutout.Tbirth)
+	query := `
+		INSERT INTO str_cutout
+			(uid, tid, stat, tnick, tgen, tbirth, tsp_intro, tarea, tthmb_pic, at_crt, at_upd)
+		VALUES
+			(?, ?, 1, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		ON DUPLICATE KEY UPDATE
+			stat = 1,
+			tnick = VALUES(tnick),
+			tgen = VALUES(tgen),
+			tbirth = VALUES(tbirth),
+			tsp_intro = VALUES(tsp_intro),
+			tarea = VALUES(tarea),
+			tthmb_pic = VALUES(tthmb_pic),
+			at_upd = NOW()
+	`
+	result, err := p.conndb.Exec(
+		query,
+		uid,
+		cutout.Tid,
+		cutout.Tnick,
+		cutout.Tgen,
+		tbirth,
+		cutout.TspIntro,
+		cutout.Tarea,
+		cutout.TthmbPic,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (p *StoryDB) UnsetCutoutUser(uid, tid uint64) (int64, error) {
+	query := `UPDATE str_cutout SET stat = 0, at_upd = NOW() WHERE uid = ? AND tid = ?`
+	result, err := p.conndb.Exec(query, uid, tid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (p *StoryDB) GetCutoutCount(uid uint64) (int64, error) {
+	query := `SELECT COUNT(1) FROM str_cutout WHERE uid = ? AND stat = 1`
+	var count int64
+	err := p.conndb.QueryRow(query, uid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (p *StoryDB) GetActiveCutoutTIDs(uid uint64) ([]uint64, error) {
+	rows, err := p.conndb.Query(`SELECT tid FROM str_cutout WHERE uid = ? AND stat = 1`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tids := make([]uint64, 0)
+	for rows.Next() {
+		var tid uint64
+		if err := rows.Scan(&tid); err != nil {
+			return nil, err
+		}
+		tids = append(tids, tid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return tids, nil
+}
+
+func (p *StoryDB) GetCutoutList(uid uint64, page, limit int) (*[]ptl.CutoutUserItem, int, error) {
+	offset := (page - 1) * limit
+	if offset < 0 {
+		offset = 0
+	}
+
+	var totalCount int
+	countQuery := `SELECT COUNT(1) FROM str_cutout WHERE uid = ? AND stat = 1`
+	if err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT idx, tid, stat, tnick, tgen, tbirth, tsp_intro, tarea, tthmb_pic, at_crt, at_upd
+		FROM str_cutout
+		WHERE uid = ? AND stat = 1
+		ORDER BY at_upd DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := p.conndb.Query(query, uid, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	list := make([]ptl.CutoutUserItem, 0, limit)
+	for rows.Next() {
+		var item ptl.CutoutUserItem
+		if err = rows.Scan(
+			&item.Idx,
+			&item.Tid,
+			&item.Stat,
+			&item.Tnick,
+			&item.Tgen,
+			&item.Tbirth,
+			&item.TspIntro,
+			&item.Tarea,
+			&item.TthmbPic,
+			&item.AtCreate,
+			&item.AtUpdate,
+		); err != nil {
+			return nil, 0, err
+		}
+		item.Age = utils.CalcBirth2Age(item.Tbirth)
+		list = append(list, item)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return &list, totalCount, nil
+}
+
+//-------------------- user cut out ---------------------------------

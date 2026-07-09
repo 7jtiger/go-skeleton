@@ -62,6 +62,8 @@ definitions:
         type: string
       partner:
         $ref: '#/definitions/protocol.PartnerInfo'
+      partner_left:
+        type: boolean
       rid:
         type: integer
       total:
@@ -1000,6 +1002,7 @@ paths:
         특정 채팅방(room_id)의 과거 메시지 목록을 커서 기반으로 페이징하여 조회합니다.
         실시간 신규 메시지는 WebSocket으로 수신하고, 본 API는 과거 구간(기록/이력) 보완용입니다.
         cursor 미지정시 최신 limit개를 반환하며, 이전 응답의 next_cursor를 전달하면 해당 커서보다 오래된 메시지를 조회합니다.
+        응답에 my_last_mid / partner_last_mid (Redis DM:READ, TTL 3일) 를 포함합니다. 조회만 하며 mid를 갱신하지 않습니다.
 
         [요청 예시]
         GET /dm/v01/history/10?limit=20 HTTP/1.1
@@ -1014,7 +1017,9 @@ paths:
         "messages": [...],
         "total_count": 109,
         "next_cursor": "086572",
-        "has_more": true
+        "has_more": true,
+        "my_last_mid": "mid-aaa",
+        "partner_last_mid": "mid-bbb"
         }
         }
       parameters:
@@ -1039,13 +1044,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: 'messages: 메시지 배열, total_count: 전체 메시지 수, next_cursor: 다음 커서,
-            has_more: 더 있음 여부'
+          description: messages, total_count, next_cursor, has_more, my_last_mid,
+            partner_last_mid
           schema:
             additionalProperties: true
             type: object
         "400":
           description: 잘못된 요청(잘못된 cursor 등)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: 방 참여자 아님
           schema:
             additionalProperties:
               type: string
@@ -1067,7 +1084,7 @@ paths:
         Retrieves the list of direct message chat rooms that the currently authenticated user is participating in. Note: 'userId' query parameter is no longer required or used. Room list is based on the authenticated session.
         request : GET /dm/v01/list/1 HTTP/1.1
         response : {"result":0,"resultString":"Success","data":{"rooms":[{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":133,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-04-28T11:43:25Z"},{"rid":9,"partner":{"pid":5709326013809104361,"nick":"평화로운 아기 바나나","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":0,"at_crtchat":"2026-04-20T13:27:53Z","at_update":"2026-04-20T13:27:53Z"}],"total_count":2}}
-        pagesize = 10
+        목록 정렬: 1) unread>0 방 우선 2) unread 방은 IncrUnread :ts(최근 수신) 3) 그 외 at_update 최신순. page당 10건.
       produces:
       - application/json
       responses:
@@ -1138,12 +1155,67 @@ paths:
       summary: DM create chat room
       tags:
       - chat
+  /dm/v01/rinfo/{room_id}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        인증된 사용자가 참여 중인 DM 채팅방(room_id = chat_his.idx)의 상세 정보를 조회합니다.
+        상대방 프로필, 최근 메시지, 전체/미읽음 메시지 수, 생성·수정 시각을 반환합니다.
+        요청자가 방 생성자(uid)이면 tid 사용자 정보를, 초대받은 사용자(tid)이면 uid 사용자 정보를 상대방으로 반환합니다.
+
+        [요청 예시]
+        GET /dm/v01/rinfo/10 HTTP/1.1
+        Authorization: Bearer {access_token}
+
+        [응답 예시]
+        {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
+      parameters:
+      - description: 채팅방 ID (chat_his.idx)
+        in: path
+        name: room_id
+        required: true
+        type: string
+      - description: 방 입장 시 마지막으로 읽은 메시지 mid (없으면 최신 메시지로 갱신)
+        in: query
+        name: mid
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: room_id, room, my_last_mid, partner_last_mid
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: room_id 누락
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: 서버 내부 에러
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: DM 채팅방 단건 조회
+      tags:
+      - chat
   /dm/v01/rmroom/{room_id}:
     post:
       consumes:
       - application/json
-      description: Deletes the specified chat (DM) room. The user must be authenticated
-        and have access to the given room. Performs a soft delete (status-based).
+      description: |-
+        인증된 사용자가 DM 채팅방에서 나갑니다. 나간 사용자는 목록에서 숨겨지고, 남은 사용자에게 partner-left 이벤트 및 시스템 메시지가 전달됩니다.
+        st_chat: 0=양쪽 나감, 1=양쪽 참여, 2=uid 나감, 3=tid 나감
       parameters:
       - description: Room ID
         in: path
@@ -1176,7 +1248,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Delete chat room
+      summary: DM 채팅방 나가기
       tags:
       - chat
   /dm/v01/total/unread:
@@ -1265,7 +1337,7 @@ paths:
         1) text-message: {"type":"text-message","to":"456","content":"Hello, how are you?","callMode":"txt|img|...","msgId":"1234567890"}
         1-1) text-message-ack: {"type":"msg-ack","from":"123","to":"456","roomId":"1234567890","msgId":"1234567890","unread":1,"timestamp":1718851200}
         2) typing(optional): {"type":"typing","to":"456","roomId":"1234567890"}
-        3) read-receipt: {"type":"read-receipt","to":"456","roomId":"1234567890"}
+        3) read-receipt: {"type":"read-receipt","to":"456","roomId":"1234567890","msgId":"last-read-mid"}
         DM Client Work flow:
         1) connection : 로그인시 ws 연결
         1-1) {domain}/dm/v01/ws GET 로그인후
@@ -1275,8 +1347,8 @@ paths:
         3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청
         4) totalunread : 총 미읽음 메시지 수 조회
         4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회
-        5) read-receipt : 특정 채팅방 입장시 미읽음 초기화
-        5-1) Type : "read-receipt", To : 수신자 UID, RoomID : 채팅방 ID
+        5) read-receipt : 방 입장/읽음 시 미읽음 초기화 + DM:READ mid 갱신(3일 TTL)
+        5-1) Type : "read-receipt", To : 수신자 UID, RoomID : 채팅방 ID, MsgID : 마지막으로 읽은 메시지 mid
         6) text-message : 텍스트 메시지 전송
         6-1) Type : "text-message", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값
         6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
@@ -2039,6 +2111,181 @@ paths:
           schema:
             $ref: '#/definitions/protocol.RespHeader'
       summary: 스토리(Story) 조건부 리스트 조회
+      tags:
+      - Story
+  /story/v01/cutout/cancel/{tid}:
+    post:
+      consumes:
+      - application/json
+      description: JWT 인증 사용자가 특정 사용자(tid)에 대한 스토리 feed 숨김을 해제합니다(str_cutout.stat=0).
+      parameters:
+      - description: 'Bearer access token. Example: Bearer {access_token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: cutout 해제 대상 사용자 UID
+        in: path
+        name: tid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: tid invalid
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 서버 에러
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 해제
+      tags:
+      - Story
+  /story/v01/cutout/count:
+    post:
+      consumes:
+      - application/json
+      description: JWT 인증 사용자의 활성 cutout(str_cutout.stat=1) 개수를 반환합니다.
+      parameters:
+      - description: 'Bearer access token. Example: Bearer {access_token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, count
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 서버 에러
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 개수 조회
+      tags:
+      - Story
+  /story/v01/cutout/list/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: JWT 인증 사용자의 활성 cutout 목록을 페이지네이션으로 조회합니다. list 항목은 CutoutUserItem(idx,
+        tid, stat, tnick, tgen, tbirth, tsp_intro, tarea, tthmb_pic, at_crt, at_upd)
+        형식입니다.
+      parameters:
+      - description: 'Bearer access token. Example: Bearer {access_token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 페이지 번호(1부터)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 4, 최대 100)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, total_count, list
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 잘못된 파라미터
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 서버 에러
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 목록 조회
+      tags:
+      - Story
+  /story/v01/cutout/set/{tid}:
+    post:
+      consumes:
+      - application/json
+      description: JWT 인증 사용자가 특정 사용자(tid)를 스토리 feed에서 숨김 처리합니다. 서비스 전체 차단(user_block)과
+        별개이며, 대상 프로필 스냅샷(tnick/tgen/tbirth/tsp_intro/tarea/tthmb_pic)을 str_cutout에
+        저장합니다. 자기 자신(tid=본인 uid) cutout은 불가합니다.
+      parameters:
+      - description: 'Bearer access token. Example: Bearer {access_token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: cutout 대상 사용자 UID
+        in: path
+        name: tid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: tid invalid / self cutout / target user not found
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 서버 에러
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 설정
       tags:
       - Story
   /story/v01/delpic:

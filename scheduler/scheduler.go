@@ -122,8 +122,7 @@ func (s *Schedule) addJob(ejob conf.Works) error {
 		name: ejob.Name,
 		desc: ejob.Desc,
 		args: ejob.Args,
-		// delay:  time.Duration(ejob.Duration) * time.Second,
-		delay:  time.Duration(ejob.Duration),
+		delay:  time.Duration(ejob.Duration) * time.Second,
 		ticker: *time.NewTicker(tick),
 		quit:   make(chan int),
 	}
@@ -159,15 +158,17 @@ func (s *Schedule) runJob(it *item) {
 		}
 	}()
 
-	// firstExec := true
+	firstExec := true
 	for {
 		select {
 		case <-it.ticker.C:
-			// if firstExec {
-			// 	it.ticker.Stop()
-			// 	it.ticker = *time.NewTicker(it.delay)
-			// 	firstExec = false
-			// }
+			if firstExec {
+				firstExec = false
+				if it.delay > 0 {
+					it.ticker.Stop()
+					it.ticker = *time.NewTicker(it.delay)
+				}
+			}
 
 			if err := s.task(it); err != nil {
 				log.Info("Error executing job %s: %v", it.name, err)
@@ -190,8 +191,8 @@ func (s *Schedule) task(it *item) error {
 		log.Info("task11 ", "Store ")
 	case "preweekcheck":
 		log.Info("task22 ", "SchdulePreWeekCheck ")
-	case "msg_remove":
-		log.Info("msg_remove ", "Remove messages older than 24 hours")
+	case "msg_delete":
+		// log.Info("msg_delete ", "Remove messages older than 3 days")
 		return s.MsgDeleter()
 	default:
 		return nil

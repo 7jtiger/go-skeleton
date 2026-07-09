@@ -239,6 +239,15 @@
 - `FollowUser()`, `UnfollowUser()`: 팔로우/언팔로우 처리
 - `GetFollowerList()`, `GetFollowingList()`: 팔로워/팔로잉 페이지 조회 (`GetFollowerList` 응답: `total_count`, `followers`)
 - `BlockUser()`, `UnblockUser()`, `GetBlockList()`: 차단/해제/목록 조회 (`uid/page/limit`, page starts at 1, limit 1~100)
+- `SetCutoutUser()`, `UnsetCutoutUser()`, `GetCutoutCount()`, `GetCutoutList()`: 스토리 cutout(피드 숨김) 설정/해제/개수/목록
+- `GetStoryConditionList()`: 인증 사용자의 활성 cutout 대상(`str_cutout.stat=1`)을 피드에서 제외
+
+#### Story Cutout API 예시 (JWT Bearer 필요)
+- `POST /story/v01/cutout/set/{tid}` → `{"result":0,"resultString":"Success","data":{"msg":"success","affected":1}}`
+- `POST /story/v01/cutout/cancel/{tid}` → `{"result":0,"resultString":"Success","data":{"msg":"success","affected":1}}`
+- `POST /story/v01/cutout/count` → `{"result":0,"resultString":"Success","data":{"msg":"success","count":3}}`
+- `GET /story/v01/cutout/list/{page}/{limit}` → `{"result":0,"resultString":"Success","data":{"msg":"success","total_count":1,"list":[...]}}`
+- 통합 테스트: `controller/stry_test.go` (`Test_SetCutoutUser`, `Test_UnsetCutoutUser`, `Test_GetCutoutCount`, `Test_GetCutoutList`) — flags: `-dm_target`, `-dm_token`, `-dm_peer_uid`
 
 ### Cloudflare Integration
 - **Image Upload**: Uses `utils.UploadCldFlr()` to upload images to Cloudflare Images
@@ -279,7 +288,7 @@
 
 ### Chat Room Management (HTTP API)
 - `CreateChatRoom()`: Creates new chat room with name, creator, and privacy settings
-- `GetChatRooms()`: Retrieves user's chat room list (`page` 1 미만이면 1로 정규화). Redis 메시지가 없는 방은 `last_msg` 빈 문자열·`total` 0으로 반환(panic 방지). `total_count`는 DB 전체 방 수
+- `GetChatRooms()`: Retrieves user's chat room list (`page` 1 미만이면 1로 정규화). **정렬**: unread>0 우선 → unread 그룹 내 Redis `:ts`(최근 수신) → `at_update` 최신. DB 전체 조회 후 Go 정렬·페이징(10건). Redis 메시지가 없는 방은 `last_msg` 빈 문자열·`total` 0으로 반환(panic 방지). `total_count`는 DB 전체 방 수
 - `GetChatHistory()`: Retrieves paginated chat history for a room
 - `SendMessage()`: REST API endpoint for sending messages (alternative to WebSocket)
 
@@ -415,11 +424,17 @@
 ### ChatController (`chatCtl.go`)
 - `ChatClient`에 `uid uint64` 필드 추가
 - 연결/해제 시 Redis 온라인 상태 반영 (`SetOnline` / `DeleteOnline`)
-- `handleTextMessage()`에서 DM 방 자동 확보, unread 증가, 오프라인 FCM fallback, `msg-ack` 전송
-- `handleReadReceipt()`에서 unread 초기화(`ResetUnread`) 후 상대에게 전달
+- `handleTextMessage()`에서 DM 방 자동 확보, unread 증가, 오프라인 FCM fallback, `msg-ack` 전송, Redis 저장 후 `TouchDMRoomActivity`로 목록 정렬용 `at_update` 갱신
+- `handleReadReceipt()`: unread `ResetUnread` + `DM:READ:{uid}:{roomID}=mid` 전진(TTL 3일, LIST index 비교) + 상대 relay. `msgId` 없으면 방 최신 mid 사용
+- `updateRoomEntryRead()`: 방 입장(`/rinfo`) 시 mid(query 또는 최신)로 last_read 갱신 + unread reset
 - 신규 통화 브릿지: `handleCallRequestFromDM`, `handleCallAcceptFromDM`, `handleCallCancel`
 - 신규 공개 메서드: `IsUserOnline`, `SendDMNotification`, `GetTotalUnread`
-- `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; 응답 `messages`, `total_count`, `next_cursor`, `has_more`. 신규 메시지는 WS, HTTP는 과거 구간 보완
+- `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; 응답 `messages`, `total_count`, `next_cursor`, `has_more`, **`my_last_mid`**, **`partner_last_mid`**. 조회만(mid 미갱신)
+- `GetChatRoomByRID`: `GET /dm/v01/rinfo/:room_id?mid=`; 입장 시 last_read 갱신, 응답에 `my_last_mid`/`partner_last_mid` 포함
+- DM 메시지·READ·UNREAD TTL: **3일** (`SaveChatMessage` Expire + 스케줄러 `ExpiredMsg`)
+- `DeleteChatRoom`: `POST /dm/v01/rmroom/:room_id` — 1명 나가기, st_chat 갱신, `partner-left` + `system-message` WS, Redis 마지막 메시지 저장
+- `buildDMRoomResp` / `resolveLastMsg` / `notifyPartnerLeft`: partner는 AccountDB; Redis에 저장된 시스템 메시지를 last_msg로 사용, `partner_left` 시 fallback
+- `ensureDMRoom`: `ActivateDMRoomSide` (나간 쪽만 재참여)
 
 ### SignalingController (`signaling.go`)
 - 대기실 메시지 타입에 `call-cancel` 추가
@@ -431,6 +446,8 @@
 ### FCMPusher (`fcmPusher.go`)
 - `SendCallPush(callerNick, callerPic, callMode, did)`
 - `SendDMPush(senderNick, content, did)`
+- `Terminate()`에 timeout 보호 추가(요청 2초/ack 3초): 종료 대기 무한 블로킹 방지
+- `loop()` leader 대기 구간을 `select` 기반으로 변경: leader 선출 대기 중에도 stop 신호 즉시 수신
 
 ### 클라이언트 테스트 페이지 (`client/dm_chat.html`)
 - WS: `GET /chat/v01/ws?userId=` — 서버 `writePump`가 여러 JSON을 `\n`으로 묶어 보내므로, 수신 시 줄 단위로 분리 후 `JSON.parse`

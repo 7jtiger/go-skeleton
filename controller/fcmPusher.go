@@ -77,19 +77,29 @@ func NewFCMPusher(root *Controller, hch *haredis.HAChecker, rep *models.Reposito
 
 func (p *FCMPusher) Terminate() {
 	fin := make(chan struct{})
-	p.stop <- fin
-	<-fin
-	log.Info("terminated instance FCMPusher")
+	select {
+	case p.stop <- fin:
+	case <-time.After(2 * time.Second):
+		log.Warn("FCMPusher terminate request timeout")
+		return
+	}
+	select {
+	case <-fin:
+		log.Info("terminated instance FCMPusher")
+	case <-time.After(3 * time.Second):
+		log.Warn("FCMPusher terminate ack timeout")
+	}
 }
 
 func (p *FCMPusher) loop() {
-
-	if !p.hch.IsLeader() {
-		for {
-			if p.hch.IsLeader() {
-				break
-			}
-			time.Sleep(5 * time.Second)
+	leaderWaitTicker := time.NewTicker(5 * time.Second)
+	defer leaderWaitTicker.Stop()
+	for !p.hch.IsLeader() {
+		select {
+		case fin := <-p.stop:
+			fin <- struct{}{}
+			return
+		case <-leaderWaitTicker.C:
 		}
 	}
 

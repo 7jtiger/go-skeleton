@@ -8,6 +8,7 @@ import (
 	ptc "ms-gateway/protocol"
 	"net/http"
 	"strconv"
+	"strings"
 
 	log "ms-gateway/common/logger"
 	"ms-gateway/common/utils"
@@ -134,8 +135,6 @@ func (p *StoryController) GetStoryConditionList(c *gin.Context) {
 	nPage := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
 	nLimit := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
 
-	// TODO: 블록 유저 조회
-
 	args := []interface{}{}
 	conds := []string{}
 
@@ -162,6 +161,25 @@ func (p *StoryController) GetStoryConditionList(c *gin.Context) {
 	nStat := ptl.GetStatCode(stat)
 	args = append(args, nStat)
 
+	// 요청 사용자 cutout 목록은 story feed에서 제외한다.
+	user, exists := c.Get("user")
+	if exists {
+		uid64 := user.(*ptc.UserInfoResp).Uid
+		cutoutTids, err := p.sdb.GetActiveCutoutTIDs(uid64)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get cutout list", err)
+			return
+		}
+		if len(cutoutTids) > 0 {
+			placeholders := make([]string, len(cutoutTids))
+			for i, tid := range cutoutTids {
+				placeholders[i] = "?"
+				args = append(args, tid)
+			}
+			conds = append(conds, "uid NOT IN ("+strings.Join(placeholders, ",")+")")
+		}
+	}
+
 	orderQuery := ptl.GetOrderQuery(order)
 	offset := (nPage - 1) * nLimit
 	args = append(args, nLimit, offset)
@@ -172,6 +190,202 @@ func (p *StoryController) GetStoryConditionList(c *gin.Context) {
 	}
 	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"story_home_list": storyList})
 }
+
+// -------------------- user cut out ---------------------------------
+
+// SetCutoutUser godoc
+// @Summary      스토리 cutout 설정
+// @Description  JWT 인증 사용자가 특정 사용자(tid)를 스토리 feed에서 숨김 처리합니다. 서비스 전체 차단(user_block)과 별개이며, 대상 프로필 스냅샷(tnick/tgen/tbirth/tsp_intro/tarea/tthmb_pic)을 str_cutout에 저장합니다. 자기 자신(tid=본인 uid) cutout은 불가합니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization  header  string  true  "Bearer access token. Example: Bearer {access_token}"
+// @Param        tid            path    string  true  "cutout 대상 사용자 UID"
+// @Success      200            {object} map[string]interface{} "msg, affected"
+// @Failure      400            {object} map[string]interface{} "tid invalid / self cutout / target user not found"
+// @Failure      401            {object} map[string]interface{} "인증 실패"
+// @Failure      500            {object} map[string]interface{} "서버 에러"
+// @Example Request: POST /story/v01/cutout/set/{tid}
+// @Example Request Header: Authorization: Bearer ...
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"success","affected":1}}
+// @Router       /story/v01/cutout/set/{tid} [post]
+func (p *StoryController) SetCutoutUser(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	tid64, err := strconv.ParseUint(c.Param("tid"), 10, 64)
+	if err != nil || tid64 == 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is invalid")
+		return
+	}
+	if uid64 == tid64 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "self cutout is not allowed")
+		return
+	}
+
+	tuser, err := p.adb.GetUserInfoByUID(tid64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "target user not found", err)
+		return
+	}
+	nGen, err := strconv.Atoi(tuser.Gender)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "target user gender is invalid", err)
+		return
+	}
+	cutUser := &ptc.CutoutUserItem{
+		Tid:      tid64,
+		Stat:     1,
+		Tnick:    tuser.Nick,
+		Tgen:     nGen,
+		Tbirth:   utils.Time2StrDay(tuser.Birth),
+		TspIntro: tuser.SPIntro,
+		Tarea:    ptc.GetAreaCode(tuser.Area),
+		TthmbPic: tuser.ThumbPic,
+	}
+
+	affected, err := p.sdb.SetCutoutUser(uid64, cutUser)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to set cutout user", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"msg":      "success",
+		"affected": affected,
+	})
+}
+
+// UnsetCutoutUser godoc
+// @Summary      스토리 cutout 해제
+// @Description  JWT 인증 사용자가 특정 사용자(tid)에 대한 스토리 feed 숨김을 해제합니다(str_cutout.stat=0).
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization  header  string  true  "Bearer access token. Example: Bearer {access_token}"
+// @Param        tid            path    string  true  "cutout 해제 대상 사용자 UID"
+// @Success      200            {object} map[string]interface{} "msg, affected"
+// @Failure      400            {object} map[string]interface{} "tid invalid"
+// @Failure      401            {object} map[string]interface{} "인증 실패"
+// @Failure      500            {object} map[string]interface{} "서버 에러"
+// @Example Request: POST /story/v01/cutout/cancel/{tid}
+// @Example Request Header: Authorization: Bearer ...
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"success","affected":1}}
+// @Router       /story/v01/cutout/cancel/{tid} [post]
+func (p *StoryController) UnsetCutoutUser(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	tid64, err := strconv.ParseUint(c.Param("tid"), 10, 64)
+	if err != nil || tid64 == 0 {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "tid is invalid")
+		return
+	}
+
+	affected, err := p.sdb.UnsetCutoutUser(uid64, tid64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to unset cutout user", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"msg":      "success",
+		"affected": affected,
+	})
+}
+
+// GetCutoutCount godoc
+// @Summary      스토리 cutout 개수 조회
+// @Description  JWT 인증 사용자의 활성 cutout(str_cutout.stat=1) 개수를 반환합니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization  header  string  true  "Bearer access token. Example: Bearer {access_token}"
+// @Success      200            {object} map[string]interface{} "msg, count"
+// @Failure      401            {object} map[string]interface{} "인증 실패"
+// @Failure      500            {object} map[string]interface{} "서버 에러"
+// @Example Request: POST /story/v01/cutout/count
+// @Example Request Header: Authorization: Bearer ...
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"success","count":3}}
+// @Router       /story/v01/cutout/count [post]
+func (p *StoryController) GetCutoutCount(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	count, err := p.sdb.GetCutoutCount(uid64)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get cutout count", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"msg":   "success",
+		"count": count,
+	})
+}
+
+// GetCutoutList godoc
+// @Summary      스토리 cutout 목록 조회
+// @Description  JWT 인증 사용자의 활성 cutout 목록을 페이지네이션으로 조회합니다. list 항목은 CutoutUserItem(idx, tid, stat, tnick, tgen, tbirth, tsp_intro, tarea, tthmb_pic, at_crt, at_upd) 형식입니다.
+// @Tags         Story
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization  header  string  true  "Bearer access token. Example: Bearer {access_token}"
+// @Param        page           path    int     true  "페이지 번호(1부터)"
+// @Param        limit          path    int     true  "페이지 크기(기본 4, 최대 100)"
+// @Success      200            {object} map[string]interface{} "msg, total_count, list"
+// @Failure      400            {object} map[string]interface{} "잘못된 파라미터"
+// @Failure      401            {object} map[string]interface{} "인증 실패"
+// @Failure      500            {object} map[string]interface{} "서버 에러"
+// @Example Request: GET /story/v01/cutout/list/1/10
+// @Example Request Header: Authorization: Bearer ...
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"success","total_count":1,"list":[{"idx":12,"tid":4033287471439576593,"stat":1,"tnick":"qqqq11111","tgen":1,"tbirth":"1990","tsp_intro":"hello","tarea":1,"tthmb_pic":"https://example.com/thumb.jpg","at_crt":"2026-06-23T10:00:00Z","at_upd":"2026-06-23T10:00:00Z"}]}}
+// @Example Response: {"result":0,"resultString":"Success","data":{"list":[{"idx":1,"tid":4033287471439576593,"stat":1,"tnick":"푸른 아름다운 양","tgen":1,"tbirth":"1991-12-18T00:00:00Z","age":34,"tsp_intro":"반가워요 큐피톡에서 만나요!","tarea":1,"tthmb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","at_crt":"2026-06-23T14:30:15Z","at_upd":"2026-06-23T14:30:15Z"}],"msg":"success","total_count":1}}
+// @Router       /story/v01/cutout/list/{page}/{limit} [get]
+func (p *StoryController) GetCutoutList(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+	uid64 := user.(*ptc.UserInfoResp).Uid
+
+	pageInt := ptc.CvtParamAtoi(c.Param("page"), 1)
+	limitInt := ptc.CvtParamAtoi(c.Param("limit"), 4)
+	if limitInt > 100 {
+		limitInt = 100
+	}
+
+	list, totalCount, err := p.sdb.GetCutoutList(uid64, pageInt, limitInt)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to get cutout list", err)
+		return
+	}
+
+	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
+		"msg":         "success",
+		"total_count": totalCount,
+		"list":        list,
+	})
+}
+
+// -------------------- user cut out ---------------------------------
 
 // GetStoryDetail godoc
 // @Summary Get story detail by story index
@@ -397,8 +611,13 @@ func (p *StoryController) CreateStory(c *gin.Context) {
 		simg.Area = 0
 	}
 
-	simg.Gender, err = strconv.Atoi(user.(*ptl.UserInfoResp).Gender)
-	if err != nil || simg.Gender < 0 || simg.Gender > 2 {
+	nGen, err := strconv.Atoi(user.(*ptl.UserInfoResp).Gender)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, gender is required", err)
+		return
+	}
+	simg.Gender = nGen
+	if simg.Gender < 0 || simg.Gender > 2 {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, gender is required")
 		return
 	}
