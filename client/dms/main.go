@@ -96,6 +96,29 @@ type RoomInfoData struct {
 	PartnerLastMid string     `json:"partner_last_mid"`
 }
 
+// GiftPreset DM 선물 테스트용 프리셋 (서버 handleSendGift 연동)
+type GiftPreset struct {
+	Code  string // 클라이언트 식별자
+	Label string // 표시명
+}
+
+// giftCatalog — chatCtl handleSendGift는 현재 content=수량(문자열)만 사용, 아이템명은 서버에서 "화살" 고정
+var giftCatalog = []GiftPreset{
+	{Code: "arrow", Label: "화살"},
+	{Code: "rose", Label: "장미"},
+	{Code: "cake", Label: "케이크"},
+	{Code: "diamond", Label: "다이아몬드"},
+	{Code: "heart", Label: "하트"},
+}
+
+var giftAliases = map[string]string{
+	"arrow": "arrow", "화살": "arrow",
+	"rose": "rose", "장미": "rose",
+	"cake": "cake", "케이크": "cake",
+	"diamond": "diamond", "다이아": "diamond", "다이아몬드": "diamond",
+	"heart": "heart", "하트": "heart",
+}
+
 // ──────────────────────────────────────────────
 // 세션 상태
 // ──────────────────────────────────────────────
@@ -318,6 +341,9 @@ func handleIncoming(msg *ChatMessage) {
 		recv("%s [%s] %s (room=%s)", ts(), msg.Type, msg.Content, msg.RoomID)
 	case "dm-incoming":
 		recv("%s DM 알림 from=%s content=%s", ts(), msg.From, msg.Content)
+	case "put-gift":
+		recv("%s 🎁 선물 [%s] from=%s → to=%s room=%s msgId=%s",
+			ts(), msg.Content, msg.From, msg.To, msg.RoomID, msg.MsgID)
 	default:
 		recv("%s [%s] %s", ts(), msg.Type, prettyJSON(msg))
 	}
@@ -639,8 +665,12 @@ func cmdChatlist(roomID, limit, cursor string, saveCursor bool) {
 		if typeTag == "" {
 			typeTag = "text-message"
 		}
-		fmt.Printf("  %s[%d]%s %s [%s] from=%s id=%s\n",
-			colorGray, i+1, colorReset, at, typeTag, m.UserID, m.ID)
+		giftMark := ""
+		if typeTag == "put-gift" {
+			giftMark = " 🎁"
+		}
+		fmt.Printf("  %s[%d]%s %s [%s]%s from=%s id=%s\n",
+			colorGray, i+1, colorReset, at, typeTag, giftMark, m.UserID, m.ID)
 		fmt.Printf("      %s\n", m.Content)
 	}
 }
@@ -650,6 +680,93 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func giftLabel(code string) string {
+	for _, g := range giftCatalog {
+		if g.Code == code {
+			return g.Label
+		}
+	}
+	return code
+}
+
+func cmdGifts() {
+	info("선물 프리셋 (WS type=put-gift, content=수량)")
+	fmt.Printf("  %s참고:%s 서버는 현재 수신 메시지에 '화살' 고정 표기 (handleSendGift TODO)\n",
+		colorGray, colorReset)
+	for i, g := range giftCatalog {
+		fmt.Printf("  %s[%d]%s /gift %s [수량]  — %s\n", colorGray, i+1, colorReset, g.Code, g.Label)
+	}
+	fmt.Println("  예: /gift 3  |  /gift rose 1  |  /gift 화살 5")
+}
+
+// sendGift DM 선물 전송 (chatCtl handleSendGift)
+func sendGift(itemCode string, amount int) {
+	if sess.partnerID == "" {
+		errMsg("/target 으로 상대를 지정하세요")
+		return
+	}
+	if amount < 1 {
+		amount = 1
+	}
+	msgID := fmt.Sprintf("g-%d", time.Now().UnixMilli())
+	content := strconv.Itoa(amount)
+
+	if err := wsSend(&ChatMessage{
+		Type:    "put-gift",
+		To:      sess.partnerID,
+		RoomID:  sess.roomID,
+		Content: content,
+		MsgID:   msgID,
+	}); err != nil {
+		errMsg("%v", err)
+		return
+	}
+	info("선물 전송 → %s (%s x%d) msgId=%s room=%s",
+		sess.partnerID, giftLabel(itemCode), amount, msgID, orDefault(sess.roomID, "(ack 후 설정)"))
+}
+
+// parseGiftArgs "/gift rose 3" | "/gift 3" | "/gift 화살"
+func parseGiftArgs(arg string) (itemCode string, amount int, err error) {
+	itemCode = "arrow"
+	amount = 1
+	if arg == "" {
+		return itemCode, amount, nil
+	}
+	tokens := strings.Fields(arg)
+	if len(tokens) == 0 {
+		return itemCode, amount, nil
+	}
+
+	// 숫자만: /gift 5
+	if n, e := strconv.Atoi(tokens[0]); e == nil {
+		return itemCode, n, nil
+	}
+
+	// /gift rose [n]
+	code, ok := giftAliases[strings.ToLower(tokens[0])]
+	if !ok {
+		return "", 0, fmt.Errorf("알 수 없는 선물: %s (/gifts 로 목록 확인)", tokens[0])
+	}
+	itemCode = code
+	if len(tokens) >= 2 {
+		n, e := strconv.Atoi(tokens[1])
+		if e != nil || n < 1 {
+			return "", 0, fmt.Errorf("수량은 1 이상의 정수여야 합니다: %s", tokens[1])
+		}
+		amount = n
+	}
+	return itemCode, amount, nil
+}
+
+func cmdGift(arg string) {
+	item, amount, err := parseGiftArgs(arg)
+	if err != nil {
+		errMsg("%v", err)
+		return
+	}
+	sendGift(item, amount)
 }
 
 // ──────────────────────────────────────────────
@@ -679,6 +796,11 @@ func printHelp() {
     /typing                 타이핑 알림
     /read [msgId]           읽음 처리 (msgId 생략 가능)
 
+  선물 (WS — chatCtl put-gift)
+    /gifts                  선물 프리셋 목록
+    /gift [item] [수량]     선물 전송 (예: /gift 3, /gift rose 1)
+    /present                /gift 와 동일 (별칭)
+
   통화 (WS)
     /call <video|audio|text>
     /accept  /reject  /cancel
@@ -703,6 +825,11 @@ func printHelp() {
     3) A: /leave  →  B: /chatlist (B는 내역 유지)
     4) A: /mkroom <B_uid> → /chatlist (A는 빈 내역)
     5) A: /send new msg  →  양쪽 /chatlist 비교
+
+  선물 테스트 시나리오
+    1) A,B /connect 후 A: /mkroom <B>
+    2) A: /gift rose 1  →  B: WS 🎁 수신 + msg-ack
+    3) B: /chatlist <rid>  →  put-gift 타입 메시지 확인
 
   /help  /quit
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
@@ -845,6 +972,12 @@ func handleCommand(line string) {
 		} else {
 			info("읽음 처리 전송 room=%s msgId=%s", sess.roomID, msg.MsgID)
 		}
+
+	case "/gifts":
+		cmdGifts()
+
+	case "/gift", "/present":
+		cmdGift(arg)
 
 	case "/call":
 		if sess.partnerID == "" {

@@ -21,6 +21,11 @@ cd client/dms && go run .
 - `/connect`, `/disconnect`
 - `/send <text>`, `/typing`, `/read [msgId]`
 - `/call`, `/accept`, `/reject`, `/cancel`
+- `/gifts`: 선물 프리셋 목록
+- `/gift [item] [수량]`, `/present`: DM 선물 전송 (WS `type=put-gift`, `content`=수량 문자열)
+  - 예: `/gift 3`, `/gift rose 1`, `/gift 화살 5`
+  - 수신: `put-gift` + `msg-ack` (텍스트와 동일 흐름)
+  - 서버 `handleSendGift`는 현재 수신 문구에 아이템명 "화살" 고정 (포인트 차감 TODO)
 
 ### REST — 방
 - `/mkroom [pid]`, `/rejoin [pid]`: 방 생성·재입장 (`POST /dm/v01/mkroom/:pid`) — 재입장 시 `DM:HIST:FROM` 컷오프 갱신
@@ -43,6 +48,11 @@ cd client/dms && go run .
 4. A: `/leave` → B: `/chatlist` (B는 내역 유지)
 5. A: `/mkroom <B_uid>` → `/chatlist` (A는 빈 내역)
 6. A: `/send new` → 양쪽 `/chatlist` 비교
+
+## 선물 테스트 시나리오
+1. A,B `/connect` 후 A: `/mkroom <B>`
+2. A: `/gift rose 1` → B: WS `put-gift` 수신 + A: `msg-ack`
+3. B: `/chatlist <rid>` → `put-gift` 타입 메시지·선물 문구 확인
 
 ## API 응답 필드 정합 (2026-07)
 - 방 목록: `total_count` (not `totalcount`)
