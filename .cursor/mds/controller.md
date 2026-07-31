@@ -271,8 +271,9 @@
 ### WebSocket Connection Management
 - `HandleWebSocket()`: Handles WebSocket connection upgrade and client registration (JWT context required, uses authenticated UID)
 - `HandleWebSocket()`: Swagger description includes DM WebSocket message examples for `text-message`, `msg-ack`, `typing`, `read-receipt`, `call-request`, `call-accept`, `call-reject`, `call-cancel`
-- `registerClient()`: Registers new client to active connections map, closes old connection if exists
-- `unregisterClient()`: Removes client from active connections and cleans up resources
+- `registerClient()`: Registers new client to active connections map; safely closes old connection's send channel and conn when same UID reconnects
+- `unregisterClient()`: Removes client only when it is still the active map entry (pointer match); prevents stale reconnect cleanup from deleting the new session or double-closing send channel
+- `closeClientSend()`: Idempotent send-channel close via `sync.Once` per client
 - Swagger annotation note: use swag-compatible tags only (`@Summary`, repeated `@Description`, `@Param`, `@Success`, `@Failure`, `@Router`) for WebSocket endpoint docs.
 
 ### Message Processing Functions
@@ -288,7 +289,7 @@
 
 ### Chat Room Management (HTTP API)
 - `CreateChatRoom()`: Creates new chat room with name, creator, and privacy settings
-- `GetChatRooms()`: Retrieves user's chat room list (`page` 1 미만이면 1로 정규화). **정렬**: unread>0 우선 → unread 그룹 내 Redis `:ts`(최근 수신) → `at_update` 최신. DB 전체 조회 후 Go 정렬·페이징(10건). Redis 메시지가 없는 방은 `last_msg` 빈 문자열·`total` 0으로 반환(panic 방지). `total_count`는 DB 전체 방 수
+- `GetChatRooms()`: Retrieves user's chat room list (`page` 1 미만이면 1로 정규화). **정렬**: unread>0 우선 → unread 그룹 내 Redis `:ts`(최근 수신) → `at_update` 최신. DB 전체 조회 후 Go 정렬·페이징(10건). Redis 메시지가 없는 방은 `last_msg` 빈 문자열·`total` 0으로 반환(panic 방지). `total_count`는 DB 전체 방 수. **N+1 제거(2026-07)**: 페이지 내 파트너 프로필은 `GetUserInfosByUIDs`(MySQL IN 쿼리 1회), 마지막 메시지·총 개수는 `GetLastMessagesForRooms`(Redis 파이프라인 1회)로 일괄 조회 후 `buildDMRoomRespPrefetched`로 응답 구성 (배치 결과에 없는 파트너만 단건 조회 폴백)
 - `GetChatHistory()`: Retrieves paginated chat history for a room
 - `SendMessage()`: REST API endpoint for sending messages (alternative to WebSocket)
 
@@ -364,9 +365,10 @@
 - `NewSignalingController()`: Creates SignalingController instance for WebRTC P2P signaling
 
 ### WebSocket Connection Management
-- `HandleWebSocket()`: Handles WebSocket connection requests and upgrades to WebSocket protocol
-- `registerClient()`: Registers new client to active connections map
-- `unregisterClient()`: Removes client from active connections and cleanup resources
+- `HandleConnection()`: Handles WebSocket connection requests and upgrades to WebSocket protocol
+- `WSClient.closeSend()`: Idempotent send-channel close via `sync.Once` (prevents close-of-closed-channel panic)
+- `trySend()`: Safe non-blocking send wrapper used for ALL sends to `client.send` (recovers from send-on-closed-channel; returns false when buffer full or channel closed)
+- `VDRoom.run()`: Room goroutine stays alive until `roomCleaner` closes `room.done` or controller ctx is cancelled (prevents Unregister sender leak); `Unregister` channel is buffered
 
 ### Message Processing Functions
 - `readPump()`: Reads messages from WebSocket connection (goroutine)
@@ -429,10 +431,11 @@
 - `updateRoomEntryRead()`: 방 입장(`/rinfo`) 시 mid(query 또는 최신)로 last_read 갱신 + unread reset
 - 신규 통화 브릿지: `handleCallRequestFromDM`, `handleCallAcceptFromDM`, `handleCallCancel`
 - 신규 공개 메서드: `IsUserOnline`, `SendDMNotification`, `GetTotalUnread`
-- `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; 응답 `messages`, `total_count`, `next_cursor`, `has_more`, **`my_last_mid`**, **`partner_last_mid`**. 조회만(mid 미갱신)
+- `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; **viewer별 `DM:HIST:FROM` 컷오프 적용** (나간 뒤 재입장 사용자는 이전 내역 미조회, 상대방은 전체 유지)
 - `GetChatRoomByRID`: `GET /dm/v01/rinfo/:room_id?mid=`; 입장 시 last_read 갱신, 응답에 `my_last_mid`/`partner_last_mid` 포함
 - DM 메시지·READ·UNREAD TTL: **3일** (`SaveChatMessage` Expire + 스케줄러 `ExpiredMsg`)
-- `DeleteChatRoom`: `POST /dm/v01/rmroom/:room_id` — 1명 나가기, st_chat 갱신, `partner-left` + `system-message` WS, Redis 마지막 메시지 저장
+- `DeleteChatRoom`: `POST /dm/v01/rmroom/:room_id` — 1명 나가기, st_chat 갱신, `partner-left` + `system-message` WS, **나간 사용자 `DM:HIST:FROM` 컷오프·unread reset**
+- `setDMHistoryCutoff` / `ensureDMRoom` 재입장: mkroom·메시지 전송 시 나간 사용자 재참여하면 현재 시점 이후 메시지만 조회
 - `buildDMRoomResp` / `resolveLastMsg` / `notifyPartnerLeft`: partner는 AccountDB; Redis에 저장된 시스템 메시지를 last_msg로 사용, `partner_left` 시 fallback
 - `ensureDMRoom`: `ActivateDMRoomSide` (나간 쪽만 재참여)
 
@@ -442,6 +445,7 @@
 - `handleCallRequest()` 오프라인 fallback: Chat WS(`call-incoming`) -> FCM 순서 처리
 - `handleCallResponse()` 수락 시 `partner` 정보 포함
 - 신규 공개 메서드: `IsUserInWaitingRoom`, `ForwardCallRequest`
+- `Shutdown()`: `cancel()` 후 worker(`msgWorker`/`brcWorker`/`roomCleaner`) `WaitGroup` 종료 대기(최대 3초 timeout 로그)
 
 ### FCMPusher (`fcmPusher.go`)
 - `SendCallPush(callerNick, callerPic, callMode, did)`

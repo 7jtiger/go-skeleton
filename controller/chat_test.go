@@ -59,6 +59,40 @@ func Test_sortDMRoomsForInbox(t *testing.T) {
 	}
 }
 
+func Test_unregisterClient_skipsStaleConnection(t *testing.T) {
+	cc := &ChatController{
+		clients: make(map[uint64]*ChatClient),
+	}
+	uid := uint64(1001)
+
+	oldClient := &ChatClient{uid: uid, send: make(chan []byte, 1)}
+	newClient := &ChatClient{uid: uid, send: make(chan []byte, 1)}
+	cc.clients[uid] = newClient
+
+	// 구 연결 unregister 시도 → 맵의 새 클라이언트는 유지
+	cc.unregisterClient(oldClient)
+
+	cc.clientsMu.RLock()
+	current := cc.clients[uid]
+	cc.clientsMu.RUnlock()
+	if current != newClient {
+		t.Fatalf("expected new client to remain registered, got %p want %p", current, newClient)
+	}
+}
+
+func Test_closeClientSend_idempotent(t *testing.T) {
+	cc := &ChatController{}
+	client := &ChatClient{send: make(chan []byte, 1)}
+
+	cc.closeClientSend(client)
+	cc.closeClientSend(client) // panic 없이 두 번째 호출도 안전해야 함
+
+	_, ok := <-client.send
+	if ok {
+		t.Fatal("send channel should be closed")
+	}
+}
+
 //"acTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc3NDYxMjI2fQ.em-dbS_WqiW3BWYj33cz0RjZfUEO2bRQF_GpVnCyVZ0",
 // "refTok":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzc4NTg0NDI2fQ.eLgd6RLtddrNVwM_YrYhRahNKNL7qGQjP5-lr28cJ1I"
 //

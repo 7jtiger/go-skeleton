@@ -102,7 +102,14 @@ func (p *Router) otpAuth() gin.HandlerFunc {
 }
 
 func (p *Router) Idx() *gin.Engine {
-	e := gin.Default()
+	// SetMode는 엔진 생성 전에 호출해야 적용됨
+	if p.cfg.Server.Mode == "prod" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// gin.New() 사용: gin.Default()의 기본 Logger/Recovery와
+	// 커스텀 GinLogger/GinRecovery가 이중 실행되지 않도록 함
+	e := gin.New()
 
 	// MultipartForm 메모리 제한 설정 (32MB - 파일 업로드용)
 	e.MaxMultipartMemory = 32 << 20 // 32MB
@@ -110,10 +117,6 @@ func (p *Router) Idx() *gin.Engine {
 	e.Use(logger.GinLogger())
 	e.Use(logger.GinRecovery(true))
 	e.Use(CORS())
-
-	if p.cfg.Server.Mode == "prod" {
-		gin.SetMode(gin.ReleaseMode)
-	}
 
 	logger.Info("start server : ", p.cfg.Server.Port)
 
@@ -323,6 +326,7 @@ func (p *Router) Idx() *gin.Engine {
 
 		// 채팅방 생성/재참여
 		chat.POST("/mkroom/:pid", p.chat.CreateChatRoom)
+		chat.GET("/room/exists/:tid", p.chat.ExistDMRoom)
 
 		// 채팅방 나가기 (1명 전이)
 		chat.POST("/rmroom/:room_id", p.chat.DeleteChatRoom)

@@ -203,7 +203,7 @@ CREATE TABLE `inmsg_push` (
 ---
 
 ## Key Features
-- **Connection Management**: MySQL database connection pooling setup (maximum 300 connections, 30 idle connections)
+- **Connection Management**: MySQL database connection pooling setup (maximum 50 connections, 25 idle connections)
 - **Health Check**: Database connection status monitoring every 2 minutes
 - **Resource Management**: Channel-based resource cleanup for safe termination
 - **Logging**: Log recording during connection setup and termination
@@ -222,7 +222,8 @@ CREATE TABLE `inmsg_push` (
 - **Connection Setup**: MySQL database connection using `hdb` configuration
 - **Connection Options**: Time parsing enabled with `parseTime=true` option
 - **Pooling Settings**: 
-  - Maximum idle connections: 30
-  - Maximum open connections: 300
+  - Maximum idle connections: 25
+  - Maximum open connections: 50
+  - Connection max lifetime: 30분, idle timeout: 5분 (DB 4개 합산이 MySQL max_connections를 넘지 않도록 제한)
   - Connection maximum lifetime: 3 minutes
 

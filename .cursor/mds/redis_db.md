@@ -54,8 +54,10 @@
 
 ## Chat Message Management Functions
 - `SaveChatMessage()`: 채팅 메시지 LIST(`chat:rooms:{roomID}:msg`) 저장, TTL **3일** (`dmMsgRetention`)
-- `GetChatMessages()`: offset 기반 (방 목록 last_msg 등 내부용)
-- `GetChatMessagesByCursor(roomID, cursor, limit)`: 커서 기반 조회 — `cursor==""` 최신 N건, `cursor` 있으면 그 id보다 오래된 N건; 반환 `(total, messages, nextCursor, hasMore, err)`. 메시지는 최신순
+- `GetChatMessages()`: offset 기반 (방 목록 last_msg 등 내부용). `fromIndex` 이후 메시지만 조회
+- `GetChatMessagesByCursor(roomID, cursor, limit, fromIndex)`: 커서 기반 조회 — viewer별 `fromIndex` 적용, `visibleTotal` 반환
+- `SetDMHistoryFromIndex` / `GetDMHistoryFromIndex`: `DM:HIST:FROM:{uid}:{roomId}` — 나가기·재입장 시 현재 LIST 길이 저장, 이전 메시지 숨김
+- `GetLastMessagesForRooms(viewerUID, roomIDs)`: viewer 기준 `fromIndex` 반영한 last_msg·total
 - `ExpiredMsg(ttl)` / `Expired24hMsg`: timestamp가 ttl 이전인 메시지 prune (기본/스케줄러 **3일**)
 - `GetLatestMessageID(roomID)`: 방 최신 메시지 mid 조회
 
@@ -90,7 +92,8 @@
 - `IncrUnread(uid, roomID)`: Redis Lua로 원자 실행 — `DM:UNREAD:{uid}:{roomId}` `INCR`, companion `...:ts`에 마지막 증가 시각(Unix 초) `SET`, 두 키 모두 **3일** `EXPIRE` 매 호출 갱신.
 - `GetUnread(uid, roomID)`: 단일 방 unread 조회 (키 미존재 시 0)
 - `ResetUnread(uid, roomID)`: 해당 방 카운터·`:ts` companion 동시 `DEL`
-- `GetAllUnreadInfoForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` — 방별 `Count` + `LastRecvAt`(`:ts`, Unix 초)
+- `GetAllUnreadInfoForUser(uid)`: `SCAN DM:UNREAD:{uid}:*` — 방별 `Count` + `LastRecvAt`(`:ts`, Unix 초). SCAN 배치마다 `MGET`으로 일괄 조회 (키별 개별 GET 왕복 제거, 2026-07 최적화)
+- `GetLastMessagesForRooms(roomIDs)`: 여러 방의 마지막 메시지·총 개수(`LLEN`+`LRANGE -1 -1`)를 파이프라인으로 일괄 조회 — 인박스 목록 N+1 제거 (2026-07 최적화)
 - `GetAllUnreadForUser(uid)`: `GetAllUnreadInfoForUser` 기반 count-only 맵 (`:ts` 키 제외)
 - `GetLastReadMid` / `SetLastReadMid`: `DM:READ:{uid}:{roomID}` = mid (TTL **3일**). LIST index 기준 전진만 허용
 - `SetOnline(uid)`: `DM:ONLINE:{uid}` 키를 90초 TTL로 설정

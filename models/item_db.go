@@ -49,9 +49,11 @@ func NewItemDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 		return nil, fmt.Errorf("database connection error: %v", err)
 	}
 
-	r.conndb.SetMaxIdleConns(30)
-	r.conndb.SetMaxOpenConns(300)
-	r.conndb.SetConnMaxLifetime(time.Minute * 3)
+	// 풀 과다 방지: DB 4개 합산이 MySQL max_connections를 넘지 않도록 제한
+	r.conndb.SetMaxIdleConns(25)
+	r.conndb.SetMaxOpenConns(50)
+	r.conndb.SetConnMaxLifetime(30 * time.Minute)
+	r.conndb.SetConnMaxIdleTime(5 * time.Minute)
 
 	go r.heartbeat()
 

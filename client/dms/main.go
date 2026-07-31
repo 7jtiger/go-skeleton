@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -17,7 +18,7 @@ import (
 )
 
 // ──────────────────────────────────────────────
-// Protocol
+// Protocol (서버 protocol/types.go · models/redis_db.go 와 정합)
 // ──────────────────────────────────────────────
 
 type ChatMessage struct {
@@ -36,19 +37,21 @@ type ChatMessage struct {
 type PartnerInfo struct {
 	PID      uint64 `json:"pid"`
 	Nick     string `json:"nick"`
-	ThumbPic string `json:"thumbPic"`
+	ThumbPic string `json:"thumb_pic"`
 	Gender   string `json:"gender"`
 	Age      string `json:"age"`
 	Area     string `json:"area"`
 }
 
 type DMRoomResp struct {
-	RoomID   int64        `json:"rid"`
-	Partner  *PartnerInfo `json:"partner"`
-	Total    int          `json:"total"`
-	Unread   int          `json:"unread"`
-	AtCreate string       `json:"at_crtchat"`
-	AtUpdate string       `json:"at_update"`
+	RoomID      int64        `json:"rid"`
+	Partner     *PartnerInfo `json:"partner"`
+	LastMsg     string       `json:"last_msg"`
+	PartnerLeft bool         `json:"partner_left"`
+	Total       int          `json:"total"`
+	Unread      int          `json:"unread"`
+	AtCreate    string       `json:"at_crtchat"`
+	AtUpdate    string       `json:"at_update"`
 }
 
 type APIResp struct {
@@ -58,13 +61,39 @@ type APIResp struct {
 }
 
 type RoomListData struct {
-	TotalCount int          `json:"totalcount"`
+	TotalCount int          `json:"total_count"`
 	Rooms      []DMRoomResp `json:"rooms"`
 }
 
 type UnreadData struct {
-	Total int64            `json:"total"`
-	Rooms map[string]int64 `json:"rooms"`
+	TotalCount int64            `json:"total_count"`
+	Rooms      map[string]int64 `json:"rooms"`
+}
+
+// StoredMessage Redis chat:rooms:{id}:msg LIST 항목 (GetChatList 응답)
+type StoredMessage struct {
+	ID        string    `json:"id"`
+	RoomID    string    `json:"room_id"`
+	UserID    string    `json:"user_id"`
+	Content   string    `json:"content"`
+	Type      string    `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type ChatHistoryData struct {
+	TotalCount     int64           `json:"total_count"`
+	Messages       []StoredMessage `json:"messages"`
+	NextCursor     string          `json:"next_cursor"`
+	HasMore        bool            `json:"has_more"`
+	MyLastMid      string          `json:"my_last_mid"`
+	PartnerLastMid string          `json:"partner_last_mid"`
+}
+
+type RoomInfoData struct {
+	RoomID         string     `json:"room_id"`
+	Room           DMRoomResp `json:"room"`
+	MyLastMid      string     `json:"my_last_mid"`
+	PartnerLastMid string     `json:"partner_last_mid"`
 }
 
 // ──────────────────────────────────────────────
@@ -72,14 +101,16 @@ type UnreadData struct {
 // ──────────────────────────────────────────────
 
 type Session struct {
-	server    string
-	token     string
-	ws        *websocket.Conn
-	roomID    string
-	partnerID string
-	done      chan struct{}
-	mu        sync.Mutex
-	connected bool
+	server     string
+	token      string
+	ws         *websocket.Conn
+	roomID     string
+	partnerID  string
+	lastCursor string // chatlist 페이지네이션
+	myLastMid  string
+	done       chan struct{}
+	mu         sync.Mutex
+	connected  bool
 }
 
 var sess = &Session{}
@@ -95,6 +126,7 @@ const (
 	colorYellow = "\033[33m"
 	colorCyan   = "\033[36m"
 	colorGray   = "\033[90m"
+	colorBold   = "\033[1m"
 )
 
 func info(format string, a ...interface{}) {
@@ -123,12 +155,12 @@ func apiBase() string {
 	return "http://" + s
 }
 
-func doReq(method, url string, body string) (int, []byte, error) {
+func doReq(method, rawURL string, body string) (int, []byte, error) {
 	var reader io.Reader
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
-	req, err := http.NewRequest(method, url, reader)
+	req, err := http.NewRequest(method, rawURL, reader)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -145,12 +177,20 @@ func doReq(method, url string, body string) (int, []byte, error) {
 	return resp.StatusCode, data, nil
 }
 
-func parseData(raw []byte) (json.RawMessage, error) {
+func parseAPI(raw []byte) (*APIResp, error) {
 	var r APIResp
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return nil, err
 	}
-	return r.Data, nil
+	return &r, nil
+}
+
+func requireToken() bool {
+	if sess.token == "" {
+		errMsg("토큰이 필요합니다. /token <jwt>")
+		return false
+	}
+	return true
 }
 
 // ──────────────────────────────────────────────
@@ -176,13 +216,13 @@ func wsConnect() error {
 	if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 		scheme = "wss"
 	}
-	url := scheme + "://" + host + "/dm/v01/ws"
+	wsURL := scheme + "://" + host + "/dm/v01/ws"
 
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+sess.token)
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	conn, resp, err := dialer.Dial(url, header)
+	conn, resp, err := dialer.Dial(wsURL, header)
 	if err != nil {
 		if resp != nil {
 			body, _ := io.ReadAll(resp.Body)
@@ -206,8 +246,8 @@ func wsDisconnect() {
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 	if sess.ws != nil {
-		sess.ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-		sess.ws.Close()
+		_ = sess.ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		_ = sess.ws.Close()
 		sess.ws = nil
 	}
 	sess.connected = false
@@ -217,7 +257,6 @@ func readLoop() {
 	defer func() {
 		sess.mu.Lock()
 		sess.connected = false
-		close(sess.done)
 		sess.mu.Unlock()
 	}()
 	for {
@@ -249,7 +288,7 @@ func readLoop() {
 func handleIncoming(msg *ChatMessage) {
 	switch msg.Type {
 	case "text-message":
-		recv("%s [%s] %s  (room=%s)", ts(), msg.From, msg.Content, msg.RoomID)
+		recv("%s [%s] %s  (room=%s msgId=%s)", ts(), msg.From, msg.Content, msg.RoomID, msg.MsgID)
 	case "msg-ack":
 		recv("%s ACK roomId=%s msgId=%s unread=%d", ts(), msg.RoomID, msg.MsgID, msg.Unread)
 		sess.mu.Lock()
@@ -258,7 +297,7 @@ func handleIncoming(msg *ChatMessage) {
 		}
 		sess.mu.Unlock()
 	case "read-receipt":
-		recv("%s 읽음 처리 from=%s room=%s", ts(), msg.From, msg.RoomID)
+		recv("%s 읽음 처리 from=%s room=%s msgId=%s", ts(), msg.From, msg.RoomID, msg.MsgID)
 	case "typing":
 		recv("%s 입력 중... from=%s", ts(), msg.From)
 	case "call-incoming":
@@ -276,7 +315,7 @@ func handleIncoming(msg *ChatMessage) {
 	case "call-info":
 		recv("%s 통화 안내: %s", ts(), msg.Content)
 	case "partner-left", "system-message":
-		recv("%s %s (room=%s)", ts(), msg.Content, msg.RoomID)
+		recv("%s [%s] %s (room=%s)", ts(), msg.Type, msg.Content, msg.RoomID)
 	case "dm-incoming":
 		recv("%s DM 알림 from=%s content=%s", ts(), msg.From, msg.Content)
 	default:
@@ -285,7 +324,11 @@ func handleIncoming(msg *ChatMessage) {
 }
 
 func wsSend(msg *ChatMessage) error {
-	if !sess.connected || sess.ws == nil {
+	sess.mu.Lock()
+	conn := sess.ws
+	ok := sess.connected
+	sess.mu.Unlock()
+	if !ok || conn == nil {
 		return fmt.Errorf("WS 미연결. /connect 먼저 실행하세요")
 	}
 	data, err := json.Marshal(msg)
@@ -293,12 +336,320 @@ func wsSend(msg *ChatMessage) error {
 		return err
 	}
 	info("전송 -> %s", string(data))
-	return sess.ws.WriteMessage(websocket.TextMessage, data)
+	return conn.WriteMessage(websocket.TextMessage, data)
 }
 
 func prettyJSON(v interface{}) string {
 	b, _ := json.MarshalIndent(v, "", "  ")
 	return string(b)
+}
+
+// ──────────────────────────────────────────────
+// REST 핸들러
+// ──────────────────────────────────────────────
+
+func applyRoomFromResp(room *DMRoomResp) {
+	if room == nil {
+		return
+	}
+	sess.roomID = strconv.FormatInt(room.RoomID, 10)
+	if room.Partner != nil {
+		sess.partnerID = strconv.FormatUint(room.Partner.PID, 10)
+	}
+}
+
+func printRoomBrief(r *DMRoomResp) {
+	nick := partnerNick(r)
+	left := ""
+	if r.PartnerLeft {
+		left = colorYellow + " [상대 나감]" + colorReset
+	}
+	fmt.Printf("  rid=%-6d partner=%-14s total=%-4d unread=%-4d%s\n",
+		r.RoomID, nick, r.Total, r.Unread, left)
+	if r.LastMsg != "" {
+		fmt.Printf("    last_msg: %s\n", truncate(r.LastMsg, 60))
+	}
+}
+
+func cmdMkroom(pid string) {
+	if !requireToken() {
+		return
+	}
+	if pid == "" {
+		errMsg("사용법: /mkroom <pid> 또는 /target 설정 후 /mkroom")
+		return
+	}
+	code, body, err := doReq("POST", apiBase()+"/dm/v01/mkroom/"+pid, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("mkroom status=%d", code)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		return
+	}
+	api, _ := parseAPI(body)
+	if api == nil || api.Data == nil {
+		fmt.Println(string(body))
+		return
+	}
+	var room DMRoomResp
+	if json.Unmarshal(api.Data, &room) != nil {
+		fmt.Println(string(body))
+		return
+	}
+	applyRoomFromResp(&room)
+	info("방 준비/재입장 완료 rid=%d partner=%s unread=%d total=%d",
+		room.RoomID, partnerNick(&room), room.Unread, room.Total)
+	printRoomBrief(&room)
+	info("나간 뒤 재입장이면 /chatlist 로 내역이 비어 있는지 확인하세요")
+}
+
+func cmdLeave(roomID string) {
+	if !requireToken() {
+		return
+	}
+	if roomID == "" {
+		roomID = sess.roomID
+	}
+	if roomID == "" {
+		errMsg("사용법: /leave [roomId] 또는 /room 설정 후 /leave")
+		return
+	}
+	code, body, err := doReq("POST", apiBase()+"/dm/v01/rmroom/"+roomID, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("leave status=%d room=%s", code, roomID)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		return
+	}
+	info("방 나가기 완료 — 이 사용자는 /chatlist 시 403 또는 재입장 후 빈 내역")
+	info("상대방은 기존 채팅 내역 유지 (다른 터미널에서 /chatlist 확인)")
+}
+
+func cmdRinfo(roomID, mid string) {
+	if !requireToken() {
+		return
+	}
+	if roomID == "" {
+		roomID = sess.roomID
+	}
+	if roomID == "" {
+		errMsg("사용법: /rinfo [roomId] [mid]")
+		return
+	}
+	rawURL := apiBase() + "/dm/v01/rinfo/" + roomID
+	if mid != "" {
+		rawURL += "?mid=" + url.QueryEscape(mid)
+	}
+	code, body, err := doReq("GET", rawURL, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("rinfo status=%d", code)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		return
+	}
+	api, _ := parseAPI(body)
+	if api == nil || api.Data == nil {
+		fmt.Println(string(body))
+		return
+	}
+	var data RoomInfoData
+	if json.Unmarshal(api.Data, &data) != nil {
+		fmt.Println(string(body))
+		return
+	}
+	sess.roomID = data.RoomID
+	applyRoomFromResp(&data.Room)
+	sess.myLastMid = data.MyLastMid
+	info("방 입장 정보 (unread 초기화됨)")
+	fmt.Printf("  room_id=%s my_last_mid=%s partner_last_mid=%s\n",
+		data.RoomID, data.MyLastMid, data.PartnerLastMid)
+	printRoomBrief(&data.Room)
+}
+
+func cmdExists(tid string) {
+	if !requireToken() {
+		return
+	}
+	if tid == "" {
+		tid = sess.partnerID
+	}
+	if tid == "" {
+		errMsg("사용법: /exists <tid>")
+		return
+	}
+	code, body, err := doReq("GET", apiBase()+"/dm/v01/room/exists/"+tid, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("exists status=%d", code)
+	fmt.Println(string(body))
+}
+
+func cmdRooms(page string) {
+	if !requireToken() {
+		return
+	}
+	if page == "" {
+		page = "1"
+	}
+	code, body, err := doReq("GET", apiBase()+"/dm/v01/list/"+page, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("rooms status=%d page=%s", code, page)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		return
+	}
+	api, _ := parseAPI(body)
+	if api == nil || api.Data == nil {
+		fmt.Println(string(body))
+		return
+	}
+	var list RoomListData
+	if json.Unmarshal(api.Data, &list) != nil {
+		fmt.Println(string(body))
+		return
+	}
+	info("총 %d개 방", list.TotalCount)
+	for i, r := range list.Rooms {
+		fmt.Printf("%s[%d]%s ", colorGray, i+1, colorReset)
+		printRoomBrief(&r)
+	}
+}
+
+func cmdUnread() {
+	if !requireToken() {
+		return
+	}
+	code, body, err := doReq("GET", apiBase()+"/dm/v01/total/unread", "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("unread status=%d", code)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		return
+	}
+	api, _ := parseAPI(body)
+	if api == nil || api.Data == nil {
+		fmt.Println(string(body))
+		return
+	}
+	var u UnreadData
+	if json.Unmarshal(api.Data, &u) != nil {
+		fmt.Println(string(body))
+		return
+	}
+	info("총 미읽음: %d", u.TotalCount)
+	for rid, cnt := range u.Rooms {
+		fmt.Printf("  room %-8s : %d\n", rid, cnt)
+	}
+}
+
+func cmdChatlist(roomID, limit, cursor string, saveCursor bool) {
+	if !requireToken() {
+		return
+	}
+	if roomID == "" {
+		roomID = sess.roomID
+	}
+	if limit == "" {
+		limit = "20"
+	}
+	if roomID == "" {
+		errMsg("사용법: /chatlist [roomId] [limit] [cursor]")
+		return
+	}
+	if cursor == "" && saveCursor {
+		cursor = sess.lastCursor
+		if cursor != "" {
+			info("이전 cursor 사용: %s", cursor)
+		}
+	}
+
+	qs := fmt.Sprintf("?limit=%s", limit)
+	if cursor != "" {
+		qs += "&cursor=" + url.QueryEscape(cursor)
+	}
+	rawURL := apiBase() + "/dm/v01/history/" + roomID + qs
+	code, body, err := doReq("GET", rawURL, "")
+	if err != nil {
+		errMsg("요청 실패: %v", err)
+		return
+	}
+	info("chatlist status=%d room=%s", code, roomID)
+	if code != http.StatusOK {
+		fmt.Println(string(body))
+		if code == http.StatusForbidden {
+			warn("방 참여자가 아닙니다. /mkroom 으로 재입장하거나 상대가 나간 상태일 수 있습니다")
+		}
+		return
+	}
+	api, _ := parseAPI(body)
+	if api == nil || api.Data == nil {
+		fmt.Println(string(body))
+		return
+	}
+	var hist ChatHistoryData
+	if json.Unmarshal(api.Data, &hist) != nil {
+		fmt.Println(string(body))
+		return
+	}
+
+	sess.myLastMid = hist.MyLastMid
+	if hist.NextCursor != "" {
+		sess.lastCursor = hist.NextCursor
+	} else if cursor == "" {
+		sess.lastCursor = ""
+	}
+
+	fmt.Printf("%s── 채팅 내역 (viewer 기준 visible=%d) ──%s\n",
+		colorBold, hist.TotalCount, colorReset)
+	fmt.Printf("  my_last_mid=%s  partner_last_mid=%s\n", hist.MyLastMid, hist.PartnerLastMid)
+	if hist.HasMore {
+		fmt.Printf("  has_more=true  next_cursor=%s  (/chatmore 로 이전 메시지)\n", hist.NextCursor)
+	} else {
+		fmt.Printf("  has_more=false\n")
+	}
+
+	if len(hist.Messages) == 0 {
+		info("메시지 없음 (나간 뒤 재입장 시 정상 — 이전 내역은 DM:HIST:FROM 컷오프로 숨김)")
+		return
+	}
+
+	for i, m := range hist.Messages {
+		at := m.Timestamp.Format("2006-01-02 15:04:05")
+		if m.Timestamp.IsZero() {
+			at = "-"
+		}
+		typeTag := m.Type
+		if typeTag == "" {
+			typeTag = "text-message"
+		}
+		fmt.Printf("  %s[%d]%s %s [%s] from=%s id=%s\n",
+			colorGray, i+1, colorReset, at, typeTag, m.UserID, m.ID)
+		fmt.Printf("      %s\n", m.Content)
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-3] + "..."
 }
 
 // ──────────────────────────────────────────────
@@ -308,7 +659,7 @@ func prettyJSON(v interface{}) string {
 func printHelp() {
 	help := `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DM Gateway 콘솔 클라이언트
+  DM Gateway 콘솔 클라이언트 (chatCtl 테스트용)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   설정
@@ -324,27 +675,36 @@ func printHelp() {
 
   메시지 (WS 연결 필요)
     /send <메시지>          텍스트 메시지 전송
-    또는 그냥 텍스트 입력   -> 자동으로 텍스트 메시지 전송
-    /typing                 타이핑 알림 전송
-    /read                   읽음 처리 전송
+    (텍스트만 입력)         -> 자동 전송
+    /typing                 타이핑 알림
+    /read [msgId]           읽음 처리 (msgId 생략 가능)
 
-  통화 (WS 연결 필요)
-    /call <video|audio|text>   통화 요청
-    /accept                    통화 수락
-    /reject                    통화 거절
-    /cancel                    통화 취소
+  통화 (WS)
+    /call <video|audio|text>
+    /accept  /reject  /cancel
 
-  REST API
-    /mkroom [pid]           방 생성 (pid 생략 시 /target 값 사용)
-    /rooms  [page]          방 목록 조회 (기본 page=1)
-    /chatlist [roomId] [page] [limit]
-                            특정 채팅방 메시지 목록 조회
-                            roomId 생략 시 현재 /room 값 사용
-    /unread                 전체 미읽음 조회
+  REST — 방
+    /mkroom [pid]           방 생성 / 재입장 (나간 사용자 컷오프 갱신)
+    /rejoin [pid]           /mkroom 과 동일
+    /leave [roomId]         방 나가기 (POST /dm/v01/rmroom/:id)
+    /exists <tid>           상대와 방 존재 여부
+    /rinfo [roomId] [mid]   방 상세 + 입장(unread 초기화)
+    /rooms [page]           인박스 목록
 
-  기타
-    /help                   도움말
-    /quit                   종료
+  REST — 메시지
+    /chatlist [roomId] [limit] [cursor]   채팅 내역 (커서 페이지네이션)
+    /chatmore [limit]                     이전 cursor로 추가 조회
+    /unread                               전체 미읽음
+
+  나가기/재입장 테스트 시나리오
+    터미널 A,B 각각 /token /target /connect 설정
+    1) A: /mkroom <B_uid>  →  /send hello
+    2) B: /rooms → /chatlist <rid>  (내역 확인)
+    3) A: /leave  →  B: /chatlist (B는 내역 유지)
+    4) A: /mkroom <B_uid> → /chatlist (A는 빈 내역)
+    5) A: /send new msg  →  양쪽 /chatlist 비교
+
+  /help  /quit
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 	fmt.Println(help)
 }
@@ -363,12 +723,18 @@ func printStatus() {
 		tokenStr = t
 	}
 	fmt.Printf(`
-  서버:    %s
-  토큰:    %s
-  WS:      %s
-  상대:    %s
-  방 ID:   %s
-`, sess.server, tokenStr, connStr, orDefault(sess.partnerID, "(없음)"), orDefault(sess.roomID, "(없음)"))
+  서버:       %s
+  토큰:       %s
+  WS:         %s
+  상대:       %s
+  방 ID:      %s
+  lastCursor: %s
+  myLastMid:  %s
+`, sess.server, tokenStr, connStr,
+		orDefault(sess.partnerID, "(없음)"),
+		orDefault(sess.roomID, "(없음)"),
+		orDefault(sess.lastCursor, "(없음)"),
+		orDefault(sess.myLastMid, "(없음)"))
 }
 
 func orDefault(s, def string) string {
@@ -392,7 +758,6 @@ func handleCommand(line string) {
 	}
 
 	switch cmd {
-	// ── 설정 ──
 	case "/server":
 		if arg == "" {
 			errMsg("사용법: /server <addr>")
@@ -423,12 +788,12 @@ func handleCommand(line string) {
 			return
 		}
 		sess.roomID = arg
+		sess.lastCursor = ""
 		info("방 ID 설정: %s", sess.roomID)
 
 	case "/status":
 		printStatus()
 
-	// ── WS 연결 ──
 	case "/connect":
 		if err := wsConnect(); err != nil {
 			errMsg("WS 연결 실패: %v", err)
@@ -440,7 +805,6 @@ func handleCommand(line string) {
 		wsDisconnect()
 		info("WS 연결 종료")
 
-	// ── 메시지 ──
 	case "/send":
 		if arg == "" {
 			errMsg("사용법: /send <메시지>")
@@ -463,20 +827,25 @@ func handleCommand(line string) {
 
 	case "/read":
 		if sess.partnerID == "" || sess.roomID == "" {
-			errMsg("/target 과 /room (또는 메시지 전송 후 ack) 이 필요합니다")
+			errMsg("/target 과 /room (또는 ack 후 room) 이 필요합니다")
 			return
 		}
-		if err := wsSend(&ChatMessage{
+		msg := &ChatMessage{
 			Type:   "read-receipt",
 			To:     sess.partnerID,
 			RoomID: sess.roomID,
-		}); err != nil {
+		}
+		if arg != "" {
+			msg.MsgID = arg
+		} else if sess.myLastMid != "" {
+			msg.MsgID = sess.myLastMid
+		}
+		if err := wsSend(msg); err != nil {
 			errMsg("%v", err)
 		} else {
-			info("읽음 처리 전송 (room=%s)", sess.roomID)
+			info("읽음 처리 전송 room=%s msgId=%s", sess.roomID, msg.MsgID)
 		}
 
-	// ── 통화 ──
 	case "/call":
 		if sess.partnerID == "" {
 			errMsg("/target 으로 상대를 지정하세요")
@@ -502,11 +871,7 @@ func handleCommand(line string) {
 			errMsg("/target 으로 상대를 지정하세요")
 			return
 		}
-		if err := wsSend(&ChatMessage{
-			Type:   "call-accept",
-			To:     sess.partnerID,
-			RoomID: sess.roomID,
-		}); err != nil {
+		if err := wsSend(&ChatMessage{Type: "call-accept", To: sess.partnerID, RoomID: sess.roomID}); err != nil {
 			errMsg("%v", err)
 		} else {
 			info("통화 수락 전송")
@@ -517,11 +882,7 @@ func handleCommand(line string) {
 			errMsg("/target 으로 상대를 지정하세요")
 			return
 		}
-		if err := wsSend(&ChatMessage{
-			Type:   "call-reject",
-			To:     sess.partnerID,
-			RoomID: sess.roomID,
-		}); err != nil {
+		if err := wsSend(&ChatMessage{Type: "call-reject", To: sess.partnerID, RoomID: sess.roomID}); err != nil {
 			errMsg("%v", err)
 		} else {
 			info("통화 거절 전송")
@@ -533,117 +894,45 @@ func handleCommand(line string) {
 			return
 		}
 		if err := wsSend(&ChatMessage{
-			Type:     "call-cancel",
-			To:       sess.partnerID,
-			RoomID:   sess.roomID,
-			CallMode: "video",
+			Type: "call-cancel", To: sess.partnerID, RoomID: sess.roomID, CallMode: "video",
 		}); err != nil {
 			errMsg("%v", err)
 		} else {
 			info("통화 취소 전송")
 		}
 
-	// ── REST API ──
-	case "/mkroom":
+	case "/mkroom", "/rejoin":
 		pid := sess.partnerID
 		if arg != "" {
 			pid = arg
 		}
-		if pid == "" {
-			errMsg("사용법: /mkroom <pid> 또는 /target 설정 후 /mkroom")
-			return
+		cmdMkroom(pid)
+
+	case "/leave", "/rmroom":
+		cmdLeave(arg)
+
+	case "/rinfo":
+		args := strings.Fields(arg)
+		roomID, mid := "", ""
+		if len(args) >= 1 {
+			roomID = args[0]
 		}
-		if sess.token == "" {
-			errMsg("토큰이 필요합니다. /token <jwt>")
-			return
+		if len(args) >= 2 {
+			mid = args[1]
 		}
-		code, body, err := doReq("POST", apiBase()+"/dm/v01/mkroom/"+pid, "")
-		if err != nil {
-			errMsg("요청 실패: %v", err)
-			return
-		}
-		info("mkroom status=%d", code)
-		data, _ := parseData(body)
-		if data != nil {
-			var room DMRoomResp
-			if json.Unmarshal(data, &room) == nil {
-				sess.roomID = strconv.FormatInt(room.RoomID, 10)
-				if room.Partner != nil {
-					sess.partnerID = strconv.FormatUint(room.Partner.PID, 10)
-				}
-				info("방 생성 완료 rid=%d partner=%s unread=%d",
-					room.RoomID,
-					orDefault(partnerNick(&room), sess.partnerID),
-					room.Unread)
-				return
-			}
-		}
-		fmt.Println(string(body))
+		cmdRinfo(roomID, mid)
+
+	case "/exists":
+		cmdExists(arg)
 
 	case "/rooms":
-		if sess.token == "" {
-			errMsg("토큰이 필요합니다. /token <jwt>")
-			return
-		}
-		page := "1"
-		if arg != "" {
-			page = arg
-		}
-		code, body, err := doReq("GET", apiBase()+"/dm/v01/list/"+page, "")
-		if err != nil {
-			errMsg("요청 실패: %v", err)
-			return
-		}
-		info("rooms status=%d", code)
-		data, _ := parseData(body)
-		if data != nil {
-			var list RoomListData
-			if json.Unmarshal(data, &list) == nil {
-				info("총 %d개 (page %s)", list.TotalCount, page)
-				for i, r := range list.Rooms {
-					nick := partnerNick(&r)
-					fmt.Printf("  %s[%d]%s rid=%-8d partner=%-12s unread=%d\n",
-						colorGray, i+1, colorReset, r.RoomID, nick, r.Unread)
-				}
-				return
-			}
-		}
-		fmt.Println(string(body))
+		cmdRooms(arg)
 
 	case "/unread":
-		if sess.token == "" {
-			errMsg("토큰이 필요합니다. /token <jwt>")
-			return
-		}
-		code, body, err := doReq("GET", apiBase()+"/dm/v01/total/unread", "")
-		if err != nil {
-			errMsg("요청 실패: %v", err)
-			return
-		}
-		info("unread status=%d", code)
-		data, _ := parseData(body)
-		if data != nil {
-			var u UnreadData
-			if json.Unmarshal(data, &u) == nil {
-				info("총 미읽음: %d", u.Total)
-				for rid, cnt := range u.Rooms {
-					fmt.Printf("  room %-8s : %d\n", rid, cnt)
-				}
-				return
-			}
-		}
-		fmt.Println(string(body))
+		cmdUnread()
 
 	case "/chatlist":
-		if sess.token == "" {
-			errMsg("토큰이 필요합니다. /token <jwt>")
-			return
-		}
-
-		roomID := sess.roomID
-		limit := "20"
-		cursor := ""
-
+		roomID, limit, cursor := "", "20", ""
 		if arg != "" {
 			args := strings.Fields(arg)
 			if len(args) >= 1 {
@@ -656,48 +945,20 @@ func handleCommand(line string) {
 				cursor = args[2]
 			}
 		}
+		sess.lastCursor = ""
+		cmdChatlist(roomID, limit, cursor, false)
 
-		if roomID == "" {
-			errMsg("사용법: /chatlist <roomId> [limit] [cursor] 또는 /room 설정 후 /chatlist")
+	case "/chatmore":
+		limit := "20"
+		if arg != "" {
+			limit = arg
+		}
+		if sess.lastCursor == "" {
+			errMsg("먼저 /chatlist 로 조회하세요 (has_more=true 일 때 사용)")
 			return
 		}
+		cmdChatlist(sess.roomID, limit, sess.lastCursor, false)
 
-		qs := fmt.Sprintf("?limit=%s", limit)
-		if cursor != "" {
-			qs += "&cursor=" + cursor
-		}
-		info("chatlist url: %s", apiBase()+"/dm/v01/history/"+roomID+qs)
-		code, body, err := doReq("GET", apiBase()+"/dm/v01/history/"+roomID+qs, "")
-		if err != nil {
-			errMsg("요청 실패: %v", err)
-			return
-		}
-		info("chatlist status=%d room=%s limit=%s cursor=%s", code, roomID, limit, cursor)
-
-		data, _ := parseData(body)
-		if data != nil {
-			info("chatlist data: %s", string(data))
-			var messages []ChatMessage
-			if json.Unmarshal(data, &messages) == nil {
-				if len(messages) == 0 {
-					info("메시지가 없습니다.")
-					return
-				}
-				for i, m := range messages {
-					at := time.Unix(m.Timestamp, 0).Format("2006-01-02 15:04:05")
-					if m.Timestamp == 0 {
-						at = "-"
-					}
-					fmt.Printf("  %s[%d]%s %s from=%s to=%s room=%s\n",
-						colorGray, i+1, colorReset, at, m.From, m.To, m.RoomID)
-					fmt.Printf("      %s\n", m.Content)
-				}
-				return
-			}
-		}
-		fmt.Println(string(body))
-
-	// ── 기타 ──
 	case "/help":
 		printHelp()
 
@@ -742,20 +1003,15 @@ func partnerNick(r *DMRoomResp) string {
 	return "?"
 }
 
-// ──────────────────────────────────────────────
-// main
-// ──────────────────────────────────────────────
-
 func main() {
 	sess.server = "localhost:8080"
 
 	fmt.Println(colorCyan + `
   ┌──────────────────────────────────────┐
   │   DM Gateway Console Client          │
-  │   /help 로 명령어 확인               │
+  │   /help 로 명령어 · 테스트 시나리오  │
   └──────────────────────────────────────┘` + colorReset)
 
-	// Ctrl+C 처리
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	go func() {
@@ -770,7 +1026,6 @@ func main() {
 	scanner.Buffer(make([]byte, 64*1024), 64*1024)
 
 	for {
-		// 프롬프트 표시
 		prompt := colorGray + "dm> " + colorReset
 		if sess.connected {
 			prompt = colorGreen + "dm" + colorReset

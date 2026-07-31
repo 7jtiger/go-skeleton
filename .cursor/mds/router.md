@@ -27,7 +27,7 @@
 ### Router Initialization and Configuration
 - `NewRouter()`: Constructor function that creates router instance and connects controllers
 - `convertWhiteList()`: Utility function that converts IP whitelist slice to map
-- `Idx()`: Main router function that initializes Gin engine and sets up all routes
+- `Idx()`: Main router function that initializes Gin engine and sets up all routes. **2026-07 최적화**: `prod` 모드면 엔진 생성 전에 `gin.SetMode(gin.ReleaseMode)` 호출(생성 후 호출은 미적용), `gin.Default()` 대신 `gin.New()`를 사용해 기본 Logger/Recovery와 커스텀 `GinLogger`/`GinRecovery`의 이중 실행 제거
 
 ### Authentication Related Functions
 - `validateOTP()`: Function that validates the validity of OTP (One-Time Password) tokens

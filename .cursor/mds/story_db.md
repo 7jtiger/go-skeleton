@@ -303,7 +303,7 @@ commentID, err := storyDB.SetStrComment(comment)
 - **Filtered Queries**: Automatically excludes deleted content
 
 ### Performance
-- **Connection Pooling**: 300 max connections, 30 idle
+- **Connection Pooling**: 50 max connections, 25 idle, 30-minute lifetime, 5-minute idle timeout
 - **Heartbeat**: 2-minute health checks
 - **Indexed Queries**: Fast lookups by idx and uid
 - **Automatic Timestamps**: at_create and at_update managed by DB

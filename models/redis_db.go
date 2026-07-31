@@ -741,6 +741,37 @@ func dmOnlineKey(uid uint64) string {
 	return fmt.Sprintf("DM:ONLINE:%d", uid)
 }
 
+// dmHistFromKey 사용자별 채팅 내역 시작 LIST 인덱스 (나가기/재입장 시 갱신, 미설정=0=전체 조회)
+func dmHistFromKey(uid uint64, roomID int64) string {
+	return fmt.Sprintf("DM:HIST:FROM:%d:%d", uid, roomID)
+}
+
+// SetDMHistoryFromIndex uid가 room에서 볼 수 있는 메시지의 최소 LIST 인덱스 설정 (fromIndex 이상만 조회)
+func (r *RedisDB) SetDMHistoryFromIndex(uid uint64, roomID int64, fromIndex int64) error {
+	return r.client.Set(r.ctx, dmHistFromKey(uid, roomID), fromIndex, 0).Err()
+}
+
+// GetDMHistoryFromIndex 미설정 시 0 (전체 내역 조회)
+func (r *RedisDB) GetDMHistoryFromIndex(uid uint64, roomID int64) (int64, error) {
+	val, err := r.client.Get(r.ctx, dmHistFromKey(uid, roomID)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return strconv.ParseInt(val, 10, 64)
+}
+
+func chatMsgListKey(roomID string) string {
+	return fmt.Sprintf("chat:rooms:%s:msg", roomID)
+}
+
+// GetChatMessageListLen 방 메시지 LIST 길이
+func (r *RedisDB) GetChatMessageListLen(roomID string) (int64, error) {
+	return r.client.LLen(r.ctx, chatMsgListKey(roomID)).Result()
+}
+
 // IncrUnread 읽지 않은 메시지 수 증가 (Lua: 카운터·companion TTL 매 호출 갱신)
 func (r *RedisDB) IncrUnread(uid uint64, roomID int64) (int64, error) {
 	counterKey := dmUnreadKey(uid, roomID)
@@ -863,6 +894,7 @@ type UnreadInfo struct {
 }
 
 // GetAllUnreadInfoForUser 사용자 전체 unread + 마지막 수신 시각(:ts) 맵 (roomID string)
+// SCAN 배치마다 MGET으로 일괄 조회한다 (키별 개별 GET 왕복 제거).
 func (r *RedisDB) GetAllUnreadInfoForUser(uid uint64) (map[string]UnreadInfo, error) {
 	pattern := fmt.Sprintf("DM:UNREAD:%d:*", uid)
 	cursor := uint64(0)
@@ -876,39 +908,44 @@ func (r *RedisDB) GetAllUnreadInfoForUser(uid uint64) (map[string]UnreadInfo, er
 			return nil, err
 		}
 
-		for _, key := range keys {
-			roomPart := strings.TrimPrefix(key, prefix)
-			if roomPart == "" {
-				continue
+		if len(keys) > 0 {
+			vals, mgetErr := r.client.MGet(r.ctx, keys...).Result()
+			if mgetErr != nil {
+				return nil, mgetErr
 			}
 
-			val, getErr := r.client.Get(r.ctx, key).Result()
-			if getErr != nil {
-				if errors.Is(getErr, redis.Nil) {
+			for i, key := range keys {
+				roomPart := strings.TrimPrefix(key, prefix)
+				if roomPart == "" {
 					continue
 				}
-				return nil, getErr
-			}
 
-			num, parseErr := strconv.ParseInt(val, 10, 64)
-			if parseErr != nil {
-				continue
-			}
-
-			if strings.HasSuffix(roomPart, tsSuffix) {
-				roomID := strings.TrimSuffix(roomPart, tsSuffix)
-				if roomID == "" {
+				valStr, ok := vals[i].(string)
+				if !ok {
+					// SCAN과 MGET 사이에 만료된 키
 					continue
 				}
-				info := result[roomID]
-				info.LastRecvAt = num
-				result[roomID] = info
-				continue
-			}
 
-			info := result[roomPart]
-			info.Count = num
-			result[roomPart] = info
+				num, parseErr := strconv.ParseInt(valStr, 10, 64)
+				if parseErr != nil {
+					continue
+				}
+
+				if strings.HasSuffix(roomPart, tsSuffix) {
+					roomID := strings.TrimSuffix(roomPart, tsSuffix)
+					if roomID == "" {
+						continue
+					}
+					info := result[roomID]
+					info.LastRecvAt = num
+					result[roomID] = info
+					continue
+				}
+
+				info := result[roomPart]
+				info.Count = num
+				result[roomPart] = info
+			}
 		}
 
 		cursor = nextCursor
@@ -1163,10 +1200,74 @@ func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 	return err
 }
 
+// LastMsgInfo 방별 마지막 메시지 요약 (인박스 목록용)
+type LastMsgInfo struct {
+	Content string
+	Total   int64
+}
+
+// GetLastMessagesForRooms 여러 방의 마지막 메시지·총 개수를 파이프라인으로 일괄 조회 (viewerUID 기준 히스토리 컷오프 반영)
+func (r *RedisDB) GetLastMessagesForRooms(viewerUID uint64, roomIDs []string) (map[string]LastMsgInfo, error) {
+	result := make(map[string]LastMsgInfo, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return result, nil
+	}
+
+	fromIndexes := make([]int64, len(roomIDs))
+	for i, roomID := range roomIDs {
+		roomIDInt, parseErr := strconv.ParseInt(roomID, 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		fromIdx, _ := r.GetDMHistoryFromIndex(viewerUID, roomIDInt)
+		fromIndexes[i] = fromIdx
+	}
+
+	pipe := r.client.Pipeline()
+	lenCmds := make([]*redis.IntCmd, len(roomIDs))
+	lastCmds := make([]*redis.StringSliceCmd, len(roomIDs))
+	for i, roomID := range roomIDs {
+		listKey := chatMsgListKey(roomID)
+		lenCmds[i] = pipe.LLen(r.ctx, listKey)
+		lastCmds[i] = pipe.LRange(r.ctx, listKey, -1, -1)
+	}
+	if _, err := pipe.Exec(r.ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+
+	for i, roomID := range roomIDs {
+		info := LastMsgInfo{}
+		total, err := lenCmds[i].Result()
+		if err != nil {
+			result[roomID] = info
+			continue
+		}
+		fromIdx := fromIndexes[i]
+		if fromIdx > total {
+			fromIdx = total
+		}
+		visibleTotal := total - fromIdx
+		if visibleTotal <= 0 {
+			result[roomID] = info
+			continue
+		}
+		info.Total = visibleTotal
+		if raw, err := lastCmds[i].Result(); err == nil && len(raw) > 0 {
+			var msg ChatMessageData
+			if jsonErr := json.Unmarshal([]byte(raw[0]), &msg); jsonErr == nil {
+				info.Content = msg.Content
+			}
+		}
+		result[roomID] = info
+	}
+
+	return result, nil
+}
+
 // GetChatMessages 특정 채팅방의 메시지 조회
-// 첫 반환값은 항상 해당 방 메시지 전체 개수(LLen). limit<=0·offset 범위 밖·메시지 없음이어도 동일.
-func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) (int64, *[]ChatMessageData, error) {
-	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+// 첫 반환값은 viewer 기준 조회 가능 메시지 수(fromIndex 이후). limit<=0·offset 범위 밖·메시지 없음이어도 동일.
+func (r *RedisDB) GetChatMessages(roomID string, offset, limit int, fromIndex int64) (int64, *[]ChatMessageData, error) {
+	listKey := chatMsgListKey(roomID)
 	total, err := r.client.LLen(r.ctx, listKey).Result()
 	if err != nil {
 		return 0, nil, err
@@ -1175,26 +1276,31 @@ func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) (int64, *[]C
 	empty := []ChatMessageData{}
 	emptyPtr := &empty
 
-	if limit <= 0 {
-		return total, emptyPtr, nil
+	if fromIndex > total {
+		fromIndex = total
 	}
-	if total == 0 || int64(offset) >= total {
-		return total, emptyPtr, nil
+	visibleTotal := total - fromIndex
+
+	if limit <= 0 {
+		return visibleTotal, emptyPtr, nil
+	}
+	if visibleTotal <= 0 || int64(offset) >= visibleTotal {
+		return visibleTotal, emptyPtr, nil
 	}
 
-	// 최신 메시지 기준(offset=0) 페이징 유지
-	start := total - int64(offset) - int64(limit)
-	if start < 0 {
-		start = 0
+	// 최신 메시지 기준(offset=0) 페이징 — fromIndex 미만 인덱스는 제외
+	end := total - 1 - int64(offset)
+	start := end - int64(limit) + 1
+	if start < fromIndex {
+		start = fromIndex
 	}
-	end := total - int64(offset) - 1
 
 	rawMessages, err := r.client.LRange(r.ctx, listKey, start, end).Result()
 	if err != nil {
-		return total, nil, err
+		return visibleTotal, nil, err
 	}
 	if len(rawMessages) == 0 {
-		return total, emptyPtr, nil
+		return visibleTotal, emptyPtr, nil
 	}
 
 	// LRange 결과는 오래된 순이므로 최신순으로 뒤집는다.
@@ -1211,7 +1317,7 @@ func (r *RedisDB) GetChatMessages(roomID string, offset, limit int) (int64, *[]C
 		messages = append(messages, message)
 	}
 
-	return total, &messages, nil
+	return visibleTotal, &messages, nil
 }
 
 // findMessageListIndex returns the Redis LIST index (0=oldest) for message id.
@@ -1250,55 +1356,64 @@ func parseChatMessagesRaw(rawMessages []string) []ChatMessageData {
 }
 
 // GetChatMessagesByCursor cursor 기반 메시지 조회 (최신순 반환).
+// fromIndex: viewer 기준 조회 시작 LIST 인덱스(나가기/재입장 이전 메시지 제외).
 // cursor == "" → 최신 limit건. cursor != "" → 해당 메시지보다 오래된 limit건.
 // nextCursor는 이번 배치에서 가장 오래된 메시지 id (다음 요청 cursor로 사용).
-func (r *RedisDB) GetChatMessagesByCursor(roomID, cursor string, limit int) (int64, []ChatMessageData, string, bool, error) {
-	listKey := fmt.Sprintf("chat:rooms:%s:msg", roomID)
+func (r *RedisDB) GetChatMessagesByCursor(roomID, cursor string, limit int, fromIndex int64) (int64, []ChatMessageData, string, bool, error) {
+	listKey := chatMsgListKey(roomID)
 	total, err := r.client.LLen(r.ctx, listKey).Result()
 	if err != nil {
 		return 0, nil, "", false, err
 	}
 
 	empty := []ChatMessageData{}
-	if limit <= 0 {
-		return total, empty, "", false, nil
+	if fromIndex > total {
+		fromIndex = total
 	}
-	if total == 0 {
-		return total, empty, "", false, nil
+	visibleTotal := total - fromIndex
+
+	if limit <= 0 {
+		return visibleTotal, empty, "", false, nil
+	}
+	if visibleTotal <= 0 {
+		return visibleTotal, empty, "", false, nil
 	}
 
 	var endIdx int64 = total - 1
 	if cursor != "" {
 		cursorIdx, found, err := r.findMessageListIndex(listKey, cursor, total)
 		if err != nil {
-			return total, nil, "", false, err
+			return visibleTotal, nil, "", false, err
 		}
 		if !found {
-			return total, nil, "", false, fmt.Errorf("invalid cursor: %s", cursor)
+			return visibleTotal, nil, "", false, fmt.Errorf("invalid cursor: %s", cursor)
+		}
+		if cursorIdx <= fromIndex {
+			return visibleTotal, empty, "", false, nil
 		}
 		endIdx = cursorIdx - 1
-		if endIdx < 0 {
-			return total, empty, "", false, nil
+		if endIdx < fromIndex {
+			return visibleTotal, empty, "", false, nil
 		}
 	}
 
 	startIdx := endIdx - int64(limit) + 1
-	if startIdx < 0 {
-		startIdx = 0
+	if startIdx < fromIndex {
+		startIdx = fromIndex
 	}
 
 	rawMessages, err := r.client.LRange(r.ctx, listKey, startIdx, endIdx).Result()
 	if err != nil {
-		return total, nil, "", false, err
+		return visibleTotal, nil, "", false, err
 	}
 	if len(rawMessages) == 0 {
-		return total, empty, "", false, nil
+		return visibleTotal, empty, "", false, nil
 	}
 
 	messages := parseChatMessagesRaw(rawMessages)
 	nextCursor := messages[len(messages)-1].ID
-	hasMore := startIdx > 0
-	return total, messages, nextCursor, hasMore, nil
+	hasMore := startIdx > fromIndex
+	return visibleTotal, messages, nextCursor, hasMore, nil
 }
 
 // ExpiredMsg 채팅방별 만료 메시지 정리

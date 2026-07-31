@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,9 +142,11 @@ func NewAccountDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 		return nil, fmt.Errorf("database connection error: %v", err)
 	}
 
-	r.conndb.SetMaxOpenConns(300)
-	r.conndb.SetMaxIdleConns(10)
-	r.conndb.SetConnMaxLifetime(time.Minute * 3)
+	// 풀 과다 방지: DB 4개 합산이 MySQL max_connections를 넘지 않도록 제한
+	r.conndb.SetMaxOpenConns(50)
+	r.conndb.SetMaxIdleConns(25)
+	r.conndb.SetConnMaxLifetime(30 * time.Minute)
+	r.conndb.SetConnMaxIdleTime(5 * time.Minute)
 
 	go r.heartbeat()
 
@@ -609,6 +612,51 @@ func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
 	}
 
 	return user, nil
+}
+
+// GetUserInfosByUIDs 여러 uid를 IN 절로 일괄 조회 (DM 인박스 N+1 제거용)
+// 반환 맵에는 조회에 성공한 사용자만 포함된다. 이메일/이름 복호화는 생략(파트너 프로필 용도).
+func (p *AccountDB) GetUserInfosByUIDs(uids []uint64) (map[uint64]ptc.UserInfoResp, error) {
+	result := make(map[uint64]ptc.UserInfoResp, len(uids))
+	if len(uids) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(uids))
+	args := make([]interface{}, len(uids))
+	for i, uid := range uids {
+		placeholders[i] = "?"
+		args[i] = uid
+	}
+
+	query := "SELECT sid, uid, did, nick, gender, birthday, area, stat, main_pic, thmb_pic, sp_intro FROM user_info WHERE uid IN (" +
+		strings.Join(placeholders, ",") + ")"
+
+	rows, err := p.conndb.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user ptc.UserInfoResp
+		var did sql.NullString
+		var area int
+
+		if err := rows.Scan(&user.ID, &user.Uid, &did, &user.Nick, &user.Gender, &user.Birth, &area, &user.Stat, &user.MainPic, &user.ThumbPic, &user.SPIntro); err != nil {
+			return nil, err
+		}
+
+		if did.Valid {
+			user.Did = did.String
+		}
+		user.Area = ptc.GetAreaName(area)
+		user.Age = strconv.Itoa(utils.CalcBirth2Age(user.Birth))
+
+		result[user.Uid] = user
+	}
+
+	return result, rows.Err()
 }
 
 func (p *AccountDB) GetSetAlert(uid uint64) (int, error) {

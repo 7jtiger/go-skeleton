@@ -4,6 +4,7 @@
 
 ### Core Data Structures
 - `item struct`: Individual scheduled task configuration containing name, description, arguments, delay, ticker, and quit channel
+  - **주의**: `ticker`는 반드시 `*time.Ticker` 포인터로 보관. 값 복사(`*time.NewTicker(...)`) 시 Go 1.23+에서 GC가 원본의 내부 타이머를 회수해 채널 수신 중 SIGSEGV(fatal error) 발생
 - `Schedule struct`: Main scheduler management structure containing configuration, account database, and task items
 
 ### Time Calculation Functions
@@ -59,7 +60,7 @@
 
 ## Key Features
 - **Flexible Scheduling**: Supports daily, hourly, 5-minute interval, and custom second-based scheduling
-- **Interval Rule**: `start`는 첫 실행 시점 정렬용, `duration`(초)는 그 이후 반복 주기(`time.Duration(duration) * time.Second`)
+- **Interval Rule**: `start`는 첫 실행 시점 정렬용, `duration`(초)는 그 이후 반복 주기. 첫 tick 후 `ticker.Reset(delay)`로 주기만 변경 (티커 재생성 금지 — 채널 교체/GC 회수 방지)
 - **Concurrent Execution**: Uses goroutines for non-blocking task execution
 - **Configuration-Driven**: Tasks are loaded from configuration files with execute flags (run/exe/o for immediate, cron for cron-style)
 - **Database Integration**: Connected to AccountDB for data operations

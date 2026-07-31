@@ -59,6 +59,7 @@ type VDRoom struct {
 	UserNames    map[*WSClient]string   // 클라이언트 -> 사용자 이름
 	Broadcast    chan *BroadcastMessage // 브로드캐스트 채널
 	Unregister   chan *WSClient         // 클라이언트 해제 채널
+	done         chan struct{}          // 방 고루틴 종료 신호 (roomCleaner가 close)
 	mu           sync.RWMutex
 	createdAt    time.Time
 	lastActivity time.Time
@@ -66,13 +67,21 @@ type VDRoom struct {
 
 // Client 클라이언트 연결 정보
 type WSClient struct {
-	conn     *websocket.Conn
-	send     chan []byte // 송신 버퍼
-	room     *VDRoom
-	userName string
-	userID   string // 사용자 ID
-	mu       sync.Mutex
-	lastSeen time.Time
+	conn      *websocket.Conn
+	send      chan []byte // 송신 버퍼
+	room      *VDRoom
+	userName  string
+	userID    string // 사용자 ID
+	mu        sync.Mutex
+	closeOnce sync.Once // send 채널 이중 close 방지
+	lastSeen  time.Time
+}
+
+// closeSend는 send 채널을 단 한 번만 닫는다 (close of closed channel 패닉 방지).
+func (w *WSClient) closeSend() {
+	w.closeOnce.Do(func() {
+		close(w.send)
+	})
 }
 
 // BroadcastMessage 브로드캐스트할 메시지
@@ -152,6 +161,7 @@ type SignalingController struct {
 	brcQueue    chan *BroadcastJob
 	ctx         context.Context
 	cancel      context.CancelFunc
+	workerWG    sync.WaitGroup
 }
 
 // NewSignalingController 시그널링 컨트롤러 생성
@@ -192,14 +202,26 @@ func NewSignalingController(ctl *Controller, rep *models.Repositories) (*Signali
 	r.cancel = cancel
 
 	for i := 0; i < NUM_WORKERS; i++ {
-		go r.msgWorker()
+		r.workerWG.Add(1)
+		go func() {
+			defer r.workerWG.Done()
+			r.msgWorker()
+		}()
 	}
 
 	for i := 0; i < NUM_BRC_WORKERS; i++ {
-		go r.brcWorker()
+		r.workerWG.Add(1)
+		go func() {
+			defer r.workerWG.Done()
+			r.brcWorker()
+		}()
 	}
 
-	go r.roomCleaner()
+	r.workerWG.Add(1)
+	go func() {
+		defer r.workerWG.Done()
+		r.roomCleaner()
+	}()
 
 	return r, nil
 }
@@ -225,6 +247,19 @@ func (p *SignalingController) Shutdown() {
 		room.mu.RUnlock()
 	}
 	p.roomsMu.RUnlock()
+
+	done := make(chan struct{})
+	go func() {
+		p.workerWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Info("SignalingController workers stopped")
+	case <-time.After(3 * time.Second):
+		log.Warn("SignalingController worker shutdown timeout")
+	}
 }
 
 // messageWorker 메시지 처리 워커
@@ -323,11 +358,9 @@ func (p *SignalingController) brcWorker() {
 					continue
 				}
 
-				select {
-				case client.send <- job.message:
-				default:
-					// 버퍼가 가득 찬 경우 연결 해제
-					log.Warn("Client buffer full, disconnecting")
+				if !p.trySend(client, job.message) {
+					// 버퍼가 가득 찼거나 채널이 닫힌 경우 연결 해제
+					log.Warn("Client buffer full or closed, disconnecting")
 					go func(c *WSClient) {
 						job.room.Unregister <- c
 					}(client)
@@ -719,13 +752,10 @@ func (p *SignalingController) HandleConnection(c *gin.Context) {
 			for otherClient := range room.Clients {
 				if otherClient != client {
 					startMsg, _ := json.Marshal(Message{Type: "start"})
-					select {
-					case otherClient.send <- startMsg:
+					if p.trySend(otherClient, startMsg) {
 						log.Info("Start signal sent to %s", room.UserNames[otherClient])
-						// start 시그널 송신 바이트 추적
-						// atomic.AddInt64(&p.stats.TotalBytesSent, int64(len(startMsg)))
-					default:
-						log.Warn("Failed to send start signal: buffer full")
+					} else {
+						log.Warn("Failed to send start signal")
 					}
 					break
 				}
@@ -767,10 +797,8 @@ func (p *SignalingController) sendUserList(client *WSClient) {
 	}
 
 	data, _ := json.Marshal(userListMsg)
-	select {
-	case client.send <- data:
-	default:
-		log.Warn("Failed to send user list: buffer full")
+	if !p.trySend(client, data) {
+		log.Warn("Failed to send user list")
 	}
 }
 
@@ -854,11 +882,10 @@ func (p *SignalingController) handleCallRequest(client *WSClient, msg *Message) 
 	}
 
 	data, _ := json.Marshal(requestMsg)
-	select {
-	case targetClient.send <- data:
+	if p.trySend(targetClient, data) {
 		log.Info("Call request sent from %s to %s", reqData.From, reqData.To)
-	default:
-		log.Warn("Failed to send call request: buffer full")
+	} else {
+		log.Warn("Failed to send call request")
 	}
 }
 
@@ -906,11 +933,10 @@ func (p *SignalingController) handleCallResponse(client *WSClient, msg *Message)
 	}
 
 	data, _ := json.Marshal(responseMsg)
-	select {
-	case requesterClient.send <- data:
+	if p.trySend(requesterClient, data) {
 		log.Info("Call response sent from %s to %s (accept: %v)", respData.From, respData.To, respData.Accept)
-	default:
-		log.Warn("Failed to send call response: buffer full")
+	} else {
+		log.Warn("Failed to send call response")
 	}
 
 	// 수락한 경우 두 사용자를 방으로 이동
@@ -1040,10 +1066,7 @@ func (p *SignalingController) broadcastUserJoined(newClient *WSClient) {
 	p.waitingRoom.mu.RLock()
 	for userID, client := range p.waitingRoom.Clients {
 		if userID != newClient.userID {
-			select {
-			case client.send <- data:
-			default:
-			}
+			p.trySend(client, data)
 		}
 	}
 	p.waitingRoom.mu.RUnlock()
@@ -1061,10 +1084,7 @@ func (p *SignalingController) broadcastUserLeft(leftClient *WSClient) {
 	data, _ := json.Marshal(leftMsg)
 	p.waitingRoom.mu.RLock()
 	for _, client := range p.waitingRoom.Clients {
-		select {
-		case client.send <- data:
-		default:
-		}
+		p.trySend(client, data)
 	}
 	p.waitingRoom.mu.RUnlock()
 }
@@ -1187,7 +1207,8 @@ func (p *SignalingController) getRoom(roomName string) (*VDRoom, error) {
 		Clients:      make(map[*WSClient]bool),
 		UserNames:    make(map[*WSClient]string),
 		Broadcast:    make(chan *BroadcastMessage, MSG_BUFFER_SIZE),
-		Unregister:   make(chan *WSClient),
+		Unregister:   make(chan *WSClient, MAX_CONN_ROOM*2), // run() 종료 후에도 전송자가 블록되지 않도록 버퍼링
+		done:         make(chan struct{}),
 		createdAt:    time.Now(),
 		lastActivity: time.Now(),
 	}
@@ -1246,18 +1267,16 @@ func (p *SignalingController) moveToRoom(roomID string, client1, client2 *WSClie
 
 	data, _ := json.Marshal(joinMsg)
 
-	select {
-	case client1.send <- data:
+	if p.trySend(client1, data) {
 		log.Info("room-joined sent to %s", client1.userID)
-	default:
-		log.Warn("Failed to send room-joined to %s: buffer full", client1.userID)
+	} else {
+		log.Warn("Failed to send room-joined to %s", client1.userID)
 	}
 
-	select {
-	case client2.send <- data:
+	if p.trySend(client2, data) {
 		log.Info("room-joined sent to %s", client2.userID)
-	default:
-		log.Warn("Failed to send room-joined to %s: buffer full", client2.userID)
+	} else {
+		log.Warn("Failed to send room-joined to %s", client2.userID)
 	}
 
 	// text 모드가 아닌 경우에만 start 시그널 전송 (WebRTC 필요)
@@ -1265,18 +1284,16 @@ func (p *SignalingController) moveToRoom(roomID string, client1, client2 *WSClie
 		time.Sleep(50 * time.Millisecond)
 
 		startMsg, _ := json.Marshal(Message{Type: "start"})
-		select {
-		case client1.send <- startMsg:
+		if p.trySend(client1, startMsg) {
 			log.Info("start signal sent to %s", client1.userID)
-		default:
-			log.Warn("Failed to send start signal to %s: buffer full", client1.userID)
+		} else {
+			log.Warn("Failed to send start signal to %s", client1.userID)
 		}
 
-		select {
-		case client2.send <- startMsg:
+		if p.trySend(client2, startMsg) {
 			log.Info("start signal sent to %s", client2.userID)
-		default:
-			log.Warn("Failed to send start signal to %s: buffer full", client2.userID)
+		} else {
+			log.Warn("Failed to send start signal to %s", client2.userID)
 		}
 	}
 
@@ -1309,6 +1326,7 @@ func (p *SignalingController) cleanEmptyRooms() {
 
 		if isEmpty && inactive {
 			delete(p.rooms, name)
+			close(room.done) // run() 고루틴 종료
 			atomic.AddInt64(&p.totalConn, -1)
 			log.Info("Cleaned up inactive room: %s", name)
 		}
@@ -1423,22 +1441,24 @@ func (v *VDRoom) run(p *SignalingController) {
 
 	for {
 		select {
+		case <-p.ctx.Done():
+			return
+
+		case <-v.done:
+			return
+
 		case client := <-v.Unregister:
 			v.mu.Lock()
 			if _, ok := v.Clients[client]; ok {
 				delete(v.Clients, client)
 				delete(v.UserNames, client)
-				close(client.send)
+				client.closeSend()
 				v.lastActivity = time.Now()
 				log.Info(fmt.Sprintf("Client unregistered from room %s (remaining: %d)", v.Name, len(v.Clients)))
 			}
-
-			// 방이 비었으면 일정 시간 후 삭제를 위해 마킹
-			if len(v.Clients) == 0 {
-				v.mu.Unlock()
-				return // 방 고루틴 종료
-			}
 			v.mu.Unlock()
+			// 방이 비어도 고루틴은 유지한다. roomCleaner가 done을 닫을 때 종료
+			// (즉시 종료하면 이후 Unregister 전송자가 영원히 블록되는 누수가 발생)
 
 		case msg := <-v.Broadcast:
 			v.lastActivity = time.Now()
@@ -1456,10 +1476,8 @@ func (v *VDRoom) run(p *SignalingController) {
 			pingMsg := []byte(`{"type":"ping"}`)
 			v.mu.RLock()
 			for client := range v.Clients {
-				select {
-				case client.send <- pingMsg:
-				default:
-					// 버퍼가 가득 찬 클라이언트는 연결 해제
+				if !p.trySend(client, pingMsg) {
+					// 버퍼가 가득 찼거나 채널이 닫힌 클라이언트는 연결 해제
 					go func(c *WSClient) {
 						v.Unregister <- c
 					}(client)

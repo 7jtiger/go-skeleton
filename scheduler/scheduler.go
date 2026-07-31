@@ -22,7 +22,7 @@ type item struct {
 	desc   string
 	args   string
 	delay  time.Duration
-	ticker time.Ticker
+	ticker *time.Ticker // 반드시 포인터로 보관 (값 복사 시 GC가 내부 타이머를 회수해 SIGSEGV 발생)
 	quit   chan int
 	once   sync.Once
 }
@@ -119,11 +119,11 @@ func (s *Schedule) addJob(ejob conf.Works) error {
 
 	tick := getDuration(ejob.Start)
 	it := &item{
-		name: ejob.Name,
-		desc: ejob.Desc,
-		args: ejob.Args,
+		name:   ejob.Name,
+		desc:   ejob.Desc,
+		args:   ejob.Args,
 		delay:  time.Duration(ejob.Duration) * time.Second,
-		ticker: *time.NewTicker(tick),
+		ticker: time.NewTicker(tick),
 		quit:   make(chan int),
 	}
 
@@ -165,8 +165,8 @@ func (s *Schedule) runJob(it *item) {
 			if firstExec {
 				firstExec = false
 				if it.delay > 0 {
-					it.ticker.Stop()
-					it.ticker = *time.NewTicker(it.delay)
+					// Reset은 채널을 유지한 채 주기만 변경한다 (티커 재생성 금지)
+					it.ticker.Reset(it.delay)
 				}
 			}
 

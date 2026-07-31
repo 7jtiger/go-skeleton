@@ -30,6 +30,7 @@
 - `ModifyUserInfo()`: Function to modify user information (nickname, area, email) by category
 - `GetUserInfo()`: Function to query encrypted user information by user ID and return decrypted data
 - `GetUserInfoByUID()`: Function to query encrypted user information by numeric UID and return decrypted data
+- `GetUserInfosByUIDs()`: 여러 UID를 `IN` 절로 일괄 조회해 `map[uint64]UserInfoResp` 반환 (DM 인박스 N+1 제거용, 이메일/이름 복호화 생략 — 파트너 프로필 용도, 2026-07 추가)
 
 ## Block/Favorite Management Functions
 - `SetBlock()`: Function to create or reactivate block relation (`uid`, `bid`)

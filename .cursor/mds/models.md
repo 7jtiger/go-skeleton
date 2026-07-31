@@ -61,7 +61,7 @@
 
 ### Key Features
 - **Security**: ChaCha20 encryption for passwords, emails, and names
-- **Connection Pooling**: 300 max connections, 30 idle connections, 3-minute lifetime
+- **Connection Pooling**: 50 max connections, 25 idle connections, 30-minute lifetime, 5-minute idle timeout
 - **Soft Delete**: Status-based deletion instead of hard delete
 - **Health Monitoring**: Periodic connection health checks
 
@@ -198,7 +198,7 @@
 - **JSON Storage**: Images stored as JSON with numeric indexes for flexible array management
 - **Backup System**: Deleted images preserved in str_imgbak instead of permanent deletion
 - **Status-based Queries**: Filters by status for soft delete and privacy control
-- **Connection Pooling**: 300 max connections, 30 idle connections, 3-minute lifetime
+- **Connection Pooling**: 50 max connections, 25 idle connections, 30-minute lifetime, 5-minute idle timeout
 - **Automatic Timestamps**: at_create and at_update managed automatically
 
 ---
