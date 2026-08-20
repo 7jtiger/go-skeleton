@@ -57,6 +57,7 @@
 - `GetChatMessages()`: offset 기반 (방 목록 last_msg 등 내부용). `fromIndex` 이후 메시지만 조회
 - `GetChatMessagesByCursor(roomID, cursor, limit, fromIndex)`: 커서 기반 조회 — viewer별 `fromIndex` 적용, `visibleTotal` 반환
 - `SetDMHistoryFromIndex` / `GetDMHistoryFromIndex`: `DM:HIST:FROM:{uid}:{roomId}` — 나가기·재입장 시 현재 LIST 길이 저장, 이전 메시지 숨김
+- 방 상태(`partner_left`)는 MySQL `st_chat`만 사용. Redis `DM:PARTNER_LEFT` 키는 사용하지 않음
 - `GetLastMessagesForRooms(viewerUID, roomIDs)`: viewer 기준 `fromIndex` 반영한 last_msg·total
 - `ExpiredMsg(ttl)` / `Expired24hMsg`: timestamp가 ttl 이전인 메시지 prune (기본/스케줄러 **3일**)
 - `GetLatestMessageID(roomID)`: 방 최신 메시지 mid 조회

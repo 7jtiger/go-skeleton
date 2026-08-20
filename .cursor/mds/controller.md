@@ -434,10 +434,12 @@
 - `GetChatList`: 커서 페이지네이션 — `GET /dm/v01/history/:room_id?limit=&cursor=`; **viewer별 `DM:HIST:FROM` 컷오프 적용** (나간 뒤 재입장 사용자는 이전 내역 미조회, 상대방은 전체 유지)
 - `GetChatRoomByRID`: `GET /dm/v01/rinfo/:room_id?mid=`; 입장 시 last_read 갱신, 응답에 `my_last_mid`/`partner_last_mid` 포함
 - DM 메시지·READ·UNREAD TTL: **3일** (`SaveChatMessage` Expire + 스케줄러 `ExpiredMsg`)
-- `DeleteChatRoom`: `POST /dm/v01/rmroom/:room_id` — 1명 나가기, st_chat 갱신, `partner-left` + `system-message` WS, **나간 사용자 `DM:HIST:FROM` 컷오프·unread reset**
-- `setDMHistoryCutoff` / `ensureDMRoom` 재입장: mkroom·메시지 전송 시 나간 사용자 재참여하면 현재 시점 이후 메시지만 조회
-- `buildDMRoomResp` / `resolveLastMsg` / `notifyPartnerLeft`: partner는 AccountDB; Redis에 저장된 시스템 메시지를 last_msg로 사용, `partner_left` 시 fallback
-- `ensureDMRoom`: `ActivateDMRoomSide` (나간 쪽만 재참여)
+- `DeleteChatRoom`: `POST /dm/v01/rmroom/:room_id` — 1명 나가기, **MySQL `st_chat` 갱신**, `partner-left` + `system-message` WS, **나간 사용자 `DM:HIST:FROM` 컷오프·unread reset**
+- `setDMHistoryCutoff` / `ensureDMRoom` 재입장: mkroom·메시지 전송 시 나간 사용자 재참여하면 현재 시점 이후 메시지만 조회 (남은 사용자 컷오프 없음)
+- `buildDMRoomResp` / `resolveLastMsg` / `notifyPartnerLeft`: partner는 AccountDB; Redis 메시지 last_msg, `partner_left`는 **`st_chat` 계산** (비어 있으면 고정 문구 fallback)
+- `resolvePartnerLeft`: MySQL `IsPartnerLeft(st_chat)` 만 사용 (방 상태 SSOT)
+- `ensureDMRoom`: 없으면 create(+과금), 있으면 강제 상태 갱신. **상대 나감 재요청·양쪽 나감 재오픈** 시 과금 후 `st_chat` 전이(`BothIn` 또는 `ActivateDMRoomSide`). **나만 재입장(상대 유지)** 은 미과금. create `room_id` UNIQUE 충돌 시 조회 후 update 복구
+- `checkSettleMent`: 과금 스텁(차후 잔액·차감·`UdtDMPaid` 구현). 실패 시 WS `billing-failed` ack
 
 ### SignalingController (`signaling.go`)
 - 대기실 메시지 타입에 `call-cancel` 추가

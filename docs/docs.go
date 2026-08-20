@@ -1109,7 +1109,7 @@ const docTemplate = `{
         },
         "/dm/v01/rinfo/{room_id}": {
             "get": {
-                "description": "인증된 사용자가 참여 중인 DM 채팅방(room_id = chat_his.idx)의 상세 정보를 조회합니다.\n상대방 프로필, 최근 메시지, 전체/미읽음 메시지 수, 생성·수정 시각을 반환합니다.\n요청자가 방 생성자(uid)이면 tid 사용자 정보를, 초대받은 사용자(tid)이면 uid 사용자 정보를 상대방으로 반환합니다.\n\n[요청 예시]\nGET /dm/v01/rinfo/10 HTTP/1.1\nAuthorization: Bearer {access_token}\n\n[응답 예시]\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"my_last_mid\":\"m-1783587208891\",\"partner_last_mid\":\"\",\"room\":{\"rid\":10,\"partner\":{\"pid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"thumb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"gender\":\"1\",\"age\":\"34\",\"area\":\"seoul\"},\"last_msg\":\"dfd\",\"partner_left\":false,\"total\":45,\"unread\":0,\"at_crtchat\":\"2026-04-28T11:43:25Z\",\"at_update\":\"2026-07-09T08:53:28Z\"},\"room_id\":\"10\"}}",
+                "description": "인증된 사용자가 참여 중인 DM 채팅방(room_id = chat_his.idx)의 상세 정보를 조회합니다.\n상대방 프로필, 최근 메시지, 전체/미읽음 메시지 수, 생성·수정 시각을 반환합니다.\n요청자가 방 생성자(uid)이면 tid 사용자 정보를, 초대받은 사용자(tid)이면 uid 사용자 정보를 상대방으로 반환합니다.\n\n[요청 예시]\nGET /dm/v01/rinfo/10 HTTP/1.1\nAuthorization: Bearer {access_token}\n\n[응답 예시]\nlast_msg: txt, img일 경우 'img'로 반환\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"my_last_mid\":\"m-1783587208891\",\"partner_last_mid\":\"\",\"room\":{\"rid\":10,\"partner\":{\"pid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"thumb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"gender\":\"1\",\"age\":\"34\",\"area\":\"seoul\"},\"last_msg\":\"dfd\",\"partner_left\":false,\"total\":45,\"unread\":0,\"at_crtchat\":\"2026-04-28T11:43:25Z\",\"at_update\":\"2026-07-09T08:53:28Z\"},\"room_id\":\"10\"}}",
                 "consumes": [
                     "application/json"
                 ],
@@ -1233,6 +1233,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/dm/v01/room/exists/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "인증된 사용자가 특정 대상(tid)과의 DM 채팅방이 존재하는지 조회합니다.",
+                "tags": [
+                    "chat"
+                ],
+                "summary": "DM 채팅방 존재 여부 확인",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "상대 사용자 UID",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "exist: true(존재함) / false(존재하지 않음)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/dm/v01/total/unread": {
             "get": {
                 "description": "Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts. (변경사항 반영됨: userId 파라미터는 더 이상 필요하지 않음, 인증된 사용자 기준)\nrequest : GET /dm/v01/total/unread HTTP/1.1\nresponse : {\"result\":0,\"resultString\":\"Success\",\"data\":{\"rooms\":{\"10\":133},\"total_count\":133}}",
@@ -1342,7 +1394,7 @@ const docTemplate = `{
         },
         "/dm/v01/ws": {
             "get": {
-                "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"last-read-mid\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 방 입장/읽음 시 미읽음 초기화 + DM:READ mid 갱신(3일 TTL)\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID, MsgID : 마지막으로 읽은 메시지 mid\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송\n7-1) Type : \"partner-left\", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : \"상대방이 대화를 종료하였습니다.\"(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자\n8) 로그아웃 : 로그아웃시 ws disconnect\n8-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
+                "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"last-read-mid\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 방 입장/읽음 시 미읽음 초기화 + DM:READ mid 갱신(3일 TTL)\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID, MsgID : 마지막으로 읽은 메시지 mid\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송\n7-1) Type : \"partner-left\", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : \"상대방이 대화를 종료하였습니다.\"(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자\n8) 선물 전송 : 선물 전송시 선물 메시지 전송\n8-1) Type : \"send-gift\", To : 수신자 UID, From : 선물 보낸 사람 UID, RoomID : 채팅방 ID, Content : 화살갯수(ex: 3), MsgID : uniq 값\n8-2) 수신메세지 : 선물 [{nickname}님이(가) 화살 {화살갯수}개를 선물했습니다.]\n8-3) msg-ack : 선물 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n9) 로그아웃 : 로그아웃시 ws disconnect\n9-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
                 "produces": [
                     "application/json"
                 ],
@@ -1499,7 +1551,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Home screen information",
                         "schema": {
-                            "$ref": "#/definitions/controller.HomeData"
+                            "$ref": "#/definitions/ms-gateway_controller.HomeData"
                         }
                     },
                     "400": {
@@ -3493,7 +3545,45 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "controller.HomeData": {
+        "ms-gateway_bak_controller.HomeData": {
+            "type": "object",
+            "properties": {
+                "checkIn": {
+                    "type": "boolean"
+                },
+                "msgQuantity": {
+                    "type": "integer"
+                },
+                "notiNew": {
+                    "type": "integer"
+                },
+                "policyLink": {
+                    "type": "string"
+                },
+                "storyList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.Pre7Story"
+                    }
+                },
+                "termsLink": {
+                    "type": "string"
+                },
+                "videoChatList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.WTRoomUser"
+                    }
+                },
+                "voiceChatList": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.WTRoomUser"
+                    }
+                }
+            }
+        },
+        "ms-gateway_controller.HomeData": {
             "type": "object",
             "properties": {
                 "checkIn": {

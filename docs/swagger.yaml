@@ -1,5 +1,30 @@
 definitions:
-  controller.HomeData:
+  ms-gateway_bak_controller.HomeData:
+    properties:
+      checkIn:
+        type: boolean
+      msgQuantity:
+        type: integer
+      notiNew:
+        type: integer
+      policyLink:
+        type: string
+      storyList:
+        items:
+          $ref: '#/definitions/protocol.Pre7Story'
+        type: array
+      termsLink:
+        type: string
+      videoChatList:
+        items:
+          $ref: '#/definitions/protocol.WTRoomUser'
+        type: array
+      voiceChatList:
+        items:
+          $ref: '#/definitions/protocol.WTRoomUser'
+        type: array
+    type: object
+  ms-gateway_controller.HomeData:
     properties:
       checkIn:
         type: boolean
@@ -1169,6 +1194,7 @@ paths:
         Authorization: Bearer {access_token}
 
         [응답 예시]
+        last_msg: txt, img일 경우 'img'로 반환
         {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
       parameters:
       - description: 채팅방 ID (chat_his.idx)
@@ -1249,6 +1275,39 @@ paths:
               type: string
             type: object
       summary: DM 채팅방 나가기
+      tags:
+      - chat
+  /dm/v01/room/exists/{tid}:
+    get:
+      description: 인증된 사용자가 특정 대상(tid)과의 DM 채팅방이 존재하는지 조회합니다.
+      parameters:
+      - description: 상대 사용자 UID
+        in: path
+        name: tid
+        required: true
+        type: string
+      responses:
+        "200":
+          description: 'exist: true(존재함) / false(존재하지 않음)'
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: DM 채팅방 존재 여부 확인
       tags:
       - chat
   /dm/v01/total/unread:
@@ -1361,8 +1420,12 @@ paths:
         6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
         7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송
         7-1) Type : "partner-left", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : "상대방이 대화를 종료하였습니다."(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자
-        8) 로그아웃 : 로그아웃시 ws disconnect
-        8-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
+        8) 선물 전송 : 선물 전송시 선물 메시지 전송
+        8-1) Type : "send-gift", To : 수신자 UID, From : 선물 보낸 사람 UID, RoomID : 채팅방 ID, Content : 화살갯수(ex: 3), MsgID : uniq 값
+        8-2) 수신메세지 : 선물 [{nickname}님이(가) 화살 {화살갯수}개를 선물했습니다.]
+        8-3) msg-ack : 선물 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
+        9) 로그아웃 : 로그아웃시 ws disconnect
+        9-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
       parameters:
       - description: 'Bearer access token. Example: Bearer {access_token}'
         in: header
@@ -1469,7 +1532,7 @@ paths:
         "200":
           description: Home screen information
           schema:
-            $ref: '#/definitions/controller.HomeData'
+            $ref: '#/definitions/ms-gateway_controller.HomeData'
         "400":
           description: Invalid request
           schema:

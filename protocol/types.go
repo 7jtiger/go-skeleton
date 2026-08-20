@@ -107,7 +107,7 @@ type ChatMessage struct {
 	RoomID    string       `json:"roomId"`             // 채팅방 ID
 	Content   string       `json:"content,omitempty"`  // 메시지 내용
 	Timestamp int64        `json:"timestamp"`          // 타임스탬프
-	CallMode  string       `json:"callMode,omitempty"` // audio | text
+	CallMode  string       `json:"callMode,omitempty"` // audio | text | gift | img
 	MsgID     string       `json:"msgId,omitempty"`    // 클라이언트 메시지 식별자
 	Partner   *PartnerInfo `json:"partner,omitempty"`  // 상대방 정보
 	Unread    int          `json:"unread,omitempty"`   // 읽지 않은 메시지 수

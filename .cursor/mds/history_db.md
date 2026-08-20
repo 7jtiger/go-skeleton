@@ -146,11 +146,12 @@ CREATE TABLE `anuc_his` (
 
 ### 스키마 (2026-06)
 ```sql
-chat_his (idx, uid, tid, st_chat, at_crtchat, at_update, paid_point)
+chat_his (idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point)
 ```
-- API `room_id` = `chat_his.idx`
+- API 응답 `roomId` / `rid` = `chat_his.idx` (정수 PK)
+- DB 컬럼 `room_id` = `FormatDMPairRoomID(uid, tid)` → **작은 uid + `_` + 큰 uid** (예: `4033287471439576593_8697414060736839837`, UNIQUE)
 - 상대 프로필은 AccountDB에서 조회 (chat_his에 캐시 없음)
-- 쌍 조회: `(uid=? AND tid=?) OR (uid=? AND tid=?)`
+- 쌍 조회: `(uid=? AND tid=?) OR (uid=? AND tid=?)` → 없으면 `room_id` 폴백 (`GetDMRoomByPairRoomID`)
 - `at_update`: 마지막 채팅 활동 시각 (메시지 전송 시 `TouchDMRoomActivity`, 나가기/재참여 시 `UpdateDMRoomStatus`). 목록 정렬 3순위 fallback (`ORDER BY at_update DESC`는 `GetDMRoomsByUser` 레거시용)
 
 ### st_chat 상태
@@ -162,12 +163,16 @@ chat_his (idx, uid, tid, st_chat, at_crtchat, at_update, paid_point)
 | 3 | tid만 나감 |
 
 ### 함수
-- `CreateDMRoom`, `GetDMRoom`, `GetDMRoomByPair`, `GetDMRoomByRid`, `GetAllDMRoomsByUser`, `GetDMRoomsByUser`
+- `FormatDMPairRoomID(uid, tid)` — min(uid,tid)_max(uid,tid) 문자열 생성
+- `CreateDMRoom` — INSERT 시 `room_id` 포함
+- `GetDMRoom`, `GetDMRoomByPair`, `GetDMRoomByPairRoomID`, `GetDMRoomByRid`, `GetAllDMRoomsByUser`, `GetDMRoomsByUser`
 - `TouchDMRoomActivity` — 메시지 저장 후 `at_update`만 갱신 (st_chat 유지)
 - `LeaveDMRoom`, `ActivateDMRoomSide`, `UpdateDMRoomStatus`
 - `SoftDeleteDMRoom`, `SoftDeleteDMRoomsByUser`, `ActivateDMRoomByPair`
 - `UdtDMPaid` — paid_point 컬럼 유지
 - 헬퍼: `IsUserInDMRoom`, `IsPartnerLeft`, `PartnerUIDOfRoom`, `PartnerLeftMsg`
+- API `partner_left`: **MySQL `IsPartnerLeft(st_chat)`** 계산. 방 상태 SSOT는 `chat_his.st_chat`, 메시지만 Redis
+- `ensureDMRoom`: 나가기 후 재요청 시 MySQL `st_chat` 강제 갱신 (create UNIQUE 충돌 시 조회+update 복구)
 
 ### 목록 필터
 - uid: `st_chat IN (1, 3)` / tid: `st_chat IN (1, 2)`

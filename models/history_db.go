@@ -1,13 +1,14 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"database/sql"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
@@ -28,15 +29,24 @@ CREATE TABLE `chat_his` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `uid` bigint unsigned NOT NULL,
   `tid` bigint unsigned NOT NULL,
+  `room_id` varchar(45) NOT NULL,
+  `tnick` varchar(45) DEFAULT NULL,
+  `tarea` varchar(45) DEFAULT NULL,
+  `tage` int DEFAULT NULL,
+  `tgender` tinyint(1) DEFAULT NULL,
+  `tthumb_url` varchar(300) DEFAULT NULL,
   `st_chat` tinyint(1) DEFAULT NULL,
   `at_crtchat` datetime DEFAULT NULL,
+  `paid_point` double DEFAULT NULL,
   `at_update` datetime DEFAULT NULL,
-  PRIMARY KEY (`idx`,`uid`,`tid`),
-  UNIQUE KEY `idx_UNIQUE` (`idx`),
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `room_id_UNIQUE` (`room_id`),
   KEY `idx_chat_his_uid` (`uid`),
-  KEY `idx_chat_his_tid` (`tid`),
-  KEY `idx_chat_his_at_update` (`at_update`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  KEY `idx_chat_his_at_update` (`at_update`),
+  KEY `idx_chat_his_st_chat_uid_at_update` (`st_chat`,`uid`,`at_update`),
+  KEY `idx_chat_his_st_chat_tid_at_update` (`st_chat`,`tid`,`at_update`),
+  KEY `idx_chat_his_room_id_st_chat_at_update` (`room_id`,`st_chat`,`at_update`)
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 */
 
 func NewHistoryDB(cf *conf.Config, root *Repositories) (IRepository, error) {
@@ -251,12 +261,13 @@ func (p *HistoryDB) GetNewMsgCount(uid uint64) (int, error) {
 	return count, nil
 }
 
-// CreateDMRoom dm_room 생성
+// CreateDMRoom dm_room 생성 (room_id = FormatDMPairRoomID(uid, tid))
 func (p *HistoryDB) CreateDMRoom(uid uint64, tUser *ptl.UserInfoResp) (int64, error) {
 	now := time.Now()
+	pairRoomID := FormatDMPairRoomID(uid, tUser.Uid)
 	res, err := p.conndb.Exec(
-		"INSERT INTO chat_his (uid, tid, st_chat, at_crtchat, at_update, paid_point) VALUES (?, ?, ?, ?, ?, ?)",
-		uid, tUser.Uid, STChatBothIn, now, now, 0,
+		"INSERT INTO chat_his (uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		uid, tUser.Uid, pairRoomID, STChatBothIn, now, now, 0,
 	)
 	if err != nil {
 		return 0, err
@@ -277,11 +288,27 @@ func (p *HistoryDB) GetDMRoom(ridx int64) (*DMRoomRow, error) {
 	return scanDMRoomRow(row)
 }
 
-// GetDMRoomByPair uid/tid 쌍 양방향 조회
+// GetDMRoomByPair uid/tid 쌍 양방향 조회 (없으면 room_id=min_max 폴백)
 func (p *HistoryDB) GetDMRoomByPair(uid, tid uint64) (*DMRoomRow, error) {
 	row := p.conndb.QueryRow(
 		"SELECT "+dmRoomSelectCols+" FROM chat_his WHERE (uid = ? AND tid = ?) OR (uid = ? AND tid = ?) LIMIT 1",
 		uid, tid, tid, uid,
+	)
+	dm, err := scanDMRoomRow(row)
+	if err == nil {
+		return dm, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return p.GetDMRoomByPairRoomID(FormatDMPairRoomID(uid, tid))
+}
+
+// GetDMRoomByPairRoomID chat_his.room_id (minUid_maxUid) 로 조회
+func (p *HistoryDB) GetDMRoomByPairRoomID(pairRoomID string) (*DMRoomRow, error) {
+	row := p.conndb.QueryRow(
+		"SELECT "+dmRoomSelectCols+" FROM chat_his WHERE room_id = ? LIMIT 1",
+		pairRoomID,
 	)
 	return scanDMRoomRow(row)
 }
@@ -300,10 +327,16 @@ func (p *HistoryDB) TouchDMRoomActivity(ridx int64, at time.Time) error {
 	return err
 }
 
-// UpdateDMRoomStatus st_chat 갱신
+// UpdateDMRoomStatus st_chat 갱신 (0=BothLeft, 1=BothIn, 2=UIDLeft, 3=TIDLeft)
 func (p *HistoryDB) UpdateDMRoomStatus(ridx int64, st int) error {
 	_, err := p.conndb.Exec("UPDATE chat_his SET st_chat = ?, at_update = ? WHERE idx = ?", st, time.Now(), ridx)
 	return err
+}
+
+// IsMySQLDuplicate MySQL unique/duplicate key (1062)
+func IsMySQLDuplicate(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
 // LeaveDMRoom 사용자 1명 나가기 (st_chat 전이)
@@ -389,13 +422,13 @@ func (p *HistoryDB) countDMRoomsByUser(uid uint64) (int, error) {
 func (p *HistoryDB) scanDMRoomRows(rows *sql.Rows) ([]DMRoomRow, error) {
 	rooms := make([]DMRoomRow, 0)
 	for rows.Next() {
-		var dm DMRoomRow
-		if err := rows.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.STChat, &dm.AtCrtCHAT, &dm.AtUpdate, &dm.PaidPoint); err != nil {
+		dm, err := scanDMRoomFields(rows)
+		if err != nil {
 			return nil, err
 		}
-		rooms = append(rooms, dm)
+		rooms = append(rooms, *dm)
 	}
-	return rooms, nil
+	return rooms, rows.Err()
 }
 
 // GetAllDMRoomsByUser 사용자 참여 DM 방 전체 조회 (정렬·페이징은 호출측)
@@ -410,10 +443,10 @@ func (p *HistoryDB) GetAllDMRoomsByUser(uid uint64) ([]DMRoomRow, int, error) {
 
 	query := `
 		SELECT * FROM (
-			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			SELECT idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point
 			FROM chat_his WHERE uid = ? AND st_chat IN (1, 3)
 			UNION
-			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			SELECT idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point
 			FROM chat_his WHERE tid = ? AND st_chat IN (1, 2)
 		) AS T`
 
@@ -444,10 +477,10 @@ func (p *HistoryDB) GetDMRoomsByUser(uid uint64, page int) (*[]DMRoomRow, int, e
 
 	query := `
 		SELECT * FROM (
-			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			SELECT idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point
 			FROM chat_his WHERE uid = ? AND st_chat IN (1, 3)
 			UNION
-			SELECT idx, uid, tid, st_chat, at_crtchat, at_update, paid_point
+			SELECT idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point
 			FROM chat_his WHERE tid = ? AND st_chat IN (1, 2)
 		) AS T
 		ORDER BY at_update DESC

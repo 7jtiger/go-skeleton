@@ -3,6 +3,7 @@ package controller
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -36,11 +37,10 @@ const (
 type ChatClient struct {
 	conn *websocket.Conn
 	send chan []byte
-	// userID   string
-	uid       uint64
-	mu        sync.Mutex
+	uid  uint64
+	nick string
+
 	closeOnce sync.Once
-	lastSeen  time.Time
 }
 
 // ChatController 텍스트 채팅 컨트롤러
@@ -106,8 +106,12 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 // @Description  6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
 // @Description  7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송
 // @Description  7-1) Type : "partner-left", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : "상대방이 대화를 종료하였습니다."(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자
-// @Description  8) 로그아웃 : 로그아웃시 ws disconnect
-// @Description  8-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
+// @Description  8) 선물 전송 : 선물 전송시 선물 메시지 전송
+// @Description  8-1) Type : "send-gift", To : 수신자 UID, From : 선물 보낸 사람 UID, RoomID : 채팅방 ID, Content : 화살갯수(ex: 3), MsgID : uniq 값
+// @Description  8-2) 수신메세지 : 선물 [{nickname}님이(가) 화살 {화살갯수}개를 선물했습니다.]
+// @Description  8-3) msg-ack : 선물 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
+// @Description  9) 로그아웃 : 로그아웃시 ws disconnect
+// @Description  9-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
 // @Tags         chat
 // @Produce      json
 // @Param        Authorization  header    string  true  "Bearer access token. Example: Bearer {access_token}"
@@ -121,7 +125,12 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-	uid64 := user.(*ptc.UserInfoResp).Uid
+	userInfo, ok := user.(*ptc.UserInfoResp)
+	if !ok || userInfo == nil {
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "Invalid user context")
+		return
+	}
+	uid64 := userInfo.Uid
 	// WebSocket 업그레이드
 	conn, err := cc.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -131,10 +140,10 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 
 	// 클라이언트 생성 및 등록
 	client := &ChatClient{
-		conn:     conn,
-		send:     make(chan []byte, CHAT_MSG_BUFFER_SIZE),
-		uid:      uid64,
-		lastSeen: time.Now(),
+		conn: conn,
+		send: make(chan []byte, CHAT_MSG_BUFFER_SIZE),
+		uid:  uid64,
+		nick: userInfo.Nick,
 	}
 
 	cc.registerClient(client)
@@ -199,6 +208,7 @@ func (cc *ChatController) readPump(client *ChatClient) {
 		client.conn.Close()
 	}()
 
+	client.conn.SetReadLimit(CHAT_MAX_MESSAGE_SIZE)
 	client.conn.SetReadDeadline(time.Now().Add(CHAT_PONG_WAIT))
 	client.conn.SetPongHandler(func(string) error {
 		client.conn.SetReadDeadline(time.Now().Add(CHAT_PONG_WAIT))
@@ -300,45 +310,84 @@ func (cc *ChatController) handleMessage(client *ChatClient, message []byte) {
 
 // handleTextMessage 텍스트 메시지 처리
 func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptc.ChatMessage) {
-	toUID, err := strconv.ParseUint(msg.To, 10, 64)
-	if err != nil {
-		log.Warn(fmt.Sprintf("invalid target uid in text-message: %s", msg.To))
+	ctx, ok := cc.prepareDMMessage(client, msg)
+	if !ok {
 		return
 	}
+	cc.persistAndDeliverDMMessage(client, msg, ctx)
+}
 
-	tUser, tUserErr := cc.adb.GetUserInfoByUID(toUID)
+// handleTyping 타이핑 상태 처리
+func (cc *ChatController) handleTyping(client *ChatClient, msg *ptc.ChatMessage) {
+	// 수신자에게 타이핑 상태 전송
+	cc.sendToUser(msg.To, msg)
+}
 
-	var room *models.DMRoomRow
-	var roomID string
-	var unreadCnt int64
+type dmMessageContext struct {
+	targetUID uint64
+	target    ptc.UserInfoResp
+	room      *models.DMRoomRow
+	now       int64
+}
 
-	if tUserErr == nil {
-		var roomErr error
-		room, roomErr = cc.ensureDMRoom(client.uid, &tUser)
-		if roomErr != nil {
-			log.Error(fmt.Sprintf("ensureDMRoom failed: %v", roomErr))
-		} else {
-			roomID = strconv.FormatInt(room.Idx, 10)
-			unreadCnt, err = cc.rdb.IncrUnread(toUID, room.Idx)
-			if err != nil {
-				log.Error(fmt.Sprintf("failed to increment unread: %v", err))
-			}
-		}
-	} else {
-		log.Warn(fmt.Sprintf("target user %d not found in DB, delivering message without room: %v", toUID, tUserErr))
+func (cc *ChatController) prepareDMMessage(client *ChatClient, msg *ptc.ChatMessage) (*dmMessageContext, bool) {
+	toUID, err := strconv.ParseUint(msg.To, 10, 64)
+	if err != nil {
+		log.Warn("invalid target uid in %s: %s", msg.Type, msg.To)
+		return nil, false
+	}
+	if toUID == client.uid {
+		log.Warn("self dm message rejected: uid=%d type=%s", client.uid, msg.Type)
+		return nil, false
+	}
+
+	tUser, err := cc.adb.GetUserInfoByUID(toUID)
+	if err != nil {
+		log.Warn("target user %d not found in DB: %v", toUID, err)
+		return nil, false
+	}
+
+	room, err := cc.ensureDMRoom(client.uid, &tUser)
+	if err != nil {
+		log.Error("ensureDMRoom failed uid=%d to=%d: %v", client.uid, toUID, err)
+		cc.sendBillingFailedAck(client, msg, err.Error())
+		return nil, false
+	}
+	if room == nil {
+		log.Error("ensureDMRoom returned nil uid=%d to=%d", client.uid, toUID)
+		return nil, false
 	}
 
 	now := time.Now().Unix()
-	if roomID != "" {
-		msg.RoomID = roomID
-		msg.Timestamp = now
+	msg.RoomID = strconv.FormatInt(room.Idx, 10)
+	msg.Timestamp = now
+
+	return &dmMessageContext{
+		targetUID: toUID,
+		target:    tUser,
+		room:      room,
+		now:       now,
+	}, true
+}
+
+func (cc *ChatController) persistAndDeliverDMMessage(client *ChatClient, msg *ptc.ChatMessage, ctx *dmMessageContext) {
+	if ctx == nil || ctx.room == nil {
+		return
+	}
+
+	if err := cc.rdb.SaveChatMessage(msg); err != nil {
+		log.Error("Failed to save chat message: %v", err)
+		return
+	}
+
+	unreadCnt, err := cc.rdb.IncrUnread(ctx.targetUID, ctx.room.Idx)
+	if err != nil {
+		log.Error("failed to increment unread: %v", err)
 	}
 
 	delivered := cc.sendToUser(msg.To, msg)
-	if !delivered {
-		if tUserErr == nil && cc.ctl.FCMPusher != nil {
-			cc.ctl.FCMPusher.SendDMPush(strconv.FormatUint(client.uid, 10), msg.Content, tUser.Did)
-		}
+	if !delivered && cc.ctl.FCMPusher != nil {
+		cc.ctl.FCMPusher.SendDMPush(cc.senderDisplayName(client), msg.Content, ctx.target.Did)
 	}
 
 	ack := &ptc.ChatMessage{
@@ -349,30 +398,23 @@ func (cc *ChatController) handleTextMessage(client *ChatClient, msg *ptc.ChatMes
 		MsgID:     msg.MsgID,
 		Unread:    int(unreadCnt),
 		CallMode:  msg.CallMode,
-		Timestamp: now,
+		Timestamp: ctx.now,
 	}
 	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
 
-	// if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content, msg.CallMode); err != nil {
-	if err := cc.rdb.SaveChatMessage(msg); err != nil {
-		log.Error("Failed to save chat message:", err)
-		return
+	if err := cc.hdb.TouchDMRoomActivity(ctx.room.Idx, time.Unix(msg.Timestamp, 0)); err != nil {
+		log.Warn("failed to touch dm room activity: %v", err)
 	}
-
-	if room != nil {
-		at := time.Unix(msg.Timestamp, 0)
-		if err := cc.hdb.TouchDMRoomActivity(room.Idx, at); err != nil {
-			log.Warn("failed to touch dm room activity: %v", err)
-		}
-	}
-
-	log.Info(fmt.Sprintf("Text message sent: %s -> %s (room=%s, delivered=%v)", msg.From, msg.To, msg.RoomID, delivered))
 }
 
-// handleTyping 타이핑 상태 처리
-func (cc *ChatController) handleTyping(client *ChatClient, msg *ptc.ChatMessage) {
-	// 수신자에게 타이핑 상태 전송
-	cc.sendToUser(msg.To, msg)
+func (cc *ChatController) senderDisplayName(client *ChatClient) string {
+	if client != nil && client.nick != "" {
+		return client.nick
+	}
+	if client != nil {
+		return strconv.FormatUint(client.uid, 10)
+	}
+	return ""
 }
 
 // handleReadReceipt 읽음 확인 처리: unread reset + last_read mid 전진 + 상대 relay
@@ -417,92 +459,24 @@ func (cc *ChatController) handleReadReceipt(client *ChatClient, msg *ptc.ChatMes
 }
 
 func (cc *ChatController) handleSendGift(client *ChatClient, msg *ptc.ChatMessage) {
-	//TODO: implement
-	// 1. 메세지 확인
-	// 2. 센더 발란스 확인
-	// 3. 게더 선물 통보
-	// 4. 센더 발란스 갱신
-	// 5. 게더 선물 저장
-
-	toUID, err := strconv.ParseUint(msg.To, 10, 64)
-	if err != nil {
-		log.Warn(fmt.Sprintf("invalid target uid in text-message: %s", msg.To))
+	giftCount := strings.TrimSpace(msg.Content)
+	if giftCount == "" {
+		log.Warn("empty gift count from %d to %s", client.uid, msg.To)
+		return
+	}
+	if _, err := strconv.ParseUint(giftCount, 10, 64); err != nil {
+		log.Warn("invalid gift count from %d to %s: %s", client.uid, msg.To, giftCount)
 		return
 	}
 
-	tUser, tUserErr := cc.adb.GetUserInfoByUID(toUID)
-
-	var room *models.DMRoomRow
-	var roomID string
-	var unreadCnt int64
-
-	if tUserErr == nil {
-		var roomErr error
-		room, roomErr = cc.ensureDMRoom(client.uid, &tUser)
-		if roomErr != nil {
-			log.Error(fmt.Sprintf("ensureDMRoom failed: %v", roomErr))
-		} else {
-			roomID = strconv.FormatInt(room.Idx, 10)
-			unreadCnt, err = cc.rdb.IncrUnread(toUID, room.Idx)
-			if err != nil {
-				log.Error(fmt.Sprintf("failed to increment unread: %v", err))
-			}
-		}
-	} else {
-		log.Warn(fmt.Sprintf("target user %d not found in DB, delivering message without room: %v", toUID, tUserErr))
-	}
-
-	now := time.Now().Unix()
-	if roomID != "" {
-		msg.RoomID = roomID
-		msg.Timestamp = now
-	}
-
-	//msg.Content
-	if strings.Contains(msg.Type, "gift") {
-		//에러 처리
-	}
-	chked := msg.Content
-	// TODO 포인트 확인
-	// 센더 발란스 확인
-	// 게더 선물 저장
-
-	// 게더 선물 통보
-	msg.Content = tUser.Nick + "님이(가) 화살 " + chked + "개를 선물했습니다."
-
-	delivered := cc.sendToUser(msg.To, msg)
-	if !delivered {
-		if tUserErr == nil && cc.ctl.FCMPusher != nil {
-			cc.ctl.FCMPusher.SendDMPush(strconv.FormatUint(client.uid, 10), msg.Content, tUser.Did)
-		}
-	}
-
-	ack := &ptc.ChatMessage{
-		Type:      "msg-ack",
-		From:      msg.To,
-		To:        msg.From,
-		RoomID:    msg.RoomID,
-		MsgID:     msg.MsgID,
-		Unread:    int(unreadCnt),
-		CallMode:  msg.CallMode,
-		Timestamp: now,
-	}
-	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
-
-	// if err := cc.rdb.SaveChatMessage(msg.RoomID, msg.From, msg.Content, msg.CallMode); err != nil {
-	if err := cc.rdb.SaveChatMessage(msg); err != nil {
-		log.Error("Failed to save chat message:", err)
+	ctx, ok := cc.prepareDMMessage(client, msg)
+	if !ok {
 		return
 	}
 
-	if room != nil {
-		at := time.Unix(msg.Timestamp, 0)
-		if err := cc.hdb.TouchDMRoomActivity(room.Idx, at); err != nil {
-			log.Warn("failed to touch dm room activity: %v", err)
-		}
-	}
-
-	// log.Info(fmt.Sprintf("Text message sent: %s -> %s (room=%s, delivered=%v)", msg.From, msg.To, msg.RoomID, delivered))
+	msg.Content = cc.senderDisplayName(client) + "님이(가) 화살 " + giftCount + "개를 선물했습니다."
+	msg.CallMode = "gift"
+	cc.persistAndDeliverDMMessage(client, msg, ctx)
 }
 
 /* func (cc *ChatController) handleRecvGift(client *ChatClient, msg *ptc.ChatMessage) {
@@ -589,10 +563,10 @@ func (cc *ChatController) trySend(client *ChatClient, data []byte) (sent bool) {
 func (cc *ChatController) ExistDMRoom(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		cc.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
-	uid := user.(uint64)
+	uid64 := user.(*ptc.UserInfoResp).Uid
 
 	tid64, err := strconv.ParseUint(c.Param("tid"), 10, 64)
 	if err != nil {
@@ -600,44 +574,122 @@ func (cc *ChatController) ExistDMRoom(c *gin.Context) {
 		return
 	}
 
-	_, err = cc.hdb.GetDMRoomByPair(uid, tid64)
+	_, err = cc.hdb.GetDMRoomByPair(uid64, tid64)
 	if err == nil {
 		c.JSON(http.StatusOK, gin.H{"exist": true})
-	} else {
-		c.JSON(http.StatusOK, gin.H{"exist": false})
+		return
 	}
+	if errors.Is(err, sql.ErrNoRows) {
+		c.JSON(http.StatusOK, gin.H{"exist": false})
+		return
+	}
+	cc.ctl.SimpleError(c, http.StatusInternalServerError, err.Error())
 }
 
-// ensureDMRoom DM 룸 조회/생성.
-// [룸 정책] DM 룸은 반드시 dm_room 테이블로 관리한다.
-//
-//	signaling의 waitingRoom(통화 대기 전용, TTL 있음)과 혼용 금지.
+// ensureDMRoom DM 룸 강제 생성/갱신 (방 상태 SSOT = MySQL chat_his.st_chat).
+// 메시지·컷오프만 Redis. signaling waitingRoom 과 혼용 금지.
 func (cc *ChatController) ensureDMRoom(uid uint64, tUser *ptc.UserInfoResp) (*models.DMRoomRow, error) {
 	room, err := cc.hdb.GetDMRoomByPair(uid, tUser.Uid)
 	if err == nil {
-		wasOut := !models.IsUserInDMRoom(room.STChat, room.UID, room.TID, uid)
+		return cc.openExistingDMRoom(room, uid, tUser.Uid, false)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return cc.createDMRoomOrRecover(uid, tUser)
+}
+
+// openExistingDMRoom 기존 방 강제 상태 갱신 (나가기 후 재요청·재입장 포함).
+// alreadyBilled=true 이면 create 충돌 복구 경로(과금 이미 수행)에서 재과금 생략.
+func (cc *ChatController) openExistingDMRoom(room *models.DMRoomRow, uid, partnerUID uint64, alreadyBilled bool) (*models.DMRoomRow, error) {
+	prevST := room.STChat
+	wasOut := !models.IsUserInDMRoom(prevST, room.UID, room.TID, uid)
+	partnerWasOut := models.IsPartnerLeft(prevST, room.UID, room.TID, uid)
+	bothLeft := prevST == models.STChatBothLeft
+
+	// 과금: 신규 생성 / 상대 나감 재요청 / 양쪽 나감 후 재오픈. 나만 나갔다 재입장(상대 유지)은 미과금.
+	needBill := !alreadyBilled && (partnerWasOut || bothLeft)
+	if needBill {
+		if err := cc.checkSettleMent(uid, partnerUID, room.Idx); err != nil {
+			return nil, err
+		}
+	}
+
+	var err error
+	if partnerWasOut {
+		if err = cc.hdb.UpdateDMRoomStatus(room.Idx, models.STChatBothIn); err != nil {
+			return nil, err
+		}
+		room.STChat = models.STChatBothIn
+		room.AtUpdate = time.Now()
+	} else {
 		room, err = cc.hdb.ActivateDMRoomSide(room, uid)
 		if err != nil {
 			return nil, err
 		}
-		if wasOut {
-			if err := cc.setDMHistoryCutoff(uid, room.Idx); err != nil {
-				log.Warn("failed to set dm history cutoff on rejoin uid=%d room=%d: %v", uid, room.Idx, err)
-			}
-		}
-		return room, nil
 	}
-	if err != sql.ErrNoRows {
+
+	if wasOut {
+		if err := cc.setDMHistoryCutoff(uid, room.Idx); err != nil {
+			log.Warn("failed to set dm history cutoff on rejoin uid=%d room=%d: %v", uid, room.Idx, err)
+		}
+	}
+
+	log.Info("ensureDMRoom update uid=%d room=%d prev_st=%d new_st=%d wasOut=%v partnerWasOut=%v billed=%v",
+		uid, room.Idx, prevST, room.STChat, wasOut, partnerWasOut, needBill || alreadyBilled)
+	return room, nil
+}
+
+// createDMRoomOrRecover 신규 생성. room_id UNIQUE 충돌 시 기존 방 조회 후 강제 갱신.
+func (cc *ChatController) createDMRoomOrRecover(uid uint64, tUser *ptc.UserInfoResp) (*models.DMRoomRow, error) {
+	if err := cc.checkSettleMent(uid, tUser.Uid, 0); err != nil {
 		return nil, err
 	}
 
-	//TODO : 과금
+	pairRoomID := models.FormatDMPairRoomID(uid, tUser.Uid)
+	log.Info("CreateDMRoom uid=%d tid=%d pair_room_id=%s", uid, tUser.Uid, pairRoomID)
+
 	rmid, createErr := cc.hdb.CreateDMRoom(uid, tUser)
 	if createErr != nil {
+		if models.IsMySQLDuplicate(createErr) {
+			room, err := cc.hdb.GetDMRoomByPair(uid, tUser.Uid)
+			if err != nil {
+				return nil, fmt.Errorf("create duplicate but lookup failed: %w", err)
+			}
+			log.Info("CreateDMRoom duplicate recovered uid=%d room=%d", uid, room.Idx)
+			return cc.openExistingDMRoom(room, uid, tUser.Uid, true)
+		}
 		return nil, createErr
 	}
 
 	return cc.hdb.GetDMRoom(rmid)
+}
+
+// checkSettleMent DM 방 생성·재요청 시 과금 (차후 잔액 확인·차감·UdtDMPaid 구현)
+func (cc *ChatController) checkSettleMent(requester, partner uint64, roomID int64) error {
+	_ = requester
+	_ = partner
+	_ = roomID
+	return nil
+}
+
+// resolvePartnerLeft MySQL st_chat 기준 (방 상태 SSOT). Redis 메시지와 분리.
+func (cc *ChatController) resolvePartnerLeft(rm *models.DMRoomRow, viewerUID uint64) bool {
+	return models.IsPartnerLeft(rm.STChat, rm.UID, rm.TID, viewerUID)
+}
+
+func (cc *ChatController) sendBillingFailedAck(client *ChatClient, msg *ptc.ChatMessage, reason string) {
+	ack := &ptc.ChatMessage{
+		Type:      "billing-failed",
+		From:      msg.To,
+		To:        msg.From,
+		RoomID:    msg.RoomID,
+		MsgID:     msg.MsgID,
+		Content:   reason,
+		CallMode:  msg.CallMode,
+		Timestamp: time.Now().Unix(),
+	}
+	cc.sendToUser(strconv.FormatUint(client.uid, 10), ack)
 }
 
 // setDMHistoryCutoff 나가기/재입장 사용자에게 현재 시점 이후 메시지만 보이도록 LIST 인덱스 컷오프 설정
@@ -669,9 +721,14 @@ func (cc *ChatController) resolveLastMsg(rm *models.DMRoomRow, viewerUID uint64)
 	tcnt, messages, err := cc.rdb.GetChatMessages(roomIDStr, 0, 1, fromIdx)
 	lastMsg := ""
 	if err == nil && messages != nil && len(*messages) > 0 {
-		lastMsg = (*messages)[0].Content
+		switch (*messages)[0].Mode {
+		case "img", "image":
+			lastMsg = "사진"
+		default:
+			lastMsg = (*messages)[0].Content
+		}
 	}
-	if lastMsg == "" && models.IsPartnerLeft(rm.STChat, rm.UID, rm.TID, viewerUID) {
+	if lastMsg == "" && cc.resolvePartnerLeft(rm, viewerUID) {
 		lastMsg = models.PartnerLeftMsg
 	}
 	return lastMsg, int(tcnt)
@@ -696,7 +753,7 @@ func (cc *ChatController) buildDMRoomRespWithUnread(rm *models.DMRoomRow, viewer
 		Area:     info.Area,
 	}
 
-	partnerLeft := models.IsPartnerLeft(rm.STChat, rm.UID, rm.TID, viewerUID)
+	partnerLeft := cc.resolvePartnerLeft(rm, viewerUID)
 	lastMsg, total := cc.resolveLastMsg(rm, viewerUID)
 
 	var unread int64
@@ -718,7 +775,7 @@ func (cc *ChatController) buildDMRoomRespWithUnread(rm *models.DMRoomRow, viewer
 	}, nil
 }
 
-// buildDMRoomRespPrefetched 일괄 조회한 파트너·마지막 메시지 데이터로 응답 구성 (인박스 목록 전용, N+1 제거)
+// buildDMRoomRespPrefetched 일괄 조회한 파트너·마지막 메시지로 응답 구성 (인박스 목록 전용, N+1 제거)
 func (cc *ChatController) buildDMRoomRespPrefetched(rm *models.DMRoomRow, viewerUID uint64, unread int64, partners map[uint64]ptc.UserInfoResp, last models.LastMsgInfo) (ptc.DMRoomResp, error) {
 	partnerUID := models.PartnerUIDOfRoom(rm, viewerUID)
 	info, ok := partners[partnerUID]
@@ -740,7 +797,7 @@ func (cc *ChatController) buildDMRoomRespPrefetched(rm *models.DMRoomRow, viewer
 		Area:     info.Area,
 	}
 
-	partnerLeft := models.IsPartnerLeft(rm.STChat, rm.UID, rm.TID, viewerUID)
+	partnerLeft := cc.resolvePartnerLeft(rm, viewerUID)
 	lastMsg := last.Content
 	if lastMsg == "" && partnerLeft {
 		lastMsg = models.PartnerLeftMsg
@@ -1125,7 +1182,7 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 	}
 	uid64 := user.(*ptc.UserInfoResp).Uid
 
-	pageInt := ptc.CvtParamAtoi(c.Param("page"), 1)
+	pageInt := ptc.CvtParamAtoi(c.DefaultQuery("page", "1"), 1)
 
 	allRooms, totalCount, err := cc.hdb.GetAllDMRoomsByUser(uid64)
 	if err != nil {
@@ -1194,6 +1251,7 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 // @Description    Authorization: Bearer {access_token}
 // @Description
 // @Description  [응답 예시]
+// @Description	 last_msg: txt, img일 경우 'img'로 반환
 // @Description  {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
 // @Tags           chat
 // @Accept         json
@@ -1207,6 +1265,7 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 // @Router         /dm/v01/rinfo/{room_id} [get]
 // @Example Request: GET /dm/v01/rinfo/10?mid=client-msg-id-xxx
 // @Example Response: {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
+// @Example Response: {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"img","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
 func (cc *ChatController) GetChatRoomByRID(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {

@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -17,11 +18,12 @@ import (
 // 	AmountOrTid decimal.Decimal    `json:"amountOrTid"`
 // }
 
-// DMRoomRow chat_his 테이블 로우 (API room_id = idx)
+// DMRoomRow chat_his 테이블 로우 (API 응답 roomId=idx, DB room_id=minUid_maxUid)
 type DMRoomRow struct {
 	Idx       int64     `json:"idx"`
 	UID       uint64    `json:"uid"`
 	TID       uint64    `json:"tid"`
+	RoomID    string    `json:"room_id"` // chat_his.room_id = FormatDMPairRoomID(uid, tid)
 	STChat    int       `json:"st_chat"`
 	AtCrtCHAT time.Time `json:"at_crtchat"`
 	AtUpdate  time.Time `json:"at_update"`
@@ -38,7 +40,17 @@ const (
 
 const PartnerLeftMsg = "상대방이 대화를 종료하였습니다."
 
-const dmRoomSelectCols = "idx, uid, tid, st_chat, at_crtchat, at_update, paid_point"
+const dmRoomSelectCols = "idx, uid, tid, room_id, st_chat, at_crtchat, at_update, paid_point"
+
+// FormatDMPairRoomID DM chat_his.room_id (작은 uid + "_" + 큰 uid).
+// 예: 4033287471439576593_8697414060736839837
+func FormatDMPairRoomID(uid, tid uint64) string {
+	lo, hi := uid, tid
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return strconv.FormatUint(lo, 10) + "_" + strconv.FormatUint(hi, 10)
+}
 
 // IsUserInDMRoom viewer가 목록/방에 노출될 수 있는지
 func IsUserInDMRoom(st int, uid, tid, viewer uint64) bool {
@@ -122,12 +134,35 @@ func nextSTChatOnRejoin(st int, joinerUID uint64, room *DMRoomRow) int {
 	return st
 }
 
-func scanDMRoomRow(row *sql.Row) (*DMRoomRow, error) {
+type dmRoomScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanDMRoomFields(sc dmRoomScanner) (*DMRoomRow, error) {
 	var dm DMRoomRow
-	if err := row.Scan(&dm.Idx, &dm.UID, &dm.TID, &dm.STChat, &dm.AtCrtCHAT, &dm.AtUpdate, &dm.PaidPoint); err != nil {
+	var roomID sql.NullString
+	var atCrt, atUpd sql.NullTime
+	var paid sql.NullFloat64
+	if err := sc.Scan(&dm.Idx, &dm.UID, &dm.TID, &roomID, &dm.STChat, &atCrt, &atUpd, &paid); err != nil {
 		return nil, err
 	}
+	if roomID.Valid {
+		dm.RoomID = roomID.String
+	}
+	if atCrt.Valid {
+		dm.AtCrtCHAT = atCrt.Time
+	}
+	if atUpd.Valid {
+		dm.AtUpdate = atUpd.Time
+	}
+	if paid.Valid {
+		dm.PaidPoint = paid.Float64
+	}
 	return &dm, nil
+}
+
+func scanDMRoomRow(row *sql.Row) (*DMRoomRow, error) {
+	return scanDMRoomFields(row)
 }
 
 // /// auth type ////////////////////////////////////////////////////////////////////////////////////

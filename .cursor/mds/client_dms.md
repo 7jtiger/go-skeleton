@@ -32,7 +32,7 @@ cd client/dms && go run .
 - `/leave [roomId]`, `/rmroom`: 방 나가기 (`POST /dm/v01/rmroom/:room_id`)
 - `/rinfo [roomId] [mid]`: 방 상세·입장 (`GET /dm/v01/rinfo/:room_id`) — unread 초기화
 - `/exists <tid>`: 방 존재 여부 (`GET /dm/v01/room/exists/:tid`)
-- `/rooms [page]`: 인박스 (`GET /dm/v01/list/:page`) — `total_count`, `last_msg`, `partner_left` 표시
+- `/rooms [page]`: 인박스 (`GET /dm/v01/list/:page`) — `total_count`, `last_msg`, `partner_left` 표시 (`partner_left` = MySQL `st_chat` 계산)
 
 ### REST — 메시지
 - `/chatlist [roomId] [limit] [cursor]`: 채팅 내역 (`GET /dm/v01/history/:room_id`)
@@ -48,6 +48,13 @@ cd client/dms && go run .
 4. A: `/leave` → B: `/chatlist` (B는 내역 유지)
 5. A: `/mkroom <B_uid>` → `/chatlist` (A는 빈 내역)
 6. A: `/send new` → 양쪽 `/chatlist` 비교
+
+## partner_left·과금 (재요청)
+1. B: `/leave` → A: `/rooms` (`partner_left=true`, MySQL `st_chat` 기준)
+2. A: `/send` 또는 `/mkroom` (재요청) → `checkSettleMent` 1회, `st_chat=BothIn`, `partner_left=false`, A `/chatlist`는 **기존 내역 유지**
+3. B가 나간 뒤 B가 `/mkroom` 재입장 → `st_chat=BothIn` (상대 유지 시 미과금), B는 `DM:HIST:FROM` 컷오프
+3. A: 추가 `/send` → 과금 없음
+4. B: `/mkroom <A>` → B는 재입장 이후 내역만
 
 ## 선물 테스트 시나리오
 1. A,B `/connect` 후 A: `/mkroom <B>`

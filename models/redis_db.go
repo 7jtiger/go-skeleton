@@ -49,6 +49,7 @@ type ChatMessageData struct {
 	UserID    string    `json:"user_id"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
+	Mode      string    `json:"mode"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -1160,12 +1161,17 @@ func (db *RedisDB) GetChatRooms() ([]ChatRoomData, error) {
 // SaveChatMessage 채팅 메시지 저장
 // SaveChatMessage HSet을 사용하여 채팅 메시지 저장
 func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
+	if msg == nil {
+		return errors.New("chat message is nil")
+	}
+	if msg.RoomID == "" {
+		return errors.New("chat message roomId is empty")
+	}
+	if msg.Timestamp == 0 {
+		msg.Timestamp = time.Now().Unix()
+	}
 	if msg.MsgID == "" {
-		ts := msg.Timestamp
-		if ts == 0 {
-			ts = time.Now().Unix()
-		}
-		msg.MsgID = fmt.Sprintf("sys-%d", ts)
+		msg.MsgID = fmt.Sprintf("sys-%d", msg.Timestamp)
 	}
 
 	message := ChatMessageData{
@@ -1174,6 +1180,7 @@ func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 		UserID:    msg.From,
 		Content:   msg.Content,
 		Type:      msg.Type,
+		Mode:      msg.CallMode,
 		Timestamp: time.Unix(msg.Timestamp, 0),
 	}
 
@@ -1185,7 +1192,7 @@ func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 
 	// Redis key 구성: 채팅방별 메시지 리스트
 	// 요청 정책: chat:rooms:{roomID} 키에 메시지 내역 저장
-	listKey := fmt.Sprintf("chat:rooms:%s:msg", msg.RoomID)
+	listKey := chatMsgListKey(msg.RoomID)
 
 	// 트랜잭션 사용하여 저장 및 TTL 설정
 	pipe := r.client.TxPipeline()
@@ -1203,6 +1210,7 @@ func (r *RedisDB) SaveChatMessage(msg *ptl.ChatMessage) error {
 // LastMsgInfo 방별 마지막 메시지 요약 (인박스 목록용)
 type LastMsgInfo struct {
 	Content string
+	Mode    string
 	Total   int64
 }
 
@@ -1255,7 +1263,15 @@ func (r *RedisDB) GetLastMessagesForRooms(viewerUID uint64, roomIDs []string) (m
 		if raw, err := lastCmds[i].Result(); err == nil && len(raw) > 0 {
 			var msg ChatMessageData
 			if jsonErr := json.Unmarshal([]byte(raw[0]), &msg); jsonErr == nil {
-				info.Content = msg.Content
+				// info.Content = msg.Content
+				//info.Mode = msg.Mode
+				switch msg.Mode {
+				case "img", "image":
+					info.Content = "사진"
+				default:
+					info.Content = msg.Content
+				}
+				info.Mode = msg.Mode
 			}
 		}
 		result[roomID] = info

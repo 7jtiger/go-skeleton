@@ -132,8 +132,12 @@ func Test_CreateDMRoom(t *testing.T) {
 		t.Skip("set -dm_token, -dm_uid, -dm_peer_uid to run dm room create test")
 	}
 
-	qurl := "/dm/v01/mkroom/" + *dmPeerUID
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	// qurl := "/dm/v01/mkroom/" + *dmPeerUID
+	// res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+
+	qurl := "/dm/v01/mkroom/" + "5709326013809104361"
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzg3MzEyMTkyfQ.4LUpQ28khxgKHHcBFhdvTiAH8o_yrHj6FKRYJD9KZNA"
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, token)
 	if err != nil {
 		t.Errorf("Failed to create dm room: %v", err)
 		return
@@ -146,8 +150,10 @@ func Test_GetDMRooms(t *testing.T) {
 		t.Skip("set -dm_token and -dm_uid to run dm room list test")
 	}
 
-	qurl := "/dm/v01/list/1"
-	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	qurl := "/dm/v01/list/0"
+	// res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzg3MzEyMTkyfQ.4LUpQ28khxgKHHcBFhdvTiAH8o_yrHj6FKRYJD9KZNA"
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, token)
 	if err != nil {
 		t.Errorf("Failed to get dm rooms: %v", err)
 		return
@@ -202,8 +208,12 @@ func Test_LeaveDMRoom(t *testing.T) {
 		t.Skip("set -dm_token and -dm_uid to run dm room leave test")
 	}
 
-	qurl := "/dm/v01/rmroom/" + *dmRoomID
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	// qurl := "/dm/v01/rmroom/" + *dmRoomID
+	// res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+
+	qurl := "/dm/v01/rmroom/" + "13"
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjoxNzg3MzEyMTkyfQ.4LUpQ28khxgKHHcBFhdvTiAH8o_yrHj6FKRYJD9KZNA"
+	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, token)
 	if err != nil {
 		t.Errorf("Failed to leave dm room: %v", err)
 		return
@@ -420,4 +430,58 @@ func Test_chatProcess(t *testing.T) {
 		return
 	}
 	fmt.Println("dm chat list:", res)
+}
+
+func Test_RoomExists(t *testing.T) {
+	if *dmToken == "" || *dmUID == "" || *dmPeerUID == "" || *dmPeerToken == "" {
+		t.Skip("set -dm_token, -dm_uid, -dm_peer_uid, -dm_peer_token to run room exists test")
+	}
+
+	// qurl := "/dm/v01/room/exists/" + *dmPeerUID
+	qurl := "/dm/v01/room/exists/" + "4033287471439576593"
+	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get room exists: %v", err)
+		return
+	}
+	fmt.Println("room exists:", res)
+}
+
+func Test_resolvePartnerLeft_usesMySQLOnly(t *testing.T) {
+	cc := &ChatController{}
+	room := &models.DMRoomRow{
+		Idx:    1,
+		UID:    100,
+		TID:    200,
+		STChat: models.STChatTIDLeft,
+	}
+
+	// viewer=uid: partner(tid) left
+	if !cc.resolvePartnerLeft(room, 100) {
+		t.Fatal("expected partner_left=true for uid when st_chat=TIDLeft")
+	}
+	// viewer=tid: self left, partner still in
+	if cc.resolvePartnerLeft(room, 200) {
+		t.Fatal("expected partner_left=false for tid when st_chat=TIDLeft")
+	}
+
+	room.STChat = models.STChatBothIn
+	if cc.resolvePartnerLeft(room, 100) || cc.resolvePartnerLeft(room, 200) {
+		t.Fatal("BothIn should not report partner_left")
+	}
+}
+
+func Test_openExistingDMRoom_transitions(t *testing.T) {
+	// pure state-machine checks (no DB): leave/rejoin helpers
+	room := &models.DMRoomRow{Idx: 1, UID: 100, TID: 200, STChat: models.STChatUIDLeft}
+
+	if models.IsUserInDMRoom(room.STChat, room.UID, room.TID, 100) {
+		t.Fatal("uid should be out when STChatUIDLeft")
+	}
+	if !models.IsUserInDMRoom(room.STChat, room.UID, room.TID, 200) {
+		t.Fatal("tid should be in when STChatUIDLeft")
+	}
+	if !models.IsPartnerLeft(room.STChat, room.UID, room.TID, 200) {
+		t.Fatal("tid viewer should see partner left when uid left")
+	}
 }
