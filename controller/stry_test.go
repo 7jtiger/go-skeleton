@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 
 // ----  stroy ----------------
 
-func Test_CreatePicStory(t *testing.T) {
+func Test_UploadPicStory(t *testing.T) {
 	// story.POST("/create", p.ValidateFileUpload(5, 5), p.st.CreateStory)
 	// "./bak/tmpimg/qwer.jpg"
 	// "./bak/tmpimg/rewq.jpg"
@@ -100,96 +101,75 @@ func Test_CreatePicStory(t *testing.T) {
 
 }
 
-// Test for uploading video files with corresponding thumbnails to the /story/v01/create endpoint
-func Test_CreateVideoStory(t *testing.T) {
-
+// Test_UploadContents POST /story/v01/upload — UploadStoryContent (동영상 + thbnl 1:1)
+func Test_UploadContents(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	flag.Parse()
 
-	uploadUrl := fmt.Sprintf("http://%s/story/v01/create", *targetUrl)
+	uploadURL := fmt.Sprintf("http://%s/story/v01/upload", *targetUrl)
 
-	// Prepare video and thumbnail files for upload (경로에 해당 파일들이 실제로 존재해야 함)
-	vd1 := "/home/jino/tmp/tes1.mp4"
-	vd2 := "/home/jino/tmp/tes2.mp4"
-	vd3 := "/home/jino/tmp/next.mp4"
-
+	vd1 := "/home/jino/tmp/next1.mp4"
 	thb1 := "/home/jino/tmp/bc1.jpg"
-	thb2 := "/home/jino/tmp/bc2.jpg"
-	thb3 := "/home/jino/tmp/bc3.jpg"
+	videoFiles := []string{vd1}
+	thumbFiles := []string{thb1}
 
-	videoFiles := []string{vd1, vd2, vd3}
-	thumbFiles := []string{thb1, thb2, thb3}
+	for _, path := range append(videoFiles, thumbFiles...) {
+		if _, err := os.Stat(path); err != nil {
+			t.Skipf("test media not found %s: %v", path, err)
+		}
+	}
 
-	var b bytes.Buffer
-	writer := multipart.NewWriter(&b)
+	var bodyBuf bytes.Buffer
+	writer := multipart.NewWriter(&bodyBuf)
 
-	// 파일 파트 추가 (비디오 파일)
 	for _, fname := range videoFiles {
 		file, err := os.Open(fname)
 		if err != nil {
 			t.Fatalf("Failed to open video file %s: %v", fname, err)
 		}
-		// 각 파일 닫기 (defer는 루프 내 반복 X, 위처럼 즉시 닫기)
-		func(f *os.File) {
+		func(f *os.File, path string) {
 			defer f.Close()
-			part, err := writer.CreateFormFile("files", filepath.Base(fname))
+			part, err := writer.CreateFormFile("files", filepath.Base(path))
 			if err != nil {
-				t.Fatalf("Failed to create form file for %s: %v", fname, err)
+				t.Fatalf("Failed to create form file for %s: %v", path, err)
 			}
 			if _, err := io.Copy(part, f); err != nil {
-				t.Fatalf("Failed to copy file data for %s: %v", fname, err)
+				t.Fatalf("Failed to copy file data for %s: %v", path, err)
 			}
-		}(file)
+		}(file, fname)
 	}
 
-	// 썸네일 파트 추가 (썸네일 이미지)
 	for _, tname := range thumbFiles {
 		file, err := os.Open(tname)
 		if err != nil {
 			t.Fatalf("Failed to open thumbnail file %s: %v", tname, err)
 		}
-		func(f *os.File) {
+		func(f *os.File, path string) {
 			defer f.Close()
-			part, err := writer.CreateFormFile("upThumb", filepath.Base(tname))
+			part, err := writer.CreateFormFile("thbnl", filepath.Base(path))
 			if err != nil {
-				t.Fatalf("Failed to create form file for thumbnail %s: %v", tname, err)
+				t.Fatalf("Failed to create form file for thumbnail %s: %v", path, err)
 			}
 			if _, err := io.Copy(part, f); err != nil {
-				t.Fatalf("Failed to copy thumbnail data for %s: %v", tname, err)
+				t.Fatalf("Failed to copy thumbnail data for %s: %v", path, err)
 			}
-		}(file)
+		}(file, tname)
 	}
-
-	// 스토리 정보(sinfo) 파트 추가
-	sinfo := map[string][]string{
-		"stat":  {"1"},
-		"sbody": {"테스트 동영상 스토리 업로드 - from automated video+thumb test"},
-	}
-	for k, vs := range sinfo {
-		for _, v := range vs {
-			if err := writer.WriteField(k, v); err != nil {
-				t.Fatalf("Failed to add sinfo field %s: %v", k, err)
-			}
-		}
-	}
-
-	// 인증 토큰 헤더 준비
-	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
 
 	if err := writer.Close(); err != nil {
 		t.Fatalf("Failed to close multipart writer: %v", err)
 	}
 
-	// HTTP 요청 생성 및 전송
-	req, err := http.NewRequest("POST", uploadUrl, &b)
+	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
+
+	req, err := http.NewRequest(http.MethodPost, uploadURL, &bodyBuf)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+testToken)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to perform request: %v", err)
 	}
@@ -202,6 +182,95 @@ func Test_CreateVideoStory(t *testing.T) {
 
 	fmt.Printf("Status: %d, Response: %s\n", resp.StatusCode, string(respBody))
 
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResp struct {
+		Result       int    `json:"result"`
+		ResultString string `json:"resultString"`
+		Data         struct {
+			Msg  string `json:"msg"`
+			Vdos string `json:"vdos"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		t.Fatalf("failed to parse response JSON: %v", err)
+	}
+	if apiResp.Result != 0 {
+		t.Fatalf("expected result=0, got %d (%s)", apiResp.Result, apiResp.ResultString)
+	}
+	if apiResp.Data.Msg != "ok" {
+		t.Fatalf("expected data.msg=ok, got %q", apiResp.Data.Msg)
+	}
+	if apiResp.Data.Vdos == "" {
+		t.Fatalf("expected data.vdos with playback/thumb URLs, got empty")
+	}
+
+	fmt.Printf("UploadStoryContent OK — vdos: %s\n", apiResp.Data.Vdos)
+}
+
+// Test_CreateStory POST /story/v01/create — CreateStory (upload 응답 vdos 고정값으로 JSON 저장 테스트)
+
+func Test_CreateStory_Test(t *testing.T) {
+	targetURL := flag.String("target", "localhost:8080", "target server url")
+	flag.Parse()
+
+	createStoryURL := fmt.Sprintf("http://%s/story/v01/create", *targetURL)
+
+	// POST /story/v01/upload 성공 응답의 data.vdos (실제 파일 업로드 생략)
+	uploadedVdos := `{"1":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}`
+
+	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
+
+	createPayload, err := json.Marshal(map[string]interface{}{
+		"stat":  1,
+		"sbody": "테스트 동영상 스토리 — CreateStory from automated video+thumb test",
+		"imgs":  "",
+		"vdos":  uploadedVdos,
+	})
+	if err != nil {
+		t.Fatalf("Failed to marshal create request: %v", err)
+	}
+
+	createReq, err := http.NewRequest(http.MethodPost, createStoryURL, bytes.NewReader(createPayload))
+	if err != nil {
+		t.Fatalf("Failed to create story request: %v", err)
+	}
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+testToken)
+
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("Failed to perform create request: %v", err)
+	}
+	defer createResp.Body.Close()
+
+	createRespBody, err := io.ReadAll(createResp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read create response: %v", err)
+	}
+	fmt.Printf("Create status: %d, Response: %s\n", createResp.StatusCode, string(createRespBody))
+
+	if createResp.StatusCode != http.StatusOK {
+		t.Fatalf("create expected status 200, got %d: %s", createResp.StatusCode, string(createRespBody))
+	}
+
+	var createAPIResp struct {
+		Msg string `json:"msg"`
+		Idx int64  `json:"idx"`
+	}
+	if err := json.Unmarshal(createRespBody, &createAPIResp); err != nil {
+		t.Fatalf("failed to parse create response JSON: %v", err)
+	}
+	if createAPIResp.Msg != "ok" {
+		t.Fatalf("expected msg=ok, got %q", createAPIResp.Msg)
+	}
+	if createAPIResp.Idx <= 0 {
+		t.Fatalf("expected idx > 0, got %d", createAPIResp.Idx)
+	}
+
+	fmt.Printf("CreateStory OK — idx: %d, vdos: %s\n", createAPIResp.Idx, uploadedVdos)
 }
 
 func TestGetStoryDetail(t *testing.T) {
@@ -821,8 +890,8 @@ func TestMultiFileUpload(t *testing.T) {
 }
 
 func Test_StoryProcess(t *testing.T) {
-	Test_CreatePicStory(t)
-	Test_CreateVideoStory(t)
+	Test_UploadPicStory(t)
+	Test_UploadContents(t)
 
 	TestGetStoryDetail(t)
 

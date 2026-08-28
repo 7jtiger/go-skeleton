@@ -312,11 +312,12 @@ commentID, err := storyDB.SetStrComment(comment)
 
 ### Controller Integration
 - **StoryController** uses StoryDB for all story operations
-- File uploads handled by **utils.UploadCldFlr()** before DB storage
+- File uploads: 본편 **utils.UpTotalCldFlrThumb()** (Images/Stream), 썸네일 **utils.UploadCldFlr()** before DB storage
 - Form data parsing in middleware provides uid, body, nick, stat
 
 ### Cloudflare Integration
-- Images uploaded to Cloudflare Images API
+- Images → Cloudflare Images API (`variants[0]`)
+- Video → Cloudflare Stream API (`playback.hls`)
 - Returns delivery URLs stored in str_img JSON
 - Configuration: cfg.Server.CfId, cfg.Server.CfToken
 

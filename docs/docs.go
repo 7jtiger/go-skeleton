@@ -2513,6 +2513,67 @@ const docTemplate = `{
                 }
             }
         },
+        "/story/v01/create": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자의 스토리를 DB에 저장합니다. 미디어 파일은 직접 받지 않고, **업로드 API에서 받은 URL 문자열**을 전달합니다.\n\n**권장 플로우**\n1. ` + "`" + `POST /story/v01/upload` + "`" + ` — Cloudflare 업로드 → ` + "`" + `data.imgs` + "`" + `(이미지) 또는 ` + "`" + `data.vdos` + "`" + `(동영상+썸네일) 수신\n2. ` + "`" + `POST /story/v01/create` + "`" + ` — 본 API에 JSON body 전달 (` + "`" + `imgs` + "`" + ` / ` + "`" + `vdos` + "`" + `는 upload 응답 값을 문자열로)\n\n**stat**: 0=del, 1=pub, 2=private(팔로우공개), 3=limit(유료공개), 4=resv\n",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "스토리 생성 (미디어 URL + 본문 DB 저장)",
+                "parameters": [
+                    {
+                        "description": "스토리 생성 요청",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.CreateStoryReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "성공: {\\\"msg\\\":\\\"ok\\\",\\\"idx\\\":5}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "JSON 파싱 실패, imgs 누락, 프로필 필드 부족",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "DB 저장 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/story/v01/cutout/cancel/{tid}": {
             "post": {
                 "security": [
@@ -3291,7 +3352,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "최대 5개의 이미지(각 5MB 이하, 총 본문 길이 512자 제한)를 업로드합니다. 인증된 사용자가 Cloudflare Images에 스토리 이미지를 업로드하며, 업로드 성공 시 db에 저장합니다.",
+                "description": "JWT 인증 후 스토리용 미디어만 Cloudflare에 업로드합니다. DB 저장 없이 URL만 반환합니다.\n\n**용량**: 이미지·썸네일 각 5MB 이하, 동영상(MP4) 각 100MB 이하, files 최대 5개.\n\n**이미지 전용**: ` + "`" + `files` + "`" + `만 전송. 응답 ` + "`" + `data.imgs` + "`" + ` = filename→URL 맵(JSON).\n\n**동영상 포함**: ` + "`" + `files` + "`" + `의 MP4마다 ` + "`" + `thbnl` + "`" + ` 썸네일 1장 필수(순서 1:1). 이미지→Images, 동영상→Stream(HLS).\n응답 ` + "`" + `data.vdos` + "`" + ` = ` + "`" + `{\"1\":\"재생URL\",\"thumb1\":\"썸네일URL\",...}` + "`" + ` JSON 문자열.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -3301,67 +3362,46 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "업로드 스토리 이미지 (Cloudflare Images)",
+                "summary": "스토리 미디어 업로드 (Cloudflare Images / Stream)",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "스토리 미디어 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가",
+                        "description": "미디어 (이미지 JPG/PNG/GIF/WEBP ≤5MB 또는 MP4 ≤100MB, 최대 5개)",
                         "name": "files",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "file",
-                        "description": "동영상 썸네일 이미지 (동영상 개수만큼 필요, 이미지 타입만 허용, files의 동영상 순서와 1:1 매칭)",
-                        "name": "thumbnails",
+                        "description": "동영상 썸네일 (이미지 ≤5MB). 동영상 있을 때만 필수, 개수·순서 1:1",
+                        "name": "thbnl",
                         "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "스토리 본문 (최대 512자, 필수)",
-                        "name": "sbody",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            0,
-                            1,
-                            2,
-                            3,
-                            4
-                        ],
-                        "type": "integer",
-                        "description": "스토리 공개 상태 (0=del, 1=pub, 2=private, 3=limit, 4=resv)",
-                        "name": "stat",
-                        "in": "formData",
-                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "업로드 성공 시: {\\\"msg\\\": \\\"Successfully uploaded story picture\\\", \\\"lastID\\\":5}",
+                        "description": "이미지: {\\\"msg\\\":\\\"ok\\\",\\\"imgs\\\":{...}} / 동영상: {\\\"msg\\\":\\\"ok\\\",\\\"vdos\\\":\\\"{...}\\\"}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "요청 파라미터 누락 또는 파일 미첨부 시 에러",
+                        "description": "파일 없음, 용량 초과, thbnl 불일치 등",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "401": {
-                        "description": "인증 실패 시",
+                        "description": "인증 실패",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Cloudflare 업로드 오류 또는 서버 내부 오류",
+                        "description": "Cloudflare 업로드 실패",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3661,6 +3701,31 @@ const docTemplate = `{
                 },
                 "noiseSuppression": {
                     "type": "boolean"
+                }
+            }
+        },
+        "protocol.CreateStoryReq": {
+            "type": "object",
+            "properties": {
+                "imgs": {
+                    "description": "POST /story/v01/upload 응답 data.imgs (JSON 문자열). 없으면 \"\"",
+                    "type": "string",
+                    "example": "{\"a.jpg\":\"https://...\"}"
+                },
+                "sbody": {
+                    "description": "최대 512자",
+                    "type": "string",
+                    "example": "스토리 본문"
+                },
+                "stat": {
+                    "description": "0=del, 1=pub, 2=private, 3=limit, 4=resv",
+                    "type": "integer",
+                    "example": 1
+                },
+                "vdos": {
+                    "description": "upload 응답 data.vdos (JSON 문자열). 없으면 \"\"",
+                    "type": "string",
+                    "example": "{\"1\":\"https://...m3u8\",\"thumb1\":\"https://...\"}"
                 }
             }
         },

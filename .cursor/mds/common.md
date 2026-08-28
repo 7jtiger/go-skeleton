@@ -213,6 +213,9 @@
 
 #### File Operations
 - `Mkdirp()`: Creates directory structure recursively with 0777 permissions if it doesn't exist
+- `UploadCldFlr()`: Cloudflare Images 전용 업로드 (`/images/v1` → `variants[0]`)
+- `UpTotalCldFlrThumb()`: 확장자별 분기 — 이미지 Images, 동영상 Stream (`/stream` → `playback.hls`)
+- `GetFileType()`: 0=image, 1=video, 2=other
 
 #### Name Generation
 - `GenDefNick()`: Generates random Korean nickname by combining adjectives and nouns from predefined arrays

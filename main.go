@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	// 서버 타임아웃 설정
-	serverReadTimeout    = 30 * time.Second
-	serverWriteTimeout   = 30 * time.Second
+	// 서버 타임아웃 설정 (동영상 최대 100MB 업로드 고려)
+	serverReadTimeout    = 5 * time.Minute
+	serverWriteTimeout   = 5 * time.Minute
 	serverIdleTimeout    = 120 * time.Second
 	serverMaxHeaderBytes = 1 << 20 // 1MB
 

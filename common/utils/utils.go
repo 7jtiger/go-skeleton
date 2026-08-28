@@ -117,77 +117,165 @@ func GenerateOTP() string {
 	return otp
 }
 
-func UploadCldFlr(files []*multipart.FileHeader, accountID, apiToken string) (*map[string]string, error) {
-	cldFlrInfos := make(map[string]string, 4)
+func UploadCldFlrImg(files []*multipart.FileHeader, accountID, apiToken string) (*map[string]string, error) {
+	cldFlrInfos := make(map[string]string, len(files))
 	for _, file := range files {
-		// Open the file
-		src, err := file.Open()
+		url, err := updCldflrImg(file, accountID, apiToken)
 		if err != nil {
 			return nil, err
 		}
-		defer src.Close()
+		cldFlrInfos[file.Filename] = url
+	}
+	return &cldFlrInfos, nil
+}
 
-		// Create multipart form data
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
-
-		// Add file to form
-		part, err := writer.CreateFormFile("file", file.Filename)
+// UpTotalCldFlrThumb 이미지→Cloudflare Images(variants[0]), 동영상→Stream(playback HLS URL)
+func UpTotalCldFlr(files []*multipart.FileHeader, accountID, apiToken string) (*map[string]string, error) {
+	cldFlrInfos := make(map[string]string, len(files))
+	for _, file := range files {
+		var (
+			mediaURL string
+			err      error
+		)
+		switch GetFileType(file.Filename) {
+		case 0: // image
+			mediaURL, err = updCldflrImg(file, accountID, apiToken)
+		case 1: // video
+			mediaURL = "https://storage.googleapis.com/stream-example-bucket/video.mp4"
+			// mediaURL, err = uplCldflrStream(file, accountID, apiToken)
+		default:
+			return nil, fmt.Errorf("unsupported file type: %s", file.Filename)
+		}
 		if err != nil {
 			return nil, err
 		}
+		cldFlrInfos[file.Filename] = mediaURL
+	}
+	return &cldFlrInfos, nil
+}
 
-		if _, err := io.Copy(part, src); err != nil {
-			return nil, err
-		}
-
-		writer.Close()
-
-		// Create request
-		url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID)
-		req, err := http.NewRequest("POST", url, body)
-		if err != nil {
-			return nil, err
-		}
-
-		// Set headers
-		req.Header.Set("Content-Type", writer.FormDataContentType())
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
-
-		// Send request
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		// Read response body
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		var tempResponse struct {
-			Success bool `json:"success"`
-			Result  struct {
-				Filename string   `json:"filename"`
-				Variants []string `json:"variants"`
-			} `json:"result"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &tempResponse); err != nil {
-			return nil, err
-		}
-
-		cldFlrInfos[file.Filename] = tempResponse.Result.Variants[0]
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("cloudflare upload failed with status %d", resp.StatusCode)
-		}
+func updCldflrImg(file *multipart.FileHeader, accountID, apiToken string) (string, error) {
+	bodyBytes, status, err := postCldflrMultipart(
+		fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID),
+		file, apiToken,
+	)
+	if err != nil {
+		return "", err
 	}
 
-	return &cldFlrInfos, nil
+	var tempResponse struct {
+		Success bool `json:"success"`
+		Errors  []struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"errors"`
+		Result struct {
+			Filename string   `json:"filename"`
+			Variants []string `json:"variants"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(bodyBytes, &tempResponse); err != nil {
+		return "", err
+	}
+	if status != http.StatusOK || !tempResponse.Success {
+		return "", fmt.Errorf("cloudflare images upload failed status=%d body=%s", status, truncateCFBody(bodyBytes))
+	}
+	if len(tempResponse.Result.Variants) == 0 {
+		return "", fmt.Errorf("cloudflare images upload returned empty variants: %s", truncateCFBody(bodyBytes))
+	}
+	return tempResponse.Result.Variants[0], nil
+}
+
+func uplCldflrStream(file *multipart.FileHeader, accountID, apiToken string) (string, error) {
+	bodyBytes, status, err := postCldflrMultipart(
+		fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/stream", accountID),
+		file, apiToken,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	var tempResponse struct {
+		Success bool `json:"success"`
+		Errors  []struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"errors"`
+		Result struct {
+			UID      string `json:"uid"`
+			Preview  string `json:"preview"`
+			Playback struct {
+				HLS  string `json:"hls"`
+				Dash string `json:"dash"`
+			} `json:"playback"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(bodyBytes, &tempResponse); err != nil {
+		return "", err
+	}
+	if (status != http.StatusOK && status != http.StatusCreated) || !tempResponse.Success {
+		return "", fmt.Errorf("cloudflare stream upload failed status=%d body=%s", status, truncateCFBody(bodyBytes))
+	}
+
+	playback := tempResponse.Result.Playback.HLS
+	if playback == "" {
+		playback = tempResponse.Result.Playback.Dash
+	}
+	if playback == "" {
+		playback = tempResponse.Result.Preview
+	}
+	if playback == "" {
+		return "", fmt.Errorf("cloudflare stream upload returned empty playback url: %s", truncateCFBody(bodyBytes))
+	}
+	return playback, nil
+}
+
+func postCldflrMultipart(apiURL string, file *multipart.FileHeader, apiToken string) ([]byte, int, error) {
+	src, err := file.Open()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer src.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", file.Filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	if _, err := io.Copy(part, src); err != nil {
+		return nil, 0, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, 0, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, apiURL, body)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return bodyBytes, resp.StatusCode, nil
+}
+
+func truncateCFBody(b []byte) string {
+	const max = 512
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "..."
 }
 
 func GetFileType(filename string) int {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"ms-gateway/conf"
 	"ms-gateway/models"
@@ -463,57 +464,43 @@ func (p *StoryController) GetStrCmtDetail(c *gin.Context) {
 	})
 }
 
-// UploadStoryPic godoc
-// @Summary 업로드 스토리 이미지 (Cloudflare Images)
-// @Description 최대 5개의 이미지(각 5MB 이하, 총 본문 길이 512자 제한)를 업로드합니다. 인증된 사용자가 Cloudflare Images에 스토리 이미지를 업로드하며, 업로드 성공 시 db에 저장합니다.
+// UploadStoryContent godoc
+// @Summary 스토리 미디어 업로드 (Cloudflare Images / Stream)
+// @Description JWT 인증 후 스토리용 미디어만 Cloudflare에 업로드합니다. DB 저장 없이 URL만 반환합니다.
+// @Description
+// @Description **용량**: 이미지·썸네일 각 5MB 이하, 동영상(MP4) 각 100MB 이하, files 최대 5개.
+// @Description
+// @Description **이미지 전용**: `files`만 전송. 응답 `data.imgs` = filename→URL 맵(JSON).
+// @Description
+// @Description **동영상 포함**: `files`의 MP4마다 `thbnl` 썸네일 1장 필수(순서 1:1). 이미지→Images, 동영상→Stream(HLS).
+// @Description 응답 `data.vdos` = `{"1":"재생URL","thumb1":"썸네일URL",...}` JSON 문자열.
 // @Tags Story
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param files formData file true "스토리 미디어 파일 (최대 5MB * 5개) — 지원 파일: 이미지/동영상, 최대 5개까지 첨부, 최소 1개 이상 필요, 파일명 중복 불가"
-// @Param thumbnails formData file false "동영상 썸네일 이미지 (동영상 개수만큼 필요, 이미지 타입만 허용, files의 동영상 순서와 1:1 매칭)"
-// @Param sbody formData string true "스토리 본문 (최대 512자, 필수)"
-// @Param stat formData int true "스토리 공개 상태 (0=del, 1=pub, 2=private, 3=limit, 4=resv)" Enums(0,1,2,3,4)
-//
-//	@Example curl -X POST http://localhost:8080/story/v01/upload \
-//	  -H "Authorization: Bearer {jwt-access-token}" \
-//	  -F "files=@/home/tmp/bc1.jpg" \
-//	  -F "files=@/home/tmp/bc2.jpg" \
-//	  -F "files=@/home/tmp/bc3.jpg" \
-//	  -F "sbody=이것은 스토리 본문입니다." \
-//	  -F "stat=1" \
-//	  -v
-//
-// @Success 200 {object} map[string]interface{} "업로드 성공 시: {\"msg\": \"Successfully uploaded story picture\", \"lastID\":5}"
-// @Failure 400 {object} map[string]interface{} "요청 파라미터 누락 또는 파일 미첨부 시 에러"
-// @Failure 401 {object} map[string]interface{} "인증 실패 시"
-// @Failure 500 {object} map[string]interface{} "Cloudflare 업로드 오류 또는 서버 내부 오류"
+// @Param files formData file true "미디어 (이미지 JPG/PNG/GIF/WEBP ≤5MB 또는 MP4 ≤100MB, 최대 5개)"
+// @Param thbnl formData file false "동영상 썸네일 (이미지 ≤5MB). 동영상 있을 때만 필수, 개수·순서 1:1"
+// @Success 200 {object} map[string]interface{} "이미지: {\"msg\":\"ok\",\"imgs\":{...}} / 동영상: {\"msg\":\"ok\",\"vdos\":\"{...}\"}"
+// @Failure 400 {object} map[string]interface{} "파일 없음, 용량 초과, thbnl 불일치 등"
+// @Failure 401 {object} map[string]interface{} "인증 실패"
+// @Failure 500 {object} map[string]interface{} "Cloudflare 업로드 실패"
 // @Router /story/v01/upload [post]
-// @Example Response : Status: 200, Response: {"msg":"Successfully uploaded story picture","lastID":5}
-func (p *StoryController) CreateStory(c *gin.Context) {
+// @Example 이미지 curl -X POST http://localhost:8080/story/v01/upload -H "Authorization: Bearer {jwt}" -F "files=@a.jpg" -F "files=@b.jpg"
+// @Example 동영상 curl -X POST http://localhost:8080/story/v01/upload -H "Authorization: Bearer {jwt}" -F "files=@v1.mp4" -F "thbnl=@t1.jpg"
+// @Example Response 이미지 {"result":0,"resultString":"Success","data":{"msg":"ok","imgs":{"a.jpg":"https://imagedelivery.net/.../public"}}}
+// @Example Response 동영상 {"result":0,"resultString":"Success","data":{"msg":"ok","vdos":"{\"1\":\"https://.../manifest/video.m3u8\",\"thumb1\":\"https://imagedelivery.net/.../public\"}"}}
+func (p *StoryController) UploadStoryContent(c *gin.Context) {
+	// c.Set("upFiles", validFiles)
+	// c.Set("upThumb", validThumbs)
+	// user, exists := c.Get("user")
+	// if !exists {
+	// 	p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+	// 	return
+	// }
+
 	fileInfo, ok := c.Get("upFiles")
 	if !ok {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "No files uploaded")
-		return
-	}
-	sinfo, ok := c.Get("sinfo")
-	if !ok {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "No sinfo uploaded")
-		return
-	}
-	// TODO : birth 타입 - 문자열 일자까지만
-	// TODO : area 타입 변경
-	user, exists := c.Get("user")
-	if !exists {
-		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	sinfoMap := sinfo.(map[string][]string)
-	sstat, okStat := firstFormValue(sinfoMap, "stat")
-	ssbody, okBody := firstFormValue(sinfoMap, "sbody")
-	if !okStat || !okBody || sstat == "" || ssbody == "" {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Story body, Status are required")
 		return
 	}
 
@@ -533,100 +520,154 @@ func (p *StoryController) CreateStory(c *gin.Context) {
 		}
 	}
 	if videoCount > len(thumbnails) {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "Thumbnail is required for each video")
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Thumbnail is required for each video"+" videoCount: "+strconv.Itoa(videoCount)+" thumbnailsCount: "+strconv.Itoa(len(thumbnails)))
 		return
 	}
 
-	// 본편 업로드 (이미지/동영상)
-	cldFlrInfos, err := utils.UploadCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
-	if err != nil {
-		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story picture", err)
-		return
-	}
-
-	// 썸네일 업로드 (Cloudflare Images)
-	var thumbInfos *map[string]string
-	if len(thumbnails) > 0 {
-		thumbInfos, err = utils.UploadCldFlr(thumbnails, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+	if videoCount > 0 {
+		// 본편 업로드: 이미지→Images, 동영상→Stream
+		cldFlrInfos, err := utils.UpTotalCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
 		if err != nil {
-			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload thumbnail", err)
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story media", err)
 			return
 		}
-	}
 
-	// files 순서를 유지하면서 str_img 구성.
-	// - "N"      : N번째 미디어 URL
-	// - "thumbN" : N번째 미디어(동영상)의 썸네일 URL
-	dix := map[string]string{}
-	var hasImg, hasVid bool
-	thumbIdx := 0
-	for i, f := range files {
-		idx := strconv.Itoa(i + 1)
-		dix[idx] = (*cldFlrInfos)[f.Filename]
-
-		switch utils.GetFileType(f.Filename) {
-		case 0:
-			hasImg = true
-		case 1:
-			hasVid = true
-			// 동영상은 순서대로 썸네일 1장을 매칭한다.
-			if thumbInfos != nil && thumbIdx < len(thumbnails) {
-				thumbFile := thumbnails[thumbIdx]
-				dix["thumb"+idx] = (*thumbInfos)[thumbFile.Filename]
-				thumbIdx++
+		// 썸네일 업로드 (Cloudflare Images — 이미지만)
+		var thumbInfos *map[string]string
+		if len(thumbnails) > 0 {
+			thumbInfos, err = utils.UploadCldFlrImg(thumbnails, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+			if err != nil {
+				p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload thumbnail", err)
+				return
 			}
 		}
+
+		// files 순서를 유지하면서 str_img 구성.
+		// - "N"      : N번째 미디어 URL
+		// - "thumbN" : N번째 미디어(동영상)의 썸네일 URL
+		dix := map[string]string{}
+		thumbIdx := 0
+		for i, f := range files {
+			idx := strconv.Itoa(i + 1)
+			dix[idx] = (*cldFlrInfos)[f.Filename]
+
+			switch utils.GetFileType(f.Filename) {
+			case 0:
+				//hasImg = true
+			case 1:
+				//hasVid = true
+				// 동영상은 순서대로 썸네일 1장을 매칭한다.
+				if thumbInfos != nil && thumbIdx < len(thumbnails) {
+					thumbFile := thumbnails[thumbIdx]
+					dix["thumb"+idx] = (*thumbInfos)[thumbFile.Filename]
+					thumbIdx++
+				}
+			}
+		}
+
+		urls, err := json.Marshal(dix)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to marshal story image", err)
+			return
+		}
+
+		p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"msg": "ok", "vdos": string(urls)})
+
+	} else {
+		// 이미지 업로드: 이미지→Images
+		cldFlrInfos, err := utils.UploadCldFlrImg(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload story media", err)
+			return
+		}
+
+		dix, err := json.Marshal(cldFlrInfos)
+		if err != nil {
+			p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to marshal story image", err)
+			return
+		}
+
+		p.ctl.SendDataResponse(c, http.StatusOK, gin.H{"msg": "ok", "imgs": dix})
 	}
 
-	simg := &ptl.StoryImage{}
-	simg.StrImg, err = json.Marshal(dix)
-	if err != nil {
-		log.Error("Failed to marshal story image: %v", err)
+}
+
+// CreateStory godoc
+// @Summary 스토리 생성 (미디어 URL + 본문 DB 저장)
+// @Description JWT 인증 사용자의 스토리를 DB에 저장합니다. 미디어 파일은 직접 받지 않고, **업로드 API에서 받은 URL 문자열**을 전달합니다.
+// @Description
+// @Description **권장 플로우**
+// @Description 1. `POST /story/v01/upload` — Cloudflare 업로드 → `data.imgs`(이미지) 또는 `data.vdos`(동영상+썸네일) 수신
+// @Description 2. `POST /story/v01/create` — 본 API에 JSON body 전달 (`imgs` / `vdos`는 upload 응답 값을 문자열로)
+// @Description
+// @Description **stat**: 0=del, 1=pub, 2=private(팔로우공개), 3=limit(유료공개), 4=resv
+// @Description
+// @Tags Story
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body protocol.CreateStoryReq true "스토리 생성 요청"
+// @Success 200 {object} map[string]interface{} "성공: {\"msg\":\"ok\",\"idx\":5}"
+// @Failure 400 {object} map[string]interface{} "JSON 파싱 실패, imgs 누락, 프로필 필드 부족"
+// @Failure 401 {object} map[string]interface{} "인증 실패"
+// @Failure 500 {object} map[string]interface{} "DB 저장 실패"
+// @Router /story/v01/create [post]
+// @Example Request 이미지 스토리 {"stat":1,"sbody":"오늘의 사진","imgs":"{\"a.jpg\":\"https://imagedelivery.net/xxx/public\"}","vdos":""}
+// @Example Request 동영상 스토리 {"stat":1,"sbody":"오늘의 영상","imgs":"","vdos":"{\"1\":\"https://customer-xxx.cloudflarestream.com/uid/manifest/video.m3u8\",\"thumb1\":\"https://imagedelivery.net/xxx/public\"}"}
+// @Example Request 동영상 스토리 {"stat":2,"sbody":"오늘의 영상","imgs":"{\"a.jpg\":\"https://imagedelivery.net/xxx/public\"}","vdos":"{\"1\":\"https://customer-xxx.cloudflarestream.com/uid/manifest/video.m3u8\",\"thumb1\":\"https://imagedelivery.net/xxx/public\"}"}
+// @Example Response {"result":0,"resultString":"Success","data":{"msg":"ok","idx":5}}
+func (p *StoryController) CreateStory(c *gin.Context) {
+	// mtype: 0=imgs only, 1=vdos only, 2=both. 단일 타입은 flat JSON, 혼합은 {"imgs":{...},"vdos":{...}}.
+	userInfo, ok := c.Get("user")
+	if !ok {
+		p.ctl.SimpleError(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+	u := userInfo.(*ptl.UserInfoResp)
+
+	var sinfo ptl.CreateStoryReq
+	if err := c.ShouldBindJSON(&sinfo); err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, "Failed to bind JSON", err)
 		return
 	}
 
-	if hasImg && hasVid {
-		simg.MType = 2
-	} else if hasVid {
-		simg.MType = 1
-	} else {
-		simg.MType = 0
+	strImg, mtype, err := GetMediaInfo(sinfo.Images, sinfo.Videos)
+	if err != nil {
+		p.ctl.SimpleError(c, http.StatusBadRequest, err.Error())
+		return
 	}
 
-	simg.Uid = user.(*ptl.UserInfoResp).Uid
-
-	//"1990-01-01T00:00:00Z"
-	simg.Birth = utils.Time2StrDay(user.(*ptl.UserInfoResp).Birth)
-	if simg.Birth == "" {
+	birth := utils.Time2StrDay(u.Birth)
+	if birth == "" {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, birth is required")
 		return
 	}
-	simg.Nick = user.(*ptl.UserInfoResp).Nick
-	if simg.Nick == "" {
+	if u.Nick == "" {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, nick is required")
 		return
 	}
-	simg.Area = ptl.GetAreaCode(user.(*ptl.UserInfoResp).Area)
-	if simg.Area <= 0 {
-		simg.Area = 0
-	}
 
-	nGen, err := strconv.Atoi(user.(*ptl.UserInfoResp).Gender)
-	if err != nil {
+	nGen, err := strconv.Atoi(u.Gender)
+	if err != nil || nGen < 0 || nGen > 2 {
 		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, gender is required", err)
 		return
 	}
-	simg.Gender = nGen
-	if simg.Gender < 0 || simg.Gender > 2 {
-		p.ctl.SimpleError(c, http.StatusBadRequest, "User not authenticated, gender is required")
-		return
+
+	area := ptl.GetAreaCode(u.Area)
+	if area <= 0 {
+		area = 0
 	}
 
-	simg.Body = ssbody
-	simg.Stat, err = strconv.Atoi(sstat)
-	if err != nil {
-		log.Error("Failed to convert stat to int: %v", err)
-		return
+	simg := &ptl.StoryImage{
+		Uid:    u.Uid,
+		Nick:   u.Nick,
+		Birth:  birth,
+		Area:   area,
+		Gender: nGen,
+		Body:   sinfo.Sbody,
+		Stat:   sinfo.Stat,
+		MType:  mtype,
+		StrImg: strImg,
 	}
 
 	lastID, err := p.sdb.SaveStory(simg)
@@ -636,7 +677,58 @@ func (p *StoryController) CreateStory(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "Successfully uploaded story picture", "lastID": lastID})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok", "idx": lastID})
+}
+
+func GetMediaInfo(imgsRaw, vdosRaw string) (json.RawMessage, int, error) {
+	imgsRaw = strings.TrimSpace(imgsRaw)
+	vdosRaw = strings.TrimSpace(vdosRaw)
+
+	var imgs, vdos map[string]string
+	if imgsRaw != "" {
+		if err := json.Unmarshal([]byte(imgsRaw), &imgs); err != nil {
+			return nil, 0, fmt.Errorf("invalid imgs JSON: %w", err)
+		}
+	}
+	if vdosRaw != "" {
+		if err := json.Unmarshal([]byte(vdosRaw), &vdos); err != nil {
+			return nil, 0, fmt.Errorf("invalid vdos JSON: %w", err)
+		}
+	}
+
+	hasImgs := len(imgs) > 0
+	hasVdos := len(vdos) > 0
+	if !hasImgs && !hasVdos {
+		return nil, 0, fmt.Errorf("imgs or vdos is required")
+	}
+
+	var mtype int
+	switch {
+	case hasImgs && hasVdos:
+		mtype = 2
+	case hasVdos:
+		mtype = 1
+	default:
+		mtype = 0
+	}
+
+	var strImg json.RawMessage
+	var err error
+	switch mtype {
+	case 0:
+		strImg, err = json.Marshal(imgs)
+	case 1:
+		strImg, err = json.Marshal(vdos)
+	default:
+		strImg, err = json.Marshal(map[string]map[string]string{
+			"imgs": imgs,
+			"vdos": vdos,
+		})
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal story media: %w", err)
+	}
+	return strImg, mtype, nil
 }
 
 /*

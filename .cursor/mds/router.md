@@ -12,7 +12,7 @@
 
 ### Data Processing Middleware
 - `GetReqXMeta()`: Middleware that parses user metadata from x-meta header and stores it in context
-- `ValidateFileUpload()`: File upload validation middleware that verifies uploaded file count, size, and type; stores normalized `sinfo` in context (`stat`/`sbody` or `sinfo[stat]`/`sinfo[sbody]` both accepted). Also parses optional `thumbnails` field (image-only) into `uploadedThumbnails` context for video thumbnails.
+- `ValidateFileUpload()`: 멀티파트 업로드 검증. **이미지·썸네일 ≤ size MB(기본 5MB)**, **동영상 ≤ 100MB**. 이미지만이면 `files`만 허용(`thbnl` 첨부 시 400). 동영상 포함 시 `thbnl` 1:1 필수. context: `upFiles`, `upThumb`, `sinfo`.
 - `AesEncrypt()`: Middleware that encrypts response data using AES GCM mode for transmission
 - `AesDecrypt()`: Middleware that decrypts request data using AES GCM mode for processing
 
@@ -111,7 +111,8 @@
 - `GET /story/v01/home/:id`: Endpoint to retrieve user's story home (placeholder)
 - `GET /story/v01/list/:uid`: Endpoint to retrieve user's public story list (stat=1 or 0)
 - `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details with comments
-- `POST /story/v01/create`: Endpoint to create story with media upload (Cloudflare), requires `JwtAuth`, and uses `ValidateFileUpload` (max 5 files, 5MB each)
+- `POST /story/v01/upload`: 스토리 미디어만 Cloudflare 업로드 (Images/Stream). `ValidateFileUpload` (이미지·썸네일 5MB, 동영상 100MB). 응답 `imgs` 또는 `vdos`
+- `POST /story/v01/create`: JSON 스토리 생성 — `stat`, `sbody`, `imgs`(upload 응답), `vdos`(upload 응답). JwtAuth.
 - `POST /story/v01/updstat`: Endpoint to update story status (0=del, 1=pub, 2=private, 3=limit, 4=reserved)
 - `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
 - `POST /story/v01/delpic`: Endpoint to delete specific picture from story

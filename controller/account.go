@@ -1033,7 +1033,7 @@ func (p *AccountController) ModifyMainPic(c *gin.Context) {
 	}
 
 	files := fileInfo.([]*multipart.FileHeader)
-	cldFlrInfos, err := utils.UploadCldFlr(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
+	cldFlrInfos, err := utils.UploadCldFlrImg(files, p.cfg.Server.CfId, p.cfg.Server.CfToken)
 	if err != nil {
 		p.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload main picture", err)
 		return

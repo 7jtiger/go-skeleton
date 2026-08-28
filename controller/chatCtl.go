@@ -911,7 +911,7 @@ func (cc *ChatController) notifyPartnerLeft(room *models.DMRoomRow, leaverUID ui
 		Timestamp: now,
 	}
 	cc.sendToUser(partnerUIDStr, wsMsg)
-	cc.sendToUser(partnerUIDStr, sysMsg)
+	// cc.sendToUser(partnerUIDStr, sysMsg)
 }
 
 func (cc *ChatController) buildPartnerInfoByUID(uid uint64) (*ptc.PartnerInfo, error) {
@@ -1546,7 +1546,7 @@ func (cc *ChatController) UploadImage(c *gin.Context) {
 
 	fps := files.([]*multipart.FileHeader)
 	// Cloudflare에 이미지 업로드
-	cldFlrInfos, err := utils.UploadCldFlr(fps, cc.cfg.Server.CfId, cc.cfg.Server.CfToken)
+	cldFlrInfos, err := utils.UploadCldFlrImg(fps, cc.cfg.Server.CfId, cc.cfg.Server.CfToken)
 	if err != nil {
 		cc.ctl.SimpleError(c, http.StatusInternalServerError, "Failed to upload image", err)
 		return

@@ -273,7 +273,7 @@ func (p *Router) OptionalJwt() gin.HandlerFunc {
 // detectContentTypeFromFile reads the first 512 bytes and detects content type.
 // Uses both http.DetectContentType and magic bytes for reliable detection.
 // Used when client sends application/octet-stream so we can allow real image/video types.
-func detectContentTypeFromFile(fh *multipart.FileHeader) (string, error) {
+func detectCntsType(fh *multipart.FileHeader) (string, error) {
 	f, err := fh.Open()
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -381,10 +381,11 @@ func normalizeFormSinfo(values map[string][]string) map[string][]string {
 	return out
 }
 
-// validateFileUploadImpl is the shared implementation for file upload validation.
-// When encParam is true, it extracts sinfo from form.Value["data"][0] (encrypted parameter mode).
-// When encParam is false, it sets sinfo to the full form.Value map.
-func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool) gin.HandlerFunc {
+// validateFileUploadImpl 스토리 등 멀티파트 업로드 검증.
+// - files 가 이미지만: 단순 이미지 업로드 (thbnl 불필요, 있으면 거부)
+// - files 에 동영상(mp4)이 포함되면: 동영상마다 thbnl 썸네일 1장 필수 (순서 1:1)
+// encParam=true 이면 sinfo를 form.Value["data"][0] 에서 읽는다.
+func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		contentType := c.GetHeader("Content-Type")
 		if !strings.HasPrefix(contentType, "multipart/form-data") {
@@ -409,14 +410,7 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 			return
 		}
 
-		// Get files from form
 		files := form.File["files"]
-		formKeys := make([]string, 0, len(form.File))
-		for k := range form.File {
-			formKeys = append(formKeys, k)
-		}
-		// logger.Info("ValidateFileUpload: Files found", "count", len(files), "form_keys", formKeys)
-
 		if len(files) == 0 {
 			logger.Warn("ValidateFileUpload: No files in 'files' field")
 			p.ctl.RespError(c, "No Uploaded File", http.StatusBadRequest)
@@ -428,39 +422,46 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 			return
 		}
 
-		maxSize := size << 20
-		allowedTypes := map[string]bool{
+		// size 인자(MB): 이미지·썸네일 한도. 동영상은 별도 100MB.
+		maxImageSize := size << 20
+		const maxVideoMB int64 = 100
+		maxVideoSize := maxVideoMB << 20
+
+		imageTypes := map[string]bool{
 			"image/jpeg": true,
 			"image/jpg":  true,
 			"image/png":  true,
 			"image/gif":  true,
 			"image/webp": true,
-			"video/mp4":  true,
+		}
+		videoTypes := map[string]bool{
+			"video/mp4": true,
 		}
 
 		validFiles := make([]*multipart.FileHeader, 0, len(files))
+		videoCount := 0
 
 		for _, fileHeader := range files {
-			if fileHeader.Size > maxSize {
-				p.ctl.RespError(c, fmt.Sprintf("File %s exceeds %dMB limit", fileHeader.Filename, size), http.StatusBadRequest)
+			ct, err := resolveUpdCntsType(fileHeader)
+			if err != nil {
+				logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
+				p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)
 				return
 			}
 
-			ct := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
-			if idx := strings.Index(ct, ";"); idx >= 0 {
-				ct = strings.TrimSpace(ct[:idx])
-			}
-
-			if ct == "" || ct == "application/octet-stream" {
-				detected, err := detectContentTypeFromFile(fileHeader)
-				if err != nil {
-					logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
-					p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)
+			switch {
+			case imageTypes[ct]:
+				if fileHeader.Size > maxImageSize {
+					p.ctl.RespError(c, fmt.Sprintf("Image %s exceeds %dMB limit", fileHeader.Filename, size), http.StatusBadRequest)
 					return
 				}
-				ct = detected
-			}
-			if !allowedTypes[ct] {
+			case videoTypes[ct]:
+				if fileHeader.Size > maxVideoSize {
+					p.ctl.RespError(c, fmt.Sprintf("Video %s exceeds %dMB limit", fileHeader.Filename, maxVideoMB), http.StatusBadRequest)
+					return
+				}
+				videoCount++
+			default:
 				p.ctl.RespError(c, fmt.Sprintf("File %s has invalid type. Only JPG, PNG, GIF, WEBP (images) and MP4 (video) files are allowed", fileHeader.Filename), http.StatusBadRequest)
 				return
 			}
@@ -468,63 +469,59 @@ func (p *Router) validateFileUploadImpl(maxFiles int, size int64, encParam bool)
 			validFiles = append(validFiles, fileHeader)
 		}
 
-		// 동영상용 썸네일(선택). 이미지 타입만 허용한다.
-		imageOnlyTypes := map[string]bool{
-			"image/jpeg": true,
-			"image/jpg":  true,
-			"image/png":  true,
-			"image/gif":  true,
-			"image/webp": true,
-		}
 		thumbnails := form.File["thbnl"]
-		validThumbs := make([]*multipart.FileHeader, 0, len(thumbnails))
-		for _, thumbHeader := range thumbnails {
-			if thumbHeader.Size > maxSize {
-				p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s exceeds %dMB limit", thumbHeader.Filename, size), http.StatusBadRequest)
+		validThumbs := make([]*multipart.FileHeader, 0)
+
+		if videoCount == 0 {
+			// 이미지만: thbnl 없이 files 만 업로드
+			if len(thumbnails) > 0 {
+				p.ctl.RespError(c, "Thumbnail (thbnl) is only allowed when uploading video. Image-only upload must not include thbnl", http.StatusBadRequest)
+				return
+			}
+		} else {
+			// 동영상 포함: 동영상 개수만큼 thbnl 동시 업로드 필수
+			if len(thumbnails) != videoCount {
+				p.ctl.RespError(c, fmt.Sprintf("Video upload requires matching thumbnails: videoCount=%d thbnl=%d (1:1 with videos in files order)", videoCount, len(thumbnails)), http.StatusBadRequest)
 				return
 			}
 
-			ct := strings.TrimSpace(thumbHeader.Header.Get("Content-Type"))
-			if idx := strings.Index(ct, ";"); idx >= 0 {
-				ct = strings.TrimSpace(ct[:idx])
-			}
-			if ct == "" || ct == "application/octet-stream" {
-				detected, err := detectContentTypeFromFile(thumbHeader)
+			validThumbs = make([]*multipart.FileHeader, 0, len(thumbnails))
+			for _, thumbHeader := range thumbnails {
+				if thumbHeader.Size > maxImageSize {
+					p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s exceeds %dMB limit", thumbHeader.Filename, size), http.StatusBadRequest)
+					return
+				}
+
+				ct, err := resolveUpdCntsType(thumbHeader)
 				if err != nil {
 					p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s: could not determine type", thumbHeader.Filename), http.StatusBadRequest)
 					return
 				}
-				ct = detected
+				if !imageTypes[ct] {
+					p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s has invalid type. Only image files are allowed", thumbHeader.Filename), http.StatusBadRequest)
+					return
+				}
+				validThumbs = append(validThumbs, thumbHeader)
 			}
-			if !imageOnlyTypes[ct] {
-				p.ctl.RespError(c, fmt.Sprintf("Thumbnail %s has invalid type. Only image files are allowed", thumbHeader.Filename), http.StatusBadRequest)
-				return
-			}
-
-			validThumbs = append(validThumbs, thumbHeader)
 		}
 
-		// Store validated files in context
 		c.Set("upFiles", validFiles)
 		c.Set("upThumb", validThumbs)
-		if encParam {
-			c.Set("sinfo", form.Value["data"][0])
-		} else {
-			c.Set("sinfo", normalizeFormSinfo(form.Value))
-		}
 
 		c.Next()
 	}
 }
 
-// ValidateFileUpload checks if the uploaded files meet the requirements
-func (p *Router) ValidateFileUpload(maxFiles int, size int64) gin.HandlerFunc {
-	return p.validateFileUploadImpl(maxFiles, size, false)
-}
-
-// EncParamFileUpload validates file upload and extracts encrypted parameter from form data
-func (p *Router) EncParamFileUpload(maxFiles int, size int64) gin.HandlerFunc {
-	return p.validateFileUploadImpl(maxFiles, size, true)
+// resolveUploadContentType Content-Type 헤더 또는 파일 magic bytes 로 MIME 판별
+func resolveUpdCntsType(fh *multipart.FileHeader) (string, error) {
+	ct := strings.TrimSpace(fh.Header.Get("Content-Type"))
+	if idx := strings.Index(ct, ";"); idx >= 0 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+	if ct != "" && ct != "application/octet-stream" {
+		return ct, nil
+	}
+	return detectCntsType(fh)
 }
 
 func (p *Router) simpleImgUploadCF(maxFiles int, size int64) gin.HandlerFunc {
@@ -595,7 +592,7 @@ func (p *Router) simpleImgUploadCF(maxFiles int, size int64) gin.HandlerFunc {
 			}
 
 			if ct == "" || ct == "application/octet-stream" {
-				detected, err := detectContentTypeFromFile(fileHeader)
+				detected, err := detectCntsType(fileHeader)
 				if err != nil {
 					logger.Warn("ValidateFileUpload: Failed to detect content type", "file", fileHeader.Filename, "error", err.Error())
 					p.ctl.RespError(c, fmt.Sprintf("File %s: could not determine type", fileHeader.Filename), http.StatusBadRequest)

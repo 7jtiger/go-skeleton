@@ -111,8 +111,8 @@ func (p *Router) Idx() *gin.Engine {
 	// 커스텀 GinLogger/GinRecovery가 이중 실행되지 않도록 함
 	e := gin.New()
 
-	// MultipartForm 메모리 제한 설정 (32MB - 파일 업로드용)
-	e.MaxMultipartMemory = 32 << 20 // 32MB
+	// MultipartForm: 동영상 최대 100MB 업로드를 위해 여유 있게 설정 (초과분은 임시 디스크)
+	e.MaxMultipartMemory = 128 << 20 // 128MB
 
 	e.Use(logger.GinLogger())
 	e.Use(logger.GinRecovery(true))
@@ -173,7 +173,7 @@ func (p *Router) Idx() *gin.Engine {
 		//cate : pw / area / nick / email
 		pfset.POST("/modify", p.acc.ModifyUserInfo)
 
-		pfset.POST("/upd/mpic", p.EncParamFileUpload(1, 5), p.acc.ModifyMainPic)
+		pfset.POST("/upd/mpic", p.ValidateFileUpload(1, 5), p.acc.ModifyMainPic)
 
 		// 로그아웃
 		pfset.POST("/logout", p.acc.LogoutUser)
@@ -260,7 +260,8 @@ func (p *Router) Idx() *gin.Engine {
 	{
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
 		// story.GET("/home/:id")
-		story.POST("/create", p.ValidateFileUpload(5, 5), p.st.CreateStory)
+		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryContent)
+		story.POST("/create", p.st.CreateStory)
 		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
 
 		story.GET("/list", p.st.GetStoryDefaultList)

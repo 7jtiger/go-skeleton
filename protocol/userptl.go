@@ -186,3 +186,10 @@ type FavoriteUserItem struct {
 	SPIntro  string
 	FavAt    time.Time
 }
+
+type CreateStoryReq struct {
+	Stat   int    `json:"stat" example:"1"`                    // 0=del, 1=pub, 2=private, 3=limit, 4=resv
+	Sbody  string `json:"sbody" example:"스토리 본문"`               // 최대 512자
+	Images string `json:"imgs" example:"{\"a.jpg\":\"https://...\"}"` // POST /story/v01/upload 응답 data.imgs (JSON 문자열). 없으면 ""
+	Videos string `json:"vdos" example:"{\"1\":\"https://...m3u8\",\"thumb1\":\"https://...\"}"` // upload 응답 data.vdos (JSON 문자열). 없으면 ""
+}

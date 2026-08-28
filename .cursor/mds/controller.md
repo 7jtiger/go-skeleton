@@ -219,7 +219,7 @@
 - `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
 - `GetStoryList()`: Retrieves all public stories (stat=1 or 0) for a user, ordered by creation time descending
 - `GetStoryDetail()`: Retrieves detailed story information including all comments for a specific story index
-- `CreateStory()`: Uploads story images/videos to Cloudflare Images (max 5 files, 5MB each), builds media type, and saves story with authenticated user profile fields. Accepts optional `thumbnails` (image-only) matched 1:1 to videos in `files` order; stored in `str_img` as `thumb<N>` keys (e.g. `{"1":"videoUrl","thumb1":"thumbUrl"}`). Requires a thumbnail per video (400 otherwise).
+- `CreateStory()`: JSON body(`CreateStoryReq`: stat, sbody, imgs, vdos). 미디어는 `POST /story/v01/upload` 결과 문자열 전달. mtype: imgs만=0, vdos만=1, 둘 다=2. `str_img`: 단일 타입은 upload flat JSON 그대로, 혼합은 `{"imgs":{...},"vdos":{...}}`. 프로필은 JWT에서 설정.
 
 ### Story Update Functions
 - `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
@@ -250,9 +250,10 @@
 - 통합 테스트: `controller/stry_test.go` (`Test_SetCutoutUser`, `Test_UnsetCutoutUser`, `Test_GetCutoutCount`, `Test_GetCutoutList`) — flags: `-dm_target`, `-dm_token`, `-dm_peer_uid`
 
 ### Cloudflare Integration
-- **Image Upload**: Uses `utils.UploadCldFlr()` to upload images to Cloudflare Images
-- **Image Storage**: Stores image URLs as JSON array with indexed keys (1, 2, 3, ...)
-- **Configuration**: Uses `cfg.Server.CfId` and `cfg.Server.CfToken` for Cloudflare API authentication
+- **Media Upload**: `utils.UpTotalCldFlrThumb()` — image → Images `variants[0]`, video → Stream `playback.hls`
+- **Thumbnail / profile**: `utils.UploadCldFlr()` — Images only
+- **Image Storage**: Stores media URLs as JSON with indexed keys (1, 2, 3, ...) and `thumbN` for video thumbnails
+- **Configuration**: Uses `cfg.Server.CfId` and `cfg.Server.CfToken` (Images + Stream Edit 권한 필요)
 
 ### Key Features
 - **Multiple File Upload**: Supports up to 5 images per story
