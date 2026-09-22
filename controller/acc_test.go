@@ -620,3 +620,19 @@ func TestGenUuid(t *testing.T) {
 	uuid := utils.GenUuid()
 	fmt.Println(uuid)
 }
+
+func TestGetUidFromInfo(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/inserv/v01/uinfo" + "/7766493213763375817"
+
+	// var key = []string{"uid"}
+	// var value = []string{"7766493213763375817"}
+
+	// res, err := GetWithToken(*targetUrl, qurl, key, value, *dmToken)
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to get story list: %v", err)
+	}
+
+	fmt.Println(res)
+}

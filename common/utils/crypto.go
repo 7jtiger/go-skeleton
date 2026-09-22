@@ -168,3 +168,35 @@ func DecryptChaCha20(encryptedData, strkey string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+// isStdBase64Ciphertext reports whether s looks like ChaCha20 ciphertext
+// stored as standard base64 (nonce + XOR payload).
+func isStdBase64Ciphertext(s string) bool {
+	n := len(s)
+	if n < 4 || n%4 != 0 {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		c := s[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '+', c == '/':
+		case c == '=' && i >= n-2:
+		default:
+			return false
+		}
+	}
+	decodedLen := base64.StdEncoding.DecodedLen(n)
+	return decodedLen >= chacha20.NonceSize
+}
+
+// DecryptChaCha20Field decrypts a DB field that should be ChaCha20+base64.
+// Legacy plaintext (e.g. Korean names inserted without encryption) is returned as-is.
+func DecryptChaCha20Field(stored, strkey string) (string, error) {
+	if stored == "" {
+		return "", nil
+	}
+	if !isStdBase64Ciphertext(stored) {
+		return stored, nil
+	}
+	return DecryptChaCha20(stored, strkey)
+}

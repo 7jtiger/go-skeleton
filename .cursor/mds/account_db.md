@@ -28,9 +28,10 @@
 
 ## User Information Management Functions
 - `ModifyUserInfo()`: Function to modify user information (nickname, area, email) by category
-- `GetUserInfo()`: Function to query encrypted user information by user ID and return decrypted data
-- `GetUserInfoByUID()`: Function to query encrypted user information by numeric UID and return decrypted data
+- `GetUserInfo()`: Function to query encrypted user information by user ID and return decrypted data. `email`/`name`은 `DecryptChaCha20Field`로 복호화하며, 암호화 이전 한글 평문 레코드는 그대로 반환한다.
+- `GetUserInfoByUID()`: Function to query encrypted user information by numeric UID and return decrypted data. 복호화 규칙은 `GetUserInfo()`와 동일.
 - `GetUserInfosByUIDs()`: 여러 UID를 `IN` 절로 일괄 조회해 `map[uint64]UserInfoResp` 반환 (DM 인박스 N+1 제거용, 이메일/이름 복호화 생략 — 파트너 프로필 용도, 2026-07 추가)
+- `GetUserAssetInfo()`: `hold_point`/`hold_cash` 조회. 컬럼이 NULL이면 0 반환 (`sql.NullFloat64` 사용, double → int64)
 
 ## Block/Favorite Management Functions
 - `SetBlock()`: Function to create or reactivate block relation (`uid`, `bid`)

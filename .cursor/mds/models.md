@@ -52,7 +52,7 @@
 ### User Information Management
 - `ModifyUserInfo()`: Updates user information by category (nickname, area, email)
 - `GetUserInfo()`: Retrieves user information with decryption of sensitive fields
-- `GetUserInfoByUID()`: Numeric UID 기반 사용자 정보 조회 (복호화 포함)
+- `GetUserInfoByUID()`: Numeric UID 기반 사용자 정보 조회 (`DecryptChaCha20Field` — 암호문 복호화, 한글 레거시 평문은 그대로)
 
 ### Database Schema
 - **user_info**: Main user table with 25 fields including authentication, profile, and status information
@@ -159,13 +159,14 @@
 - `heartbeat()`: Goroutine that periodically pings database every 2 minutes
 
 ### Story Management Functions
-- `SetStory()`: Inserts new story with uid, nickname, body, status, and image JSON, returns lastInsertId
-- `GetStoryList()`: Retrieves user's public stories (stat=1 or 0) with idx, nick, str_img, at_create, ordered by creation time descending
-- `GetStory()`: Retrieves single story detail by index (nick, body, str_img, at_create)
+- `SetStory()` / `SaveStory(simg, media)`: `BuildStrImgForDB(media)`로 `str_img`·`type` 구성 후 INSERT
+- `GetStoryList()` / `GetDefStoryList()`: 공개 스토리 목록. `str_img`는 DB 통합 media 그대로
+- `GetStory()`: 상세 조회. `str_img` DB 값 그대로
+- `story_media.go`: `BuildStrImgForDB`, `ParseStoryMedia`, `GetFirstPicUrl`, `ValidateStoryMedia`, `MediaMType`, `ReindexStoryMediaAfterDelete`
 - `UpdateStoryStat()`: Updates story status and at_update timestamp
 - `UpdateStrBody()`: Updates story body content and at_update timestamp
 - `GetStrPicList()`: Retrieves str_img and str_imgbak JSON data for a story
-- `DeleteStrPic()`: Updates str_img and str_imgbak (moves deleted image to backup)
+- `DeleteStrPic()`: Updates str_img and str_imgbak (deleted slot → bak; unified reindex 1..N)
 
 ### Story Comment Functions
 - `SetStrComment()`: Inserts new comment with str_idx, wuid, nick, body, stat, returns lastInsertId
@@ -185,7 +186,7 @@
   - `idx` (PK, auto_increment), `uid` (bigint), `nick` (varchar 20), `body` (varchar 512)
   - `stat` (tinyint: 0=del, 1=pub, 2=private, 3=limit, 4=reserved)
   - `qt_good` (int), `qt_checked` (int - view count)
-  - `str_img` (JSON - active images), `str_imgbak` (JSON - deleted images backup)
+  - `str_img` (JSON - 통합 media `{"N":{"type":"img|vdo","url","thumb"}}`), `str_imgbak` (JSON - deleted backup)
   - `at_create`, `at_update` (datetime)
 
 - **str_cmt table**:
@@ -197,6 +198,7 @@
 ### Key Features
 - **JSON Storage**: Images stored as JSON with numeric indexes for flexible array management
 - **Backup System**: Deleted images preserved in str_imgbak instead of permanent deletion
+- **Unified Media**: upload/create에서 슬롯 객체 맵만 저장·조회 (레거시 변환 없음)
 - **Status-based Queries**: Filters by status for soft delete and privacy control
 - **Connection Pooling**: 50 max connections, 25 idle connections, 30-minute lifetime, 5-minute idle timeout
 - **Automatic Timestamps**: at_create and at_update managed automatically

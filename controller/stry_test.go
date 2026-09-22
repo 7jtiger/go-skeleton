@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	ptl "ms-gateway/protocol"
 	// "gocv.io/x/gocv"
 )
 
@@ -190,8 +192,8 @@ func Test_UploadContents(t *testing.T) {
 		Result       int    `json:"result"`
 		ResultString string `json:"resultString"`
 		Data         struct {
-			Msg  string `json:"msg"`
-			Vdos string `json:"vdos"`
+			Msg   string                        `json:"msg"`
+			Media map[string]ptl.StoryMediaItem `json:"media"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
@@ -203,14 +205,18 @@ func Test_UploadContents(t *testing.T) {
 	if apiResp.Data.Msg != "ok" {
 		t.Fatalf("expected data.msg=ok, got %q", apiResp.Data.Msg)
 	}
-	if apiResp.Data.Vdos == "" {
-		t.Fatalf("expected data.vdos with playback/thumb URLs, got empty")
+	if len(apiResp.Data.Media) == 0 {
+		t.Fatalf("expected data.media with slots, got empty")
+	}
+	item, ok := apiResp.Data.Media["1"]
+	if !ok || item.Type != ptl.StoryMediaTypeVdo || item.URL == "" || item.Thumb == "" {
+		t.Fatalf("expected media[1] vdo with url+thumb, got %+v", item)
 	}
 
-	fmt.Printf("UploadStoryContent OK — vdos: %s\n", apiResp.Data.Vdos)
+	fmt.Printf("UploadStoryContent OK — media: %+v\n", apiResp.Data.Media)
 }
 
-// Test_CreateStory POST /story/v01/create — CreateStory (upload 응답 vdos 고정값으로 JSON 저장 테스트)
+// Test_CreateStory POST /story/v01/create — CreateStory (upload 응답 media로 JSON 저장 테스트)
 
 func Test_CreateStory_Test(t *testing.T) {
 	targetURL := flag.String("target", "localhost:8080", "target server url")
@@ -218,16 +224,21 @@ func Test_CreateStory_Test(t *testing.T) {
 
 	createStoryURL := fmt.Sprintf("http://%s/story/v01/create", *targetURL)
 
-	// POST /story/v01/upload 성공 응답의 data.vdos (실제 파일 업로드 생략)
-	uploadedVdos := `{"1":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}`
+	// POST /story/v01/upload 성공 응답의 data.media 객체 (실제 파일 업로드 생략)
+	uploadedMedia := ptl.StoryStrImg{
+		"1": {
+			Type:  ptl.StoryMediaTypeVdo,
+			URL:   "https://storage.googleapis.com/stream-example-bucket/video.mp4",
+			Thumb: "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public",
+		},
+	}
 
 	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
 
 	createPayload, err := json.Marshal(map[string]interface{}{
 		"stat":  1,
 		"sbody": "테스트 동영상 스토리 — CreateStory from automated video+thumb test",
-		"imgs":  "",
-		"vdos":  uploadedVdos,
+		"media": uploadedMedia,
 	})
 	if err != nil {
 		t.Fatalf("Failed to marshal create request: %v", err)
@@ -270,9 +281,12 @@ func Test_CreateStory_Test(t *testing.T) {
 		t.Fatalf("expected idx > 0, got %d", createAPIResp.Idx)
 	}
 
-	fmt.Printf("CreateStory OK — idx: %d, vdos: %s\n", createAPIResp.Idx, uploadedVdos)
+	fmt.Printf("CreateStory OK — idx: %d, media: %+v\n", createAPIResp.Idx, uploadedMedia)
 }
 
+// 개인 피드에서 idx 피드 상세 조회 변경
+// 개개인별 피드 리스트 -> 클릭 -> 해당 개인 디테일 -> 컨텐츠 + 본문 + 댓글 리스트 조회
+// 타겟 uid
 func TestGetStoryDetail(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
 	idx := "3"
@@ -288,12 +302,13 @@ func TestGetStoryDetail(t *testing.T) {
 
 func TestGetDefStoryList(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/list"
+	qurl := "/story/v01/list" + "/7766493213763375817"
 
-	var key = []string{"uid"}
-	var value = []string{"7766493213763375817"}
+	// var key = []string{"uid"}
+	// var value = []string{"7766493213763375817"}
 
-	res, err := Get(*targetUrl, qurl, key, value)
+	// res, err := GetWithToken(*targetUrl, qurl, key, value, *dmToken)
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
 	if err != nil {
 		t.Errorf("Failed to get story list: %v", err)
 	}

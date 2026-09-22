@@ -30,23 +30,25 @@ CREATE TABLE `acc_info` (
   UNIQUE KEY `acc_num_UNIQUE` (`acc_num`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
-CREATE TABLE `pf_info` (
+CREATE TABLE `prf_info` (
   `idx` int NOT NULL AUTO_INCREMENT,
-  `uid` bigint unsigned NOT NULL,
-  `sp_intro` varchar(128) DEFAULT NULL,
-  `intro` varchar(256) DEFAULT NULL,
-  `fw_cnt` int DEFAULT NULL,
-  `fwing_cnt` int DEFAULT NULL,
-  `fw_list` json DEFAULT NULL,
-  `fwing_list` json DEFAULT NULL,
-  `birthday` date DEFAULT NULL,
-  `pf_pic` json DEFAULT NULL,
-  `sub_pic` json DEFAULT NULL,
-  `at_upd` datetime DEFAULT NULL,
-  PRIMARY KEY (`idx`),
-  UNIQUE KEY `idx_UNIQUE` (`idx`),
-  UNIQUE KEY `uid_UNIQUE` (`uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) DEFAULT NULL,
+  `gender` tinyint(1) NOT NULL COMMENT 'woman = 0, man = 1',
+  `birth` date DEFAULT '1900-12-30',
+  `age` varchar(3) DEFAULT '0' COMMENT '+3 ~ -3',
+  `area` tinyint DEFAULT NULL,
+  `intro` varchar(128) DEFAULT NULL,
+  `main_pic` varchar(128) DEFAULT NULL,
+  `sub_pic1` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot1',
+  `sub_pic2` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot2',
+  `sub_pic3` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot3',
+  `sub_pic4` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot4',
+  `sub_pic5` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot5',
+  `at_update` date DEFAULT NULL,
+  `at_create` date DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 CREATE TABLE `user_fav` (
   `uid` bigint unsigned NOT NULL COMMENT '즐겨찾기 한 사용자 uid',
@@ -550,18 +552,18 @@ func (p *AccountDB) GetUserInfo(id string) (ptc.UserInfoResp, error) {
 	// uid를 사용하여 키 생성 (CheckNameBirth와 동일한 방식)
 	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
 
-	// 이메일 복호화
+	// 이메일 복호화 (레거시 평문 허용)
 	if encEmail != "" {
-		decEmail, err := utils.DecryptChaCha20(encEmail, key)
+		decEmail, err := utils.DecryptChaCha20Field(encEmail, key)
 		if err != nil {
 			return ptc.UserInfoResp{}, fmt.Errorf("error decrypting email: %v", err)
 		}
 		user.Email = decEmail
 	}
 
-	// 이름 복호화
+	// 이름 복호화 (레거시 한글 평문 허용)
 	if encName != "" {
-		decName, err := utils.DecryptChaCha20(encName, key)
+		decName, err := utils.DecryptChaCha20Field(encName, key)
 		if err != nil {
 			return ptc.UserInfoResp{}, fmt.Errorf("error decrypting name: %v", err)
 		}
@@ -596,7 +598,7 @@ func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
 
 	key := fmt.Sprintf("Cupitok-%d-Gateway", user.Uid)
 	if encEmail != "" {
-		decEmail, decErr := utils.DecryptChaCha20(encEmail, key)
+		decEmail, decErr := utils.DecryptChaCha20Field(encEmail, key)
 		if decErr != nil {
 			return ptc.UserInfoResp{}, fmt.Errorf("error decrypting email: %v", decErr)
 		}
@@ -604,7 +606,7 @@ func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
 	}
 
 	if encName != "" {
-		decName, decErr := utils.DecryptChaCha20(encName, key)
+		decName, decErr := utils.DecryptChaCha20Field(encName, key)
 		if decErr != nil {
 			return ptc.UserInfoResp{}, fmt.Errorf("error decrypting name: %v", decErr)
 		}
@@ -612,6 +614,27 @@ func (p *AccountDB) GetUserInfoByUID(uid uint64) (ptc.UserInfoResp, error) {
 	}
 
 	return user, nil
+}
+
+// GetUserAssetInfo returns hold_point / hold_cash. NULL DB values are treated as 0.
+func (p *AccountDB) GetUserAssetInfo(uid uint64) (int64, int64, error) {
+	query := "SELECT hold_point, hold_cash FROM user_info WHERE uid = ?"
+	row := p.conndb.QueryRow(query, uid)
+
+	var holdPoint, holdCash sql.NullFloat64
+	err := row.Scan(&holdPoint, &holdCash)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var point, cash int64
+	if holdPoint.Valid {
+		point = int64(holdPoint.Float64)
+	}
+	if holdCash.Valid {
+		cash = int64(holdCash.Float64)
+	}
+	return point, cash, nil
 }
 
 // GetUserInfosByUIDs 여러 uid를 IN 절로 일괄 조회 (DM 인박스 N+1 제거용)

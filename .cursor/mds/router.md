@@ -111,8 +111,8 @@
 - `GET /story/v01/home/:id`: Endpoint to retrieve user's story home (placeholder)
 - `GET /story/v01/list/:uid`: Endpoint to retrieve user's public story list (stat=1 or 0)
 - `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details with comments
-- `POST /story/v01/upload`: 스토리 미디어만 Cloudflare 업로드 (Images/Stream). `ValidateFileUpload` (이미지·썸네일 5MB, 동영상 100MB). 응답 `imgs` 또는 `vdos`
-- `POST /story/v01/create`: JSON 스토리 생성 — `stat`, `sbody`, `imgs`(upload 응답), `vdos`(upload 응답). JwtAuth.
+- `POST /story/v01/upload`: 스토리 미디어만 Cloudflare 업로드 (Images/Stream). `ValidateFileUpload` (이미지·썸네일 5MB, 동영상 100MB). 응답 **`data.media`** 통합 슬롯 맵 `{"N":{"type":"img|vdo","url":"...","thumb":"..."}}`
+- `POST /story/v01/create`: JSON 스토리 생성 — `stat`, `sbody`, **`media` 객체**(upload `data.media`). DB에 `BuildStrImgForDB`로 정규 저장. JwtAuth.
 - `POST /story/v01/updstat`: Endpoint to update story status (0=del, 1=pub, 2=private, 3=limit, 4=reserved)
 - `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
 - `POST /story/v01/delpic`: Endpoint to delete specific picture from story

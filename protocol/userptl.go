@@ -187,9 +187,61 @@ type FavoriteUserItem struct {
 	FavAt    time.Time
 }
 
+type PrfInfo struct {
+	Uid     uint64    `json:"uid"`
+	Nick    string    `json:"nick"`
+	Gender  string    `json:"gender"`
+	Birth   time.Time `json:"birth"`
+	Age     string    `json:"age"`
+	Area    string    `json:"area"`
+	Intro   string    `json:"intro"`
+	MainPic string    `json:"main_pic"`
+}
+
 type CreateStoryReq struct {
-	Stat   int    `json:"stat" example:"1"`                    // 0=del, 1=pub, 2=private, 3=limit, 4=resv
-	Sbody  string `json:"sbody" example:"스토리 본문"`               // 최대 512자
-	Images string `json:"imgs" example:"{\"a.jpg\":\"https://...\"}"` // POST /story/v01/upload 응답 data.imgs (JSON 문자열). 없으면 ""
-	Videos string `json:"vdos" example:"{\"1\":\"https://...m3u8\",\"thumb1\":\"https://...\"}"` // upload 응답 data.vdos (JSON 문자열). 없으면 ""
+	Stat  int         `json:"stat" example:"1"`       // 0=del, 1=pub, 2=private, 3=limit, 4=resv
+	Sbody string      `json:"sbody" example:"스토리 본문"` // 최대 512자
+	Media StoryStrImg `json:"media"`                  // story.str_img와 동일 슬롯 맵
+}
+
+// Story media type constants for story.str_img slot objects
+const (
+	StoryMediaTypeImg = "img"
+	StoryMediaTypeVdo = "vdo"
+)
+
+// StoryStrImg is story.str_img JSON shape (max 5 slots, keys "1".."5"):
+//
+//	{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb":"..."},"3":{"type":"img","url":"..."}}
+type StoryStrImg map[string]StoryMediaItem
+
+// StoryMediaItem is one slot in story.str_img (img | vdo).
+type StoryMediaItem struct {
+	Type  string `json:"type" example:"img"` // "img" | "vdo"
+	URL   string `json:"url" example:"https://imagedelivery.net/.../public"`
+	Thumb string `json:"thumb,omitempty" example:"https://imagedelivery.net/.../public"` // vdo only
+}
+
+// PrfPicInfo is stored in prf_info.sub_pic{1..5} as {"url":"...","stat":N} (slot = column number).
+type PrfPicInfo struct {
+	Url  string `json:"url" example:"https://imagedelivery.net/.../public"`
+	Stat int    `json:"stat" example:"3"` // 1=요청중, 2=승인대기, 3=승인, 4=거절:삭제
+}
+
+// PrfPicMap is list/query response: {"1":{"url":"...","stat":3},"2":{"url":"...","stat":3}}
+type PrfPicMap map[string]PrfPicInfo
+
+// PrfPicWaitingItem 관리자용 — sub_pic 슬롯 중 stat=1|2 대기 항목
+type PrfPicWaitingItem struct {
+	Uid  uint64 `json:"uid" example:"8697414060736839837"`
+	Nick string `json:"nick" example:"건강한 꼬마 오렌지"`
+	Slot int    `json:"slot" example:"1"` // sub_pic1~5 (컬럼 번호)
+	Url  string `json:"url" example:"https://imagedelivery.net/.../public"`
+	Stat int    `json:"stat" example:"1"` // 1=요청중, 2=승인대기
+}
+
+// SetPrfPicStatReq 관리자용 — 특정 슬롯 프로필 사진 승인(stat=3)
+type SetPrfPicStatReq struct {
+	Uid  uint64 `json:"uid" example:"8697414060736839837"`
+	Slot int    `json:"slot" example:"1"` // sub_pic1~5
 }

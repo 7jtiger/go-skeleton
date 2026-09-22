@@ -82,18 +82,18 @@ type StorySearchReq struct {
 }
 
 type StoryListResp struct {
-	Idx      int             `json:"idx"`
-	Nick     string          `json:"nick"`
-	StrImg   json.RawMessage `json:"str_img"`
-	AtCreate time.Time       `json:"at_create"`
+	Idx      int         `json:"idx"`
+	Nick     string      `json:"nick"`
+	StrImg   StoryStrImg `json:"str_img"` // {"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...","thumb":"..."}}
+	AtCreate time.Time   `json:"at_create"`
 }
 
 type StoryDetailResp struct {
-	Nick        string          `json:"nick"`
-	Body        string          `json:"body"`
-	StrImg      json.RawMessage `json:"str_img"`
-	AtCreate    time.Time       `json:"at_create"`
-	CommentList []StrComment    `json:"comment_list"`
+	Nick        string       `json:"nick"`
+	Body        string       `json:"body"`
+	StrImg      StoryStrImg  `json:"str_img"` // story.str_img 슬롯 맵 (img|vdo)
+	AtCreate    time.Time    `json:"at_create"`
+	CommentList []StrComment `json:"comment_list"`
 }
 
 type UpdateStrStatReq struct {

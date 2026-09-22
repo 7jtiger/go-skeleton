@@ -29,14 +29,37 @@ Main table for storing user stories with images.
 **Indexes:**
 - PRIMARY KEY (`idx`)
 
-**Example JSON Structure for str_img:**
+**Example JSON Structure for str_img (canonical):**
 ```json
 {
-  "1": "https://imagedelivery.net/xxx/uuid1/public",
-  "2": "https://imagedelivery.net/xxx/uuid2/public",
-  "3": "https://imagedelivery.net/xxx/uuid3/public"
+  "1": {
+    "type": "img",
+    "url": "https://imagedelivery.net/.../pic1/public"
+  },
+  "2": {
+    "type": "vdo",
+    "url": "https://customer-xxx.cloudflarestream.com/abc/manifest/video.m3u8",
+    "thumb": "https://imagedelivery.net/.../thumb2/public"
+  },
+  "3": {
+    "type": "img",
+    "url": "https://imagedelivery.net/.../pic3/public"
+  }
 }
 ```
+
+- 슬롯 키: `"1"` … `"5"` (업로드 순서, 1-based, **최대 5개**)
+- `type`: `img` | `vdo`
+- `url`: 본편 URL
+- `thumb`: **vdo만** (이미지 슬롯에는 없음)
+- 저장: `SaveStory` → `BuildStrImgForDB`로 위 형태로 INSERT (`ValidateStoryMedia`에서 1~5개 검증)
+- 조회: list/detail `str_img`를 `StoryStrImg`로 파싱해 동일 형태 반환
+- 삭제: 슬롯 제거 후 `1..N` 재인덱싱, 삭제분은 `str_imgbak`으로 이동
+
+#### BuildStrImgForDB
+- media 검증(개수 ≤5, 키 1..5) → 키 오름차순 `1..N` 재번호
+- img: `{type,url}` / vdo: `{type,url,thumb}`
+- 반환: `str_img` JSON + `type`(0=img, 1=vdo, 2=both)
 
 ### str_cmt Table
 Table for storing comments on stories.
@@ -92,6 +115,22 @@ Creates new story with uid, nickname, body, status, and image JSON.
 
 **Returns:** Last insert ID
 
+#### GetPrfPicWaitingList
+```go
+func (p *StoryDB) GetPrfPicWaitingList(page, limit int) ([]ptc.PrfPicWaitingItem, int, error)
+```
+Admin review list: unpivots `prf_info.sub_pic1`~`sub_pic5`, filters JSON `stat IN (1,2)`, returns paged items (`uid`, `nick`, `slot`, `url`, `stat`) and `total_count`. Limit capped at 100. Slot JSON format: `{"url":"...","stat":N}` (no idx).
+
+#### SetPrfPicStat
+```go
+func (p *StoryDB) SetPrfPicStat(uid uint64, slot, newStat int) (int64, error)
+```
+Updates `sub_pic{slot}` JSON `$.stat` via `JSON_SET`. Only rows with current stat 1 or 2 are updated. Used to approve (stat=3).
+
+#### UploadPrfPic / DeletePrfPic
+- `UploadPrfPic`: slice 순서대로 `sub_pic1..N`에 `{"url","stat"}` 저장, 나머지 슬롯 NULL
+- `DeletePrfPic(slot)`: 해당 컬럼 삭제 후 뒤 슬롯을 앞으로 당김 (JSON 재번호 불필요 — 순번은 컬럼)
+
 #### GetStoryList
 ```go
 func (p *StoryDB) GetStoryList(uid uint64) (*[]ptl.StoryListResp, error)
@@ -118,22 +157,27 @@ Retrieves condition-based story map (`idx -> first image url`) with dynamic filt
 **Notes:**
 - `stories` map is initialized before scan loop
 - `orderQuery` should be built from whitelist mapping (e.g. `protocol.GetOrderQuery`) to avoid invalid SQL
-- `str_img` JSON is parsed and the representative URL is selected by the smallest numeric key (`"1"`, `"2"`, ...).  
-  If a matching `thumb<N>` key exists (video thumbnail), it is returned instead of the raw media URL.  
-  If JSON parsing fails, the raw DB value is returned as fallback.
+- `str_img`는 `ParseStoryMedia`/`GetFirstPicUrl`로 파싱. 최소 슬롯의 img→url, vdo→thumb 반환.
+  파싱 실패 시 raw DB 값 fallback.
 
-#### str_img key convention
-- `"N"`: N-th media URL (image or video), 1-based, follows upload order
-- `"thumb<N>"`: thumbnail URL for the N-th media when it is a video
-- Legacy rows in plain `{"1":"url"}` form remain compatible (no `thumb<N>` keys)
+#### str_img 포맷
+- 슬롯 키 `"1"`, `"2"`, ... (업로드 순서, 1-based)
+- 값: `{"type":"img"|"vdo","url":"...","thumb":"..."}` (`thumb`은 vdo만)
+- 입력(upload/create)에서만 생성. 조회 시 변환 없음
 
 #### GetStory
 ```go
 func (p *StoryDB) GetStory(strIdx int) (*ptl.StoryDetailResp, error)
 ```
-Retrieves single story detail by index.
+Retrieves single story detail by index. `str_img`는 DB 저장값 그대로 반환.
 
-**Returns:** nick, body, str_img (JSON), at_create
+**Returns:** nick, body, str_img (unified media JSON), at_create
+
+#### ParseStoryMedia / GetFirstPicUrl (`models/story_media.go`)
+- `ParseStoryMedia`: 통합 media JSON → `map[string]StoryMediaItem` (그 외 포맷 거부)
+- `GetFirstPicUrl`: 리스트용 대표 URL (vdo면 thumb)
+- `MediaMType`: story.type 계산 (0=img, 1=vdo, 2=both)
+- `ReindexStoryMediaAfterDelete`: 슬롯 삭제 후 1..N 재번호
 
 #### UpdateStoryStat
 ```go

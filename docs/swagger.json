@@ -2512,7 +2512,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 사용자의 스토리를 DB에 저장합니다. 미디어 파일은 직접 받지 않고, **업로드 API에서 받은 URL 문자열**을 전달합니다.\n\n**권장 플로우**\n1. `POST /story/v01/upload` — Cloudflare 업로드 → `data.imgs`(이미지) 또는 `data.vdos`(동영상+썸네일) 수신\n2. `POST /story/v01/create` — 본 API에 JSON body 전달 (`imgs` / `vdos`는 upload 응답 값을 문자열로)\n\n**stat**: 0=del, 1=pub, 2=private(팔로우공개), 3=limit(유료공개), 4=resv\n",
+                "description": "JWT 인증 사용자의 스토리를 DB에 저장합니다. 미디어 파일은 직접 받지 않고, **업로드 API의 data.media**를 전달합니다.\n\n**권장 플로우**\n1. `POST /story/v01/upload` — Cloudflare 업로드 → `data.media` 수신\n2. `POST /story/v01/create` — JSON body에 `media`(upload 응답 객체) 전달\n\n**media 슬롯**: 최대 5개. `{\"1\":{\"type\":\"img\",\"url\":\"...\"},\"2\":{\"type\":\"vdo\",\"url\":\"...\",\"thumb\":\"...\"}}`\n**stat**: 0=del, 1=pub, 2=private(팔로우공개), 3=limit(유료공개), 4=resv\n",
                 "consumes": [
                     "application/json"
                 ],
@@ -2543,7 +2543,7 @@
                         }
                     },
                     "400": {
-                        "description": "JSON 파싱 실패, imgs 누락, 프로필 필드 부족",
+                        "description": "JSON 파싱 실패, media 누락, 프로필 필드 부족",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2825,7 +2825,7 @@
         },
         "/story/v01/delpic": {
             "post": {
-                "description": "Delete a picture from a story and move it to backup",
+                "description": "Delete a media slot from story str_img and move it to backup. Unified format reindexes remaining slots 1..N.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2896,7 +2896,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved story detail - returns story object with nick, body, str_img (JSON array), at_create fields and commentList array with idx, wuid, nick, body, at_create fields",
+                        "description": "Successfully retrieved story detail - str_img is unified media slot map",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespDataHeader"
                         }
@@ -3219,7 +3219,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved story list - returns array of story objects with idx, nick, str_img (JSON array), at_create fields",
+                        "description": "Successfully retrieved story list - str_img is unified media slot map",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespDataHeader"
                         }
@@ -3234,6 +3234,831 @@
                         "description": "Internal server error - failed to get story list",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/assets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자 본인의 보유 화살(포인트), 캐시, DM 미읽음 쪽지 합계를 조회합니다.\n\n**응답 data**\n- `hold_point`: 보유 화살/포인트 (`user_info.hold_point`, NULL이면 0)\n- `hold_cash`: 보유 캐시 (`user_info.hold_cash`, NULL이면 0)\n- `msg_count`: 전체 DM 미읽음 쪽지 합계 (Redis)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "스토리 프로필 자산 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.hold_point, data.hold_cash, data.msg_count",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "자산/쪽지 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/info": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 본인 또는 타인의 프로필 정보와 팔로워 수를 조회합니다.\n\n**tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용. 값이 있으면 해당 사용자 프로필 조회.\n**응답 data**: `prf_Info`(protocol.PrfInfo), `flw_cnt`(팔로워 수)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "스토리 프로필 정보 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.prf_Info, data.flw_cnt",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "프로필/팔로워 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/info/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 본인 또는 타인의 프로필 정보와 팔로워 수를 조회합니다.\n\n**tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용. 값이 있으면 해당 사용자 프로필 조회.\n**응답 data**: `prf_Info`(protocol.PrfInfo), `flw_cnt`(팔로워 수)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "스토리 프로필 정보 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "조회 대상 UID (본인 조회 시에도 UID 전달)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.prf_Info, data.flw_cnt",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "프로필/팔로워 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/delete/{idx}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자의 `prf_info.sub_pic{slot}`를 삭제하고, 뒤 슬롯을 앞으로 당깁니다.\n\n**idx**(path): 삭제할 슬롯 번호 1~5. 예: 2 → sub_pic2 삭제 후 sub_pic3→2, sub_pic4→3, sub_pic5→4, sub_pic5=NULL\n슬롯 JSON은 `{\"url\",\"stat\"}`만 저장(idx 없음). 순번은 컬럼 위치.\n**응답**: `SendResponse` — `desc=success` (data 필드 없음)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "삭제할 프로필 사진 슬롯 (1~5)",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "result=0, desc=success",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "idx 누락/형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "DB 삭제 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 프로필 사진(`prf_info.sub_pic1`~`sub_pic5`) 목록을 조회합니다.\n\n**조회 대상**: 현재 라우트는 `/prf/pic/list` (본인 JWT UID). 코드상 `tid` path가 있으면 해당 UID 조회.\n**응답 data**: 비어 있지 않은 슬롯만 포함한 맵\n`{\"1\":{\"url\":\"...\",\"stat\":3},\"2\":{\"url\":\"...\",\"stat\":3}}` (키=`sub_pic` 번호)\n\n**PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: PrfPicMap",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "프로필 사진 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/list/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 프로필 사진(`prf_info.sub_pic1`~`sub_pic5`) 목록을 조회합니다.\n\n**조회 대상**: 현재 라우트는 `/prf/pic/list` (본인 JWT UID). 코드상 `tid` path가 있으면 해당 UID 조회.\n**응답 data**: 비어 있지 않은 슬롯만 포함한 맵\n`{\"1\":{\"url\":\"...\",\"stat\":3},\"2\":{\"url\":\"...\",\"stat\":3}}` (키=`sub_pic` 번호)\n\n**PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: PrfPicMap",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "프로필 사진 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/stat": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "승인 대기 목록(`GetPrfPicWaitingList`)의 특정 항목을 승인합니다. `prf_info.sub_pic{slot}` JSON의 `stat`을 **3(승인)** 으로 변경합니다.\n\n**요청 body**: `uid`(대상 사용자), `slot`(1~5, sub_pic 슬롯)\n**조건**: 해당 슬롯의 현재 stat이 1 또는 2일 때만 갱신\n**응답 data**: `msg`, `affected` (0이면 대상 없음/이미 처리됨)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 승인 (관리자)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "승인 대상 uid + slot",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.SetPrfPicStatReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "msg, affected",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "JSON/파라미터 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "DB 업데이트 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자의 프로필 사진을 Cloudflare Images에 업로드하고 `prf_info.sub_pic1~5`에 저장합니다.\n\n**요청 (multipart/form-data)**\n- `files`: 신규 이미지 (JPG/PNG/GIF/WEBP, 각 ≤5MB, 최대 5개). **thbnl 금지**(이미지 전용).\n- `urls`: 유지할 기존 사진 URL JSON 배열 문자열. 신규만이면 `[]`.\n\n**처리 순서**\n1. `urls` 기존 URL을 앞에서부터 채움 (stat=3 승인)\n2. `files` 신규 업로드 URL을 이어 붙임 (stat=1 요청중)\n3. 합계 최대 5장. 순차적으로 `sub_pic1`~`sub_picN`에 `{\"url\",\"stat\"}` JSON 저장 (idx 없음)\n\n**PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제\n\"stat\" Enums(1(요청중),2(승인대기),3(승인),4(거절/삭제)) default(1)\n\n**응답 data**: `msg`, `pics`([]PrfPicInfo — url/stat만, 배열 순서=슬롯)",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 업로드",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "신규 프로필 이미지 (최대 5개, 이미지 전용)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "유지할 기존 URL JSON 배열. 예: [] 또는 [\\",
+                        "name": "urls",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.msg, data.pics",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "파일 없음, urls JSON 오류, 저장할 사진 없음",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Cloudflare/DB 저장 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/waiting/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "`prf_info.sub_pic1`~`sub_pic5` JSON 중 `stat`이 1(요청중) 또는 2(승인대기)인 항목을 전체 사용자 대상으로 페이징 조회합니다.\n\n**응답 data**\n- `msg`: success\n- `total_count`: 대기 항목 전체 개수\n- `list`: []PrfPicWaitingItem (uid, nick, slot, url, stat) — slot=sub_pic 컬럼 번호",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 승인 대기 목록 (관리자)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "msg, total_count, list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "page/limit 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/set/mainpic/{url}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자의 `prf_info.main_pic`을 설정하거나 삭제합니다.\n\n**url path**\n- 값이 있으면 해당 URL을 대표사진으로 저장\n- 비어 있으면 대표사진 삭제(`main_pic` 빈 문자열)\n- URL에 `/`가 포함되면 path-escape 필요 (예: `url.PathEscape`)\n\n**응답 data**: `{\"msg\":\"success\"}`",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 대표사진 설정/삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대표사진 URL (삭제 시 빈 값 또는 placeholder)",
+                        "name": "url",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.msg=success",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "DB 업데이트 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/story/lists": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 본인 또는 타인의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.\n\n**tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용.\n**응답 data**\n- `str_imgs`: 이미지 스토리 대표 URL 맵 (key=story idx, value=URL)\n- `str_thmbls`: 동영상 스토리 썸네일 URL 맵 (key=story idx, value=thumb URL)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 최근 스토리 대표 이미지 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.str_imgs, data.str_thmbls",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "스토리 목록 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/story/lists/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 후 본인 또는 타인의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.\n\n**tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용.\n**응답 data**\n- `str_imgs`: 이미지 스토리 대표 URL 맵 (key=story idx, value=URL)\n- `str_thmbls`: 동영상 스토리 썸네일 URL 맵 (key=story idx, value=thumb URL)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 최근 스토리 대표 이미지 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "조회 대상 UID (본인 조회 시에도 UID 전달)",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.str_imgs, data.str_thmbls",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "tid 형식 오류",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "스토리 목록 조회 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/upd": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT 인증 사용자의 `prf_info`를 부분 수정합니다. UID는 JWT에서 강제 설정합니다.\n\n**요청 body** (`protocol.PrfInfo`): 값이 있는 필드만 UPDATE (빈 문자열은 무시)\n- `nick`, `gender`, `age`, `area`, `intro`\n- `uid` / `birth` / `main_pic` 는 본 API에서 사용하지 않음 (대표사진은 `/prf/set/mainpic`)\n- `area`는 지역명 문자열 → 서버에서 area code로 변환\n\n**응답 data**: `{\"msg\":\"success\"}`",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "스토리 프로필 정보 수정",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "수정할 프로필 필드 (부분 업데이트)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfInfo"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.msg=success",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "JSON 바인딩 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "DB 업데이트 실패",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -3344,7 +4169,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 스토리용 미디어만 Cloudflare에 업로드합니다. DB 저장 없이 URL만 반환합니다.\n\n**용량**: 이미지·썸네일 각 5MB 이하, 동영상(MP4) 각 100MB 이하, files 최대 5개.\n\n**이미지 전용**: `files`만 전송. 응답 `data.imgs` = filename→URL 맵(JSON).\n\n**동영상 포함**: `files`의 MP4마다 `thbnl` 썸네일 1장 필수(순서 1:1). 이미지→Images, 동영상→Stream(HLS).\n응답 `data.vdos` = `{\"1\":\"재생URL\",\"thumb1\":\"썸네일URL\",...}` JSON 문자열.",
+                "description": "JWT 인증 후 스토리용 미디어만 Cloudflare에 업로드합니다. DB 저장 없이 **통합 media** URL만 반환합니다.\n\n**용량**: 이미지·썸네일 각 5MB 이하, 동영상(MP4) 각 100MB 이하, files 최대 5개.\n\n**응답 data.media**: 업로드 순서 슬롯 맵\n`{\"1\":{\"type\":\"img\",\"url\":\"...\"},\"2\":{\"type\":\"vdo\",\"url\":\"...m3u8\",\"thumb\":\"...\"}}`\n- `type`: `img` | `vdo`\n- `url`: 본편 URL\n- `thumb`: 동영상 썸네일 (vdo만)\n\n**동영상 포함**: `files`의 MP4마다 `thbnl` 썸네일 1장 필수(순서 1:1).",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -3372,7 +4197,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "이미지: {\\\"msg\\\":\\\"ok\\\",\\\"imgs\\\":{...}} / 동영상: {\\\"msg\\\":\\\"ok\\\",\\\"vdos\\\":\\\"{...}\\\"}",
+                        "description": "{\\\"msg\\\":\\\"ok\\\",\\\"media\\\":{...}}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3699,10 +4524,13 @@
         "protocol.CreateStoryReq": {
             "type": "object",
             "properties": {
-                "imgs": {
-                    "description": "POST /story/v01/upload 응답 data.imgs (JSON 문자열). 없으면 \"\"",
-                    "type": "string",
-                    "example": "{\"a.jpg\":\"https://...\"}"
+                "media": {
+                    "description": "story.str_img와 동일 슬롯 맵",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/protocol.StoryStrImg"
+                        }
+                    ]
                 },
                 "sbody": {
                     "description": "최대 512자",
@@ -3713,11 +4541,6 @@
                     "description": "0=del, 1=pub, 2=private, 3=limit, 4=resv",
                     "type": "integer",
                     "example": 1
-                },
-                "vdos": {
-                    "description": "upload 응답 data.vdos (JSON 문자열). 없으면 \"\"",
-                    "type": "string",
-                    "example": "{\"1\":\"https://...m3u8\",\"thumb1\":\"https://...\"}"
                 }
             }
         },
@@ -3910,6 +4733,35 @@
                 }
             }
         },
+        "protocol.PrfInfo": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "birth": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "intro": {
+                    "type": "string"
+                },
+                "main_pic": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "integer"
+                }
+            }
+        },
         "protocol.RefreshTokenReq": {
             "type": "object",
             "properties": {
@@ -4022,6 +4874,20 @@
                 "Success"
             ]
         },
+        "protocol.SetPrfPicStatReq": {
+            "type": "object",
+            "properties": {
+                "slot": {
+                    "description": "sub_pic1~5",
+                    "type": "integer",
+                    "example": 1
+                },
+                "uid": {
+                    "type": "integer",
+                    "example": 8697414060736839837
+                }
+            }
+        },
         "protocol.StoryLikeToggleReq": {
             "type": "object",
             "properties": {
@@ -4031,6 +4897,31 @@
                 "uid": {
                     "type": "string"
                 }
+            }
+        },
+        "protocol.StoryMediaItem": {
+            "type": "object",
+            "properties": {
+                "thumb": {
+                    "description": "vdo only",
+                    "type": "string",
+                    "example": "https://imagedelivery.net/.../public"
+                },
+                "type": {
+                    "description": "\"img\" | \"vdo\"",
+                    "type": "string",
+                    "example": "img"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://imagedelivery.net/.../public"
+                }
+            }
+        },
+        "protocol.StoryStrImg": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/protocol.StoryMediaItem"
             }
         },
         "protocol.StrCmtCreateReq": {

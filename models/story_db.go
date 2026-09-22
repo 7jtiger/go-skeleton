@@ -15,7 +15,7 @@ import (
 	log "ms-gateway/common/logger"
 	"ms-gateway/common/utils"
 	"ms-gateway/conf"
-	ptl "ms-gateway/protocol"
+	ptc "ms-gateway/protocol"
 )
 
 /*
@@ -31,10 +31,10 @@ CREATE TABLE `story` (
   `stat` tinyint DEFAULT '1' COMMENT 'stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 : ',
   `qt_good` int DEFAULT '0',
   `qt_checked` int DEFAULT '0' COMMENT '조회수',
-  `str_img` json NOT NULL,
+  `str_img` json NOT NULL COMMENT '슬롯맵 최대5 {"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb":"..."},...}',
   `at_update` datetime DEFAULT NULL,
   `at_create` datetime DEFAULT NULL,
-  `str_imgbak` json DEFAULT NULL,
+  `str_imgbak` json DEFAULT NULL COMMENT '삭제된 슬롯 백업 (동일 StoryStrImg 포맷)',
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
@@ -100,6 +100,24 @@ CREATE TABLE `str_cutout` (
   CONSTRAINT `chk_cutout_not_self` CHECK ((`uid` <> `tid`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
+CREATE TABLE `prf_info` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) DEFAULT NULL,
+  `birth` date DEFAULT '1900-12-30',
+  `age` varchar(3) DEFAULT NULL,
+  `area` tinyint DEFAULT NULL,
+  `intro` varchar(128) DEFAULT NULL,
+  `main_pic` varchar(128) DEFAULT NULL,
+  `sub_pic1` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot1',
+  `sub_pic2` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot2',
+  `sub_pic3` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot3',
+  `sub_pic4` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot4',
+  `sub_pic5` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot5',
+  `at_update` date DEFAULT NULL,
+  `at_create` date DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 */
 
@@ -188,6 +206,321 @@ func (p *StoryDB) heartbeat() {
 	}
 }
 
+// --- story profile----------------------------------------------------------------------
+func (p *StoryDB) SaveInitPrfInfo(req ptc.RegistReq) error {
+	area := ptc.GetAreaCode(req.Area)
+	query := `INSERT INTO prf_info (uid, nick, gender, birth, area, intro, at_update, at_create)
+	VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`
+
+	_, err := p.conndb.Exec(query, req.Uid, req.Nick, req.Gender, req.Birth, area, req.SPIntro)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// /prf/info -> GetPrfInfo ->
+// 프로필 정보 조회
+func (p *StoryDB) GetPrfInfo(uid uint64) (*ptc.PrfInfo, error) {
+	query := `SELECT uid, nick, gender, birth, age, area, intro, main_pic FROM prf_info WHERE uid = ?`
+	row := p.conndb.QueryRow(query, uid)
+	var prf ptc.PrfInfo
+	var mainPic, age sql.NullString
+	err := row.Scan(&prf.Uid, &prf.Nick, &prf.Gender, &prf.Birth, &age, &prf.Area, &prf.Intro, &mainPic)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("profile not found")
+		}
+		return nil, err
+	}
+	if mainPic.Valid {
+		prf.MainPic = mainPic.String
+	} else {
+		prf.MainPic = ""
+	}
+	if age.Valid {
+		prf.Age = age.String
+	} else {
+		prf.Age = "0"
+	}
+
+	return &prf, nil
+}
+
+func (p *StoryDB) GetPrfPicList(uid uint64) (ptc.PrfPicMap, error) {
+	query := `SELECT sub_pic1, sub_pic2, sub_pic3, sub_pic4, sub_pic5 FROM prf_info WHERE uid = ?`
+	row := p.conndb.QueryRow(query, uid)
+
+	var subPic1, subPic2, subPic3, subPic4, subPic5 sql.NullString
+	err := row.Scan(&subPic1, &subPic2, &subPic3, &subPic4, &subPic5)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(ptc.PrfPicMap, 5)
+	slots := []sql.NullString{subPic1, subPic2, subPic3, subPic4, subPic5}
+	for i, slot := range slots {
+		if !slot.Valid || strings.TrimSpace(slot.String) == "" || slot.String == "null" {
+			continue
+		}
+		var pic ptc.PrfPicInfo
+		if err := json.Unmarshal([]byte(slot.String), &pic); err != nil {
+			log.Warn("GetPrfPicList skip invalid json", " uid ", uid, " slot ", i+1, " err ", err)
+			continue
+		}
+		if strings.TrimSpace(pic.Url) == "" {
+			continue
+		}
+		out[strconv.Itoa(i+1)] = pic
+	}
+	return out, nil
+}
+
+// prfPicWaitingBaseSQL unpivots sub_pic1~5 and keeps rows whose JSON stat is 1 or 2.
+const prfPicWaitingBaseSQL = `
+SELECT uid, nick, slot, pic_json FROM (
+	SELECT uid, COALESCE(nick, '') AS nick, 1 AS slot, sub_pic1 AS pic_json
+	FROM prf_info WHERE sub_pic1 IS NOT NULL AND JSON_TYPE(sub_pic1) <> 'NULL'
+	UNION ALL
+	SELECT uid, COALESCE(nick, '') AS nick, 2 AS slot, sub_pic2 AS pic_json
+	FROM prf_info WHERE sub_pic2 IS NOT NULL AND JSON_TYPE(sub_pic2) <> 'NULL'
+	UNION ALL
+	SELECT uid, COALESCE(nick, '') AS nick, 3 AS slot, sub_pic3 AS pic_json
+	FROM prf_info WHERE sub_pic3 IS NOT NULL AND JSON_TYPE(sub_pic3) <> 'NULL'
+	UNION ALL
+	SELECT uid, COALESCE(nick, '') AS nick, 4 AS slot, sub_pic4 AS pic_json
+	FROM prf_info WHERE sub_pic4 IS NOT NULL AND JSON_TYPE(sub_pic4) <> 'NULL'
+	UNION ALL
+	SELECT uid, COALESCE(nick, '') AS nick, 5 AS slot, sub_pic5 AS pic_json
+	FROM prf_info WHERE sub_pic5 IS NOT NULL AND JSON_TYPE(sub_pic5) <> 'NULL'
+) AS pics
+WHERE CAST(JSON_UNQUOTE(JSON_EXTRACT(pic_json, '$.stat')) AS UNSIGNED) IN (1, 2)
+`
+
+// GetPrfPicWaitingList returns profile pics with stat=1|2 across all users (admin review), paged.
+func (p *StoryDB) GetPrfPicWaitingList(page, limit int) ([]ptc.PrfPicWaitingItem, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	countQ := "SELECT COUNT(*) FROM (" + prfPicWaitingBaseSQL + ") AS waiting"
+	if err := p.conndb.QueryRow(countQ).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	listQ := prfPicWaitingBaseSQL + " ORDER BY uid ASC, slot ASC LIMIT ? OFFSET ?"
+	rows, err := p.conndb.Query(listQ, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	list := make([]ptc.PrfPicWaitingItem, 0, limit)
+	for rows.Next() {
+		var (
+			uid     uint64
+			nick    string
+			slot    int
+			picJSON string
+		)
+		if err := rows.Scan(&uid, &nick, &slot, &picJSON); err != nil {
+			return nil, 0, err
+		}
+
+		var pic ptc.PrfPicInfo
+		if err := json.Unmarshal([]byte(picJSON), &pic); err != nil {
+			log.Warn("GetPrfPicWaitingList skip invalid json", " uid ", uid, " slot ", slot, " err ", err)
+			continue
+		}
+		list = append(list, ptc.PrfPicWaitingItem{
+			Uid:  uid,
+			Nick: nick,
+			Slot: slot,
+			Url:  pic.Url,
+			Stat: pic.Stat,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return list, total, nil
+}
+
+// SetPrfPicStat updates sub_pic{slot} JSON $.stat for a user.
+// Only slots currently in waiting state (stat 1 or 2) are updated. newStat is typically 3 (approved).
+func (p *StoryDB) SetPrfPicStat(uid uint64, slot, newStat int) (int64, error) {
+	if uid == 0 {
+		return 0, fmt.Errorf("uid is required")
+	}
+	if slot < 1 || slot > 5 {
+		return 0, fmt.Errorf("slot must be 1-5")
+	}
+	if newStat < 1 || newStat > 4 {
+		return 0, fmt.Errorf("stat must be 1-4")
+	}
+
+	col := "sub_pic" + strconv.Itoa(slot)
+	// col is whitelist-derived from validated slot (1~5) only
+	query := fmt.Sprintf(`
+UPDATE prf_info
+SET %s = JSON_SET(%s, '$.stat', CAST(? AS UNSIGNED)), at_update = NOW()
+WHERE uid = ?
+  AND %s IS NOT NULL
+  AND JSON_TYPE(%s) <> 'NULL'
+  AND CAST(JSON_UNQUOTE(JSON_EXTRACT(%s, '$.stat')) AS UNSIGNED) IN (1, 2)
+`, col, col, col, col, col)
+
+	result, err := p.conndb.Exec(query, newStat, uid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (p *StoryDB) GetStoryFirstPicUrls(uid uint64) (*map[int]string, *map[int]string, error) {
+	query := `SELECT idx, str_img FROM story WHERE uid = ? ORDER BY at_create DESC LIMIT 4`
+	rows, err := p.conndb.Query(query, uid)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	strImgs := make(map[int]string)
+	strthmbls := make(map[int]string)
+	// var stories []ptc.StoryListResp
+	for rows.Next() {
+		i := 1
+		var idx int
+		var strImg string
+		err := rows.Scan(&idx, &strImg)
+		if err != nil {
+			return nil, nil, err
+		}
+		//strImg := {"1": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public", "2": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0125d18e-aa56-45a0-98ac-853ecd3c1600/public"}
+
+		firstURL, tcnts, err := GetFirstPicUrl(strImg)
+		if err != nil {
+			return nil, nil, err
+		}
+		if tcnts == 1 {
+			strthmbls[idx] = firstURL
+		} else {
+			strImgs[idx] = firstURL
+		}
+
+		i++
+	}
+
+	return &strImgs, &strthmbls, nil
+}
+
+func (p *StoryDB) UpdatePrfInfo(req ptc.PrfInfo) error {
+	sets := make([]string, 0, 6)
+	args := make([]interface{}, 0, 6)
+
+	if req.Nick != "" {
+		sets = append(sets, "nick = ?")
+		args = append(args, req.Nick)
+	}
+	if req.Gender != "" {
+		sets = append(sets, "gender = ?")
+		args = append(args, req.Gender)
+	}
+	if req.Age != "" {
+		sets = append(sets, "age = ?")
+		args = append(args, req.Age)
+	}
+	if req.Area != "" {
+		sets = append(sets, "area = ?")
+		args = append(args, ptc.GetAreaCode(req.Area))
+	}
+	if req.Intro != "" {
+		sets = append(sets, "intro = ?")
+		args = append(args, req.Intro)
+	}
+	if len(sets) == 0 {
+		return nil // 또는 fmt.Errorf("no fields to update")
+	}
+	sets = append(sets, "at_update = NOW()")
+	args = append(args, req.Uid)
+	query := "UPDATE prf_info SET " + strings.Join(sets, ", ") + " WHERE uid = ?"
+	_, err := p.conndb.Exec(query, args...)
+	return err
+}
+
+func (p *StoryDB) DeletePrfPic(uid uint64, slot int) error {
+	// sub_pic{slot} 삭제 후 뒤 슬롯을 앞으로 당긴다 (JSON에 idx 없음 — 컬럼 위치가 순번).
+	// 예: slot=2 → sub_pic2=sub_pic3, sub_pic3=sub_pic4, sub_pic4=sub_pic5, sub_pic5=NULL
+	if slot < 1 || slot > 5 {
+		return fmt.Errorf("slot must be between 1 and 5")
+	}
+
+	setCols := make([]string, 0, 6)
+	for i := slot; i < 5; i++ {
+		colNext := fmt.Sprintf("sub_pic%d", i+1)
+		colCur := fmt.Sprintf("sub_pic%d", i)
+		setCols = append(setCols, colCur+" = "+colNext)
+	}
+	setCols = append(setCols, "sub_pic5 = NULL")
+	setCols = append(setCols, "at_update = NOW()")
+
+	query := "UPDATE prf_info SET " + strings.Join(setCols, ", ") + " WHERE uid = ?"
+	_, err := p.conndb.Exec(query, uid)
+	return err
+}
+
+// /prf/set/mainpic/:url -> SetMainPic ->
+func (p *StoryDB) SetMainPic(url string, uid uint64) error {
+	query := `UPDATE prf_info SET main_pic = IFNULL(?, ''), at_update = NOW() WHERE uid = ?`
+	_, err := p.conndb.Exec(query, url, uid)
+	return err
+}
+
+func (p *StoryDB) UploadPrfPic(picInfos *[]ptc.PrfPicInfo, uid uint64) error {
+	// 순차 저장: slice[0]→sub_pic1 … slice[n-1]→sub_pic{n}, 나머지는 NULL.
+	// 각 컬럼 JSON: {"url":"...","stat":N} (idx 없음)
+	if picInfos == nil {
+		return nil
+	}
+	if len(*picInfos) > 5 {
+		return fmt.Errorf("profile pictures allow at most 5 items")
+	}
+
+	sets := make([]string, 0, 6)
+	args := make([]interface{}, 0, 6)
+	for i := 0; i < 5; i++ {
+		col := "sub_pic" + strconv.Itoa(i+1)
+		if i < len(*picInfos) && strings.TrimSpace((*picInfos)[i].Url) != "" {
+			raw, err := json.Marshal((*picInfos)[i])
+			if err != nil {
+				return err
+			}
+			sets = append(sets, col+" = ?")
+			args = append(args, raw)
+			continue
+		}
+		sets = append(sets, col+" = NULL")
+	}
+
+	sets = append(sets, "at_update = NOW()")
+	args = append(args, uid)
+	query := "UPDATE prf_info SET " + strings.Join(sets, ", ") + " WHERE uid = ?"
+	_, err := p.conndb.Exec(query, args...)
+	return err
+}
+
+// --- story profile ----------------------------------------------------------------------
+
 func (p *StoryDB) GetSList() (string, string, error) {
 	row := p.conndb.QueryRow("SELECT privacy_url, terms_url FROM terms_info")
 	var privacyUrl, termsUrl string
@@ -198,7 +531,14 @@ func (p *StoryDB) GetSList() (string, string, error) {
 	return privacyUrl, termsUrl, nil
 }
 
-func (p *StoryDB) SaveStory(simg *ptl.StoryImage) (int64, error) {
+func (p *StoryDB) SaveStory(simg *ptc.StoryImage, media ptc.StoryStrImg) (int64, error) {
+	strImg, mtype, err := BuildStrImgForDB(media)
+	if err != nil {
+		return 0, err
+	}
+	simg.StrImg = strImg
+	simg.MType = mtype
+
 	query := `INSERT INTO story (uid, nick, birth, area, gender, body, type, stat, str_img, at_create, at_update) 
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
 	result, err := p.conndb.Exec(query, simg.Uid, simg.Nick, simg.Birth,
@@ -216,7 +556,7 @@ func (p *StoryDB) SaveStory(simg *ptl.StoryImage) (int64, error) {
 }
 
 // stat = 0 : pub, stat = 1 : private, stat = 2 : limit, stat = 3 : resv, stat = 4 : del
-func (p *StoryDB) GetDefStoryList(uid uint64) (*[]ptl.StoryListResp, error) {
+func (p *StoryDB) GetDefStoryList(uid uint64) (*[]ptc.StoryListResp, error) {
 	query := `SELECT idx, nick, str_img, at_create FROM story WHERE uid = ? AND stat IN (1, 0) ORDER BY at_create DESC`
 	rows, err := p.conndb.Query(query, uid)
 	if err != nil {
@@ -224,12 +564,19 @@ func (p *StoryDB) GetDefStoryList(uid uint64) (*[]ptl.StoryListResp, error) {
 	}
 	defer rows.Close()
 
-	var stories []ptl.StoryListResp
+	var stories []ptc.StoryListResp
 	for rows.Next() {
-		var story ptl.StoryListResp
-		err := rows.Scan(&story.Idx, &story.Nick, &story.StrImg, &story.AtCreate)
+		var (
+			story ptc.StoryListResp
+			raw   json.RawMessage
+		)
+		err := rows.Scan(&story.Idx, &story.Nick, &raw, &story.AtCreate)
 		if err != nil {
 			return nil, err
+		}
+		story.StrImg, err = LoadStoryStrImg(raw)
+		if err != nil {
+			return nil, fmt.Errorf("story %d str_img: %w", story.Idx, err)
 		}
 		stories = append(stories, story)
 	}
@@ -258,56 +605,35 @@ func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []int
 			return nil, err
 		}
 
-		// str_img JSON에서 대표 썸네일 URL을 추출한다.
-		// 키 규칙: "N"=N번째 미디어 URL, "thumbN"=N번째 동영상 썸네일 URL.
-		var imgMap map[string]string
-		err = json.Unmarshal([]byte(strImg), &imgMap)
+		// str_img 통합 media에서 대표 URL 추출 (img→url, vdo→thumb)
+		firstURL, _, err := GetFirstPicUrl(strImg)
 		if err != nil {
-			// JSON 파싱 실패 시 원본 문자열을 그대로 반환
 			stories[idx] = strImg
 			continue
 		}
-
-		// 숫자 키 중 가장 작은 값을 대표 미디어로 선택한다.
-		minNum := 0
-		hasNum := false
-		for k := range imgMap {
-			if strings.HasPrefix(k, "thumb") {
-				continue
-			}
-			n, convErr := strconv.Atoi(k)
-			if convErr != nil {
-				continue
-			}
-			if !hasNum || n < minNum {
-				minNum = n
-				hasNum = true
-			}
-		}
-
-		if hasNum {
-			primary := strconv.Itoa(minNum)
-			// 동영상이면 썸네일을 우선 노출한다.
-			if thumb, ok := imgMap["thumb"+primary]; ok && thumb != "" {
-				stories[idx] = thumb
-			} else {
-				stories[idx] = imgMap[primary]
-			}
-		}
+		stories[idx] = firstURL
 	}
 
 	return &stories, nil
 }
 
-func (p *StoryDB) GetStory(strIdx int) (*ptl.StoryDetailResp, error) {
+func (p *StoryDB) GetStory(strIdx int) (*ptc.StoryDetailResp, error) {
 	query := `SELECT nick, body, str_img, at_create FROM story WHERE idx = ?`
 	row := p.conndb.QueryRow(query, strIdx)
-	var story ptl.StoryDetailResp
-	err := row.Scan(&story.Nick, &story.Body, &story.StrImg, &story.AtCreate)
+	var (
+		story ptc.StoryDetailResp
+		raw   json.RawMessage
+	)
+	err := row.Scan(&story.Nick, &story.Body, &raw, &story.AtCreate)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("story not found")
+	}
 	if err != nil {
 		return nil, err
-	} else if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("story not found")
+	}
+	story.StrImg, err = LoadStoryStrImg(raw)
+	if err != nil {
+		return nil, fmt.Errorf("story %d str_img: %w", strIdx, err)
 	}
 	return &story, nil
 }
@@ -330,7 +656,7 @@ func (p *StoryDB) UpdateStrBody(strIdx int, body string) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) SetStrComment(cmt *ptl.StrComment) (int64, error) {
+func (p *StoryDB) SetStrComment(cmt *ptc.StrComment) (int64, error) {
 	query := `INSERT INTO str_cmt (str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update) 
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
 	result, err := p.conndb.Exec(
@@ -351,7 +677,7 @@ func (p *StoryDB) SetStrComment(cmt *ptl.StrComment) (int64, error) {
 	return result.LastInsertId()
 }
 
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, int, error) {
+func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int, error) {
 	const pageSize = 20
 	offset := (page - 1) * pageSize
 	if offset < 0 {
@@ -375,9 +701,9 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, int,
 	}
 	defer rows.Close()
 
-	comments := []ptl.StrComment{}
+	comments := []ptc.StrComment{}
 	for rows.Next() {
-		var comment ptl.StrComment
+		var comment ptc.StrComment
 		var nick, thumbUrl, wgender, wage, warea, body sql.NullString
 		err := rows.Scan(
 			&comment.Idx,
@@ -426,7 +752,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptl.StrComment, int,
 	return &comments, totalCount, nil
 }
 
-func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptl.StrComment, error) {
+func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptc.StrComment, error) {
 	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
 	          FROM str_cmt
 	          WHERE str_idx = ? AND stat IN (0,1)
@@ -438,10 +764,10 @@ func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptl.StrComment, error) {
 	}
 	defer rows.Close()
 
-	comments := []ptl.StrComment{}
+	comments := []ptc.StrComment{}
 	for rows.Next() {
 		var (
-			comment  ptl.StrComment
+			comment  ptc.StrComment
 			nick     sql.NullString
 			thumbUrl sql.NullString
 			wgender  sql.NullString
@@ -499,11 +825,11 @@ func (p *StoryDB) GetStrPicList(strIdx int) (json.RawMessage, json.RawMessage, e
 	query := `SELECT str_img, str_imgbak FROM story WHERE idx = ?`
 	row := p.conndb.QueryRow(query, strIdx)
 
-	fmt.Println("strIdx ", row)
+	// fmt.Println("strIdx ", row)
 	var strImg, strImgBak json.RawMessage
 	err := row.Scan(&strImg, &strImgBak)
-	fmt.Println("strImg", strImg)
-	fmt.Println("strImgBak", strImgBak)
+	// fmt.Println("strImg", strImg)
+	// fmt.Println("strImgBak", strImgBak)
 	if err != nil && strImg == nil {
 		return nil, nil, err
 	}
@@ -624,7 +950,27 @@ func (p *StoryDB) SetUnfollow(followerUid, followeeUid uint64) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptl.FollowUserItem, int, error) {
+func (p *StoryDB) GetFollowerCount(uid uint64) (int64, error) {
+	query := `SELECT COUNT(1) FROM user_follow WHERE followee_uid = ? AND stat = 1`
+	var count int64
+	err := p.conndb.QueryRow(query, uid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (p *StoryDB) GetFollowingCount(uid uint64) (int64, error) {
+	query := `SELECT COUNT(1) FROM user_follow WHERE uid = ? AND stat = 1`
+	var count int64
+	err := p.conndb.QueryRow(query, uid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptc.FollowUserItem, int, error) {
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -654,9 +1000,9 @@ func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptl.Follo
 	}
 	defer rows.Close()
 
-	list := make([]ptl.FollowUserItem, 0, limit)
+	list := make([]ptc.FollowUserItem, 0, limit)
 	for rows.Next() {
-		var item ptl.FollowUserItem
+		var item ptc.FollowUserItem
 		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
 			return nil, totalCount, err
 		}
@@ -668,7 +1014,7 @@ func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptl.Follo
 	return &list, totalCount, nil
 }
 
-func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptl.FollowUserItem, int, error) {
+func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptc.FollowUserItem, int, error) {
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -698,9 +1044,9 @@ func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptl.FollowUs
 	}
 	defer rows.Close()
 
-	list := make([]ptl.FollowUserItem, 0, limit)
+	list := make([]ptc.FollowUserItem, 0, limit)
 	for rows.Next() {
-		var item ptl.FollowUserItem
+		var item ptc.FollowUserItem
 		if err = rows.Scan(&item.Uid, &item.Nick, &item.ThumbPic, &item.AtUpdate); err != nil {
 			return nil, totalCount, err
 		}
@@ -725,7 +1071,7 @@ func (p *StoryDB) GetStoryOwnerUID(storyIdx int) (uint64, error) {
 
 //-------------------- user cut out ---------------------------------
 
-func (p *StoryDB) SetCutoutUser(uid uint64, cutout *ptl.CutoutUserItem) (int64, error) {
+func (p *StoryDB) SetCutoutUser(uid uint64, cutout *ptc.CutoutUserItem) (int64, error) {
 	tbirth := utils.Time2StrDay(cutout.Tbirth)
 	query := `
 		INSERT INTO str_cutout
@@ -799,7 +1145,7 @@ func (p *StoryDB) GetActiveCutoutTIDs(uid uint64) ([]uint64, error) {
 	return tids, nil
 }
 
-func (p *StoryDB) GetCutoutList(uid uint64, page, limit int) (*[]ptl.CutoutUserItem, int, error) {
+func (p *StoryDB) GetCutoutList(uid uint64, page, limit int) (*[]ptc.CutoutUserItem, int, error) {
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -824,9 +1170,9 @@ func (p *StoryDB) GetCutoutList(uid uint64, page, limit int) (*[]ptl.CutoutUserI
 	}
 	defer rows.Close()
 
-	list := make([]ptl.CutoutUserItem, 0, limit)
+	list := make([]ptc.CutoutUserItem, 0, limit)
 	for rows.Next() {
-		var item ptl.CutoutUserItem
+		var item ptc.CutoutUserItem
 		if err = rows.Scan(
 			&item.Idx,
 			&item.Tid,

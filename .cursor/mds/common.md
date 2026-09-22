@@ -108,7 +108,8 @@
 
 #### ChaCha20 Encryption
 - `EncryptChaCha20()`: Encrypts data using ChaCha20 stream cipher with random nonce and base64 encoding
-- `DecryptChaCha20()`: Decrypts ChaCha20 encrypted data by extracting nonce and performing stream decryption
+- `DecryptChaCha20()`: Decrypts ChaCha20 encrypted data by extracting nonce and performing stream decryption. Input must be standard base64; Hangul plaintext fails at byte 0.
+- `DecryptChaCha20Field()`: DB 필드용. base64 암호문이면 복호화, 한글 등 레거시 평문이면 그대로 반환.
 
 ### http.go - HTTP Client Functions
 

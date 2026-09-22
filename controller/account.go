@@ -36,6 +36,7 @@ type AccountController struct {
 
 	rdb *models.RedisDB
 	adb *models.AccountDB
+	sdb *models.StoryDB
 }
 
 func NewAccountController(ctl *Controller, rep *models.Repositories) (*AccountController, error) {
@@ -45,7 +46,7 @@ func NewAccountController(ctl *Controller, rep *models.Repositories) (*AccountCo
 		cfg: ctl.cfg,
 	}
 
-	if err := rep.Get(&r.adb, &r.rdb); err != nil {
+	if err := rep.Get(&r.adb, &r.sdb, &r.rdb); err != nil {
 		return nil, err
 	}
 
@@ -194,6 +195,12 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 	err = p.adb.RegistUser(req, hsedPw)
 	if err != nil {
 		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserRegistFailed, "failed to register user"), http.StatusBadRequest, err)
+		return
+	}
+
+	err = p.sdb.SaveInitPrfInfo(req)
+	if err != nil {
+		p.ctl.RespError(c, ptl.NewRespHeader(ptl.UserRegistFailed, "failed to save profile info"), http.StatusBadRequest, err)
 		return
 	}
 
@@ -940,7 +947,7 @@ func (p *AccountController) GetUidFromInfo(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SendResponse(c, http.StatusOK, user)
+	p.ctl.SendDataResponse(c, http.StatusOK, user)
 }
 
 // @Summary Delete user

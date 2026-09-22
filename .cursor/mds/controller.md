@@ -215,16 +215,32 @@
 ### Story Controller Initialization
 - `NewStoryController()`: Creates StoryController instance with AccountDB, HistoryDB, and StoryDB connections
 
+### Profile Functions (`/story/v01/prf/*`, JWT)
+- `GetPrfInfo()`: `GET /prf/info/:tid` — 프로필 + 팔로워 수 (`prf_Info`, `flw_cnt`). Swagger 문서화됨.
+- `GetPrfAssets()`: `GET /prf/assets` — 화살/캐시/쪽지 (`hold_point`, `hold_cash`, `msg_count`). Swagger 문서화됨.
+- `GetPrfPicLists()`: `GET /prf/pic/list` — `{"1":{"url","stat"},"2":{...}}` 슬롯 맵 응답 (비어 있는 슬롯 제외).
+- `GetPrfPicWaitingList()`: `GET /prf/pic/waiting/:page/:limit` — 전체 사용자 `sub_pic` 중 stat=1|2 대기 항목 페이징 (`list`: uid/nick/slot/url/stat). 관리자용.
+- `SetPrfPicStat()`: `POST /prf/pic/stat` — body `{uid, slot}`로 해당 `sub_pic{slot}` JSON `stat`을 3(승인)으로 변경. 현재 1|2일 때만 갱신. 관리자용.
+- `GetPrfStoryLists()`: `GET /prf/story/lists/:tid` — 최신 스토리 최대 4개. `str_imgs`(이미지), `str_thmbls`(동영상 썸네일). key=story idx. Swagger 문서화됨.
+- `UpdatePrfInfo()`: `POST /prf/upd` — JSON partial update (`nick`/`gender`/`age`/`area`/`intro` 빈 값 무시). UID는 JWT. Swagger 문서화됨.
+- `SetMainPic()`: `POST /prf/set/mainpic/:url` — 대표사진 설정(URL path-escape). 빈 url이면 삭제. 응답 `SendDataResponse`. Swagger 문서화됨.
+- `DeletePrfPic()`: `POST /prf/pic/delete/:idx` — `sub_pic{idx}` 삭제 후 뒤 슬롯을 앞으로 당김 (1~5). JSON에 idx 없음.
+- `UploadPrfPic()`: `POST /prf/pic/upload` — multipart `files` + `urls`. 앞에서부터 순차 `sub_pic1..N`에 `{"url","stat"}` 저장, 나머지 NULL. 최대 5장.
+- E2E 테스트: `controller/stry_prf_test.go` (`Test_GetPrfInfo` … `Test_UploadPrfPic`, `Test_PrfProcess`)
+
 ### Story Management Functions
 - `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
-- `GetStoryList()`: Retrieves all public stories (stat=1 or 0) for a user, ordered by creation time descending
-- `GetStoryDetail()`: Retrieves detailed story information including all comments for a specific story index
-- `CreateStory()`: JSON body(`CreateStoryReq`: stat, sbody, imgs, vdos). 미디어는 `POST /story/v01/upload` 결과 문자열 전달. mtype: imgs만=0, vdos만=1, 둘 다=2. `str_img`: 단일 타입은 upload flat JSON 그대로, 혼합은 `{"imgs":{...},"vdos":{...}}`. 프로필은 JWT에서 설정.
+- `GetStoryList()` / `GetStoryDefaultList()`: 공개 스토리 목록. 응답 `str_img`는 DB에 저장된 통합 media 슬롯 맵 그대로
+- `GetStoryDetail()`: 스토리 상세. 응답 `str_img`는 DB 저장값 그대로
+- `UploadStoryContent()`: multipart 업로드 → `data.media`를 `StoryStrImg`로 구성 (**최대 5슬롯**, `BuildStrImgForDB`와 동일 포맷)
+- `CreateStory()`: `media`(StoryStrImg, 1~5개) → `SaveStory` → `story.str_img`에 동일 슬롯 맵 저장
+- `GetStoryDefaultList()` / `GetStoryDetail()`: DB `str_img`를 `StoryStrImg`로 파싱해 응답
+- `DeleteStrPic()`: 슬롯 삭제 → `1..N` 재인덱싱 → `BuildStrImgForDB`로 다시 저장, bak은 `str_imgbak`
 
 ### Story Update Functions
 - `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
 - `UpdateStrBody()`: Updates story body content (max 512 characters)
-- `DeleteStrPic()`: Deletes specific picture from story and moves it to backup (str_imgbak)
+- `DeleteStrPic()`: media 슬롯 삭제 후 `str_imgbak`으로 이동, 남은 슬롯 `1..N` 재인덱싱
 
 ### Story Comment Functions
 - `CreateStrComment()`: Creates new comment on a story with writer uid, nickname, body (max 256 chars), and status
@@ -250,9 +266,9 @@
 - 통합 테스트: `controller/stry_test.go` (`Test_SetCutoutUser`, `Test_UnsetCutoutUser`, `Test_GetCutoutCount`, `Test_GetCutoutList`) — flags: `-dm_target`, `-dm_token`, `-dm_peer_uid`
 
 ### Cloudflare Integration
-- **Media Upload**: `utils.UpTotalCldFlrThumb()` — image → Images `variants[0]`, video → Stream `playback.hls`
-- **Thumbnail / profile**: `utils.UploadCldFlr()` — Images only
-- **Image Storage**: Stores media URLs as JSON with indexed keys (1, 2, 3, ...) and `thumbN` for video thumbnails
+- **Media Upload**: `utils.UpTotalCldFlr` / `UploadCldFlrImg` — image → Images, video → Stream HLS + thumb
+- **Thumbnail / profile**: `utils.UploadCldFlrImg` — Images only
+- **Image Storage**: `str_img` 통합 포맷 `{"N":{"type":"img|vdo","url":"...","thumb":"..."}}` (thumb은 vdo만)
 - **Configuration**: Uses `cfg.Server.CfId` and `cfg.Server.CfToken` (Images + Stream Edit 권한 필요)
 
 ### Key Features

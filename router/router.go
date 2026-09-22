@@ -258,13 +258,29 @@ func (p *Router) Idx() *gin.Engine {
 
 	story := e.Group("story/v01", p.SecurityHeaders(), p.JwtAuth())
 	{
+		// ------------- profile -------------
+		// story.POST("/prf/upd/:nick/:gender/:age/:area/:intro", p.st.UpdatePrfInfo)
+		// story.GET("/prf/home", p.st.GetPrfHomeInfo)
+		story.GET("/prf/info/:tid", p.st.GetPrfInfo)
+		story.GET("/prf/assets", p.st.GetPrfAssets)
+		story.GET("/prf/pic/list", p.st.GetPrfPicLists)
+		story.GET("/prf/story/lists/:tid", p.st.GetPrfStoryLists)
+		story.POST("/prf/upd", p.st.UpdatePrfInfo)
+
+		story.POST("/prf/set/mainpic/:url", p.st.SetMainPic)
+		story.POST("/prf/pic/upload", p.ValidateFileUpload(5, 5), p.st.UploadPrfPic)
+		story.POST("/prf/pic/delete/:idx", p.st.DeletePrfPic)
+
+		story.GET("/prf/pic/waiting/:page/:limit", p.st.GetPrfPicWaitingList)
+		story.POST("/prf/pic/stat", p.st.SetPrfPicStat)
+
 		// 좋아요 카운트, 팔로워, 조회수, 팔로잉?, 신고카운트
 		// story.GET("/home/:id")
 		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryContent)
 		story.POST("/create", p.st.CreateStory)
 		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
 
-		story.GET("/list", p.st.GetStoryDefaultList)
+		story.GET("/list/:uid", p.st.GetStoryDefaultList)
 		story.GET("/detail/:idx", p.st.GetStoryDetail)
 
 		// ------------- story -------------
