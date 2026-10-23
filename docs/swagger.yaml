@@ -1,30 +1,5 @@
 definitions:
-  ms-gateway_bak_controller.HomeData:
-    properties:
-      checkIn:
-        type: boolean
-      msgQuantity:
-        type: integer
-      notiNew:
-        type: integer
-      policyLink:
-        type: string
-      storyList:
-        items:
-          $ref: '#/definitions/protocol.Pre7Story'
-        type: array
-      termsLink:
-        type: string
-      videoChatList:
-        items:
-          $ref: '#/definitions/protocol.WTRoomUser'
-        type: array
-      voiceChatList:
-        items:
-          $ref: '#/definitions/protocol.WTRoomUser'
-        type: array
-    type: object
-  ms-gateway_controller.HomeData:
+  controller.HomeData:
     properties:
       checkIn:
         type: boolean
@@ -91,6 +66,109 @@ definitions:
         description: 0=del, 1=pub, 2=private, 3=limit, 4=resv
         example: 1
         type: integer
+    type: object
+  protocol.CutoutActionData:
+    properties:
+      affected:
+        example: 1
+        type: integer
+      msg:
+        example: success
+        type: string
+    type: object
+  protocol.CutoutActionResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.CutoutActionData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.CutoutCountData:
+    properties:
+      count:
+        example: 3
+        type: integer
+      msg:
+        example: success
+        type: string
+    type: object
+  protocol.CutoutCountResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.CutoutCountData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.CutoutListData:
+    properties:
+      list:
+        items:
+          $ref: '#/definitions/protocol.CutoutUserItem'
+        type: array
+      msg:
+        example: success
+        type: string
+      total_count:
+        example: 1
+        type: integer
+    type: object
+  protocol.CutoutListResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.CutoutListData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.CutoutUserItem:
+    properties:
+      age:
+        example: 34
+        type: integer
+      at_crt:
+        example: "2026-06-23T14:30:15Z"
+        type: string
+      at_upd:
+        example: "2026-06-23T14:30:15Z"
+        type: string
+      idx:
+        example: 12
+        type: integer
+      stat:
+        example: 1
+        type: integer
+      tarea:
+        example: 1
+        type: integer
+      tbirth:
+        example: "1991-12-18"
+        type: string
+      tgen:
+        example: 1
+        type: integer
+      tid:
+        example: 4033287471439576593
+        type: integer
+      tnick:
+        example: 푸른 아름다운 양
+        type: string
+      tsp_intro:
+        example: 반가워요
+        type: string
+      tthmb_pic:
+        example: https://i.ibb.co/99MhfMXt/icon-male-03.webp
+        type: string
     type: object
   protocol.DMRoomResp:
     properties:
@@ -215,24 +293,207 @@ definitions:
       pic1:
         type: string
     type: object
+  protocol.PrfAssetsData:
+    properties:
+      hold_cash:
+        example: 0
+        type: integer
+      hold_point:
+        example: 0
+        type: integer
+      msg_count:
+        example: 3
+        type: integer
+    type: object
+  protocol.PrfAssetsResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfAssetsData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
   protocol.PrfInfo:
     properties:
       age:
+        example: "-2"
         type: string
       area:
+        example: "1"
         type: string
       birth:
+        example: "1990-01-01T00:00:00Z"
         type: string
       gender:
+        example: "1"
         type: string
       intro:
+        example: 반가워요 큐피톡에서 만나요!
         type: string
       main_pic:
+        example: ""
         type: string
       nick:
+        example: 건강한 꼬마 오렌지
         type: string
       uid:
+        example: 8697414060736839837
         type: integer
+    type: object
+  protocol.PrfInfoData:
+    properties:
+      flw_cnt:
+        example: 0
+        type: integer
+      prf_Info:
+        $ref: '#/definitions/protocol.PrfInfo'
+    type: object
+  protocol.PrfInfoResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfInfoData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.PrfPicInfo:
+    properties:
+      stat:
+        description: 1=요청중, 2=승인대기, 3=승인, 4=거절:삭제
+        example: 3
+        type: integer
+      url:
+        example: https://imagedelivery.net/.../public
+        type: string
+    type: object
+  protocol.PrfPicListResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfPicMap'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.PrfPicMap:
+    additionalProperties:
+      $ref: '#/definitions/protocol.PrfPicInfo'
+    type: object
+  protocol.PrfPicUploadData:
+    properties:
+      msg:
+        example: success
+        type: string
+      pics:
+        items:
+          $ref: '#/definitions/protocol.PrfPicInfo'
+        type: array
+    type: object
+  protocol.PrfPicUploadResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfPicUploadData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.PrfPicWaitingItem:
+    properties:
+      nick:
+        example: 건강한 꼬마 오렌지
+        type: string
+      slot:
+        description: sub_pic1~5 (컬럼 번호)
+        example: 1
+        type: integer
+      stat:
+        description: 1=요청중, 2=승인대기
+        example: 1
+        type: integer
+      uid:
+        example: 8697414060736839837
+        type: integer
+      url:
+        example: https://imagedelivery.net/.../public
+        type: string
+    type: object
+  protocol.PrfPicWaitingListData:
+    properties:
+      list:
+        items:
+          $ref: '#/definitions/protocol.PrfPicWaitingItem'
+        type: array
+      msg:
+        example: success
+        type: string
+      total_count:
+        example: 2
+        type: integer
+    type: object
+  protocol.PrfPicWaitingListResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfPicWaitingListData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.PrfStoryListsData:
+    properties:
+      str_imgs:
+        additionalProperties:
+          type: string
+        example:
+          '{"12"': '"https://imagedelivery.net/.../public"}'
+        type: object
+      str_thmbls:
+        additionalProperties:
+          type: string
+        example:
+          '{"15"': '"https://imagedelivery.net/.../public"}'
+        type: object
+    type: object
+  protocol.PrfStoryListsResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfStoryListsData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
+  protocol.PrfUpdData:
+    properties:
+      msg:
+        example: success
+        type: string
+    type: object
+  protocol.PrfUpdResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.PrfUpdData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
     type: object
   protocol.RefreshTokenReq:
     properties:
@@ -308,6 +569,16 @@ definitions:
     type: integer
     x-enum-varnames:
     - Success
+  protocol.SetPrfPicStatData:
+    properties:
+      affected:
+        description: 0이면 대상 없음/이미 처리됨
+        example: 1
+        type: integer
+      msg:
+        example: success
+        type: string
+    type: object
   protocol.SetPrfPicStatReq:
     properties:
       slot:
@@ -318,6 +589,17 @@ definitions:
         example: 8697414060736839837
         type: integer
     type: object
+  protocol.SetPrfPicStatResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.SetPrfPicStatData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
+        type: string
+    type: object
   protocol.StoryLikeToggleReq:
     properties:
       story_idx:
@@ -327,7 +609,7 @@ definitions:
     type: object
   protocol.StoryMediaItem:
     properties:
-      thumb:
+      thumb1:
         description: vdo only
         example: https://imagedelivery.net/.../public
         type: string
@@ -346,29 +628,129 @@ definitions:
   protocol.StrCmtCreateReq:
     properties:
       body:
+        description: max 256
+        example: 111111 test comment body
         type: string
       nick:
+        example: test
         type: string
       stat:
+        description: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+        example: "1"
         type: string
       str_idx:
+        example: "3"
         type: string
       wuid:
+        example: "77645423236541"
+        type: string
+    type: object
+  protocol.StrCmtCreateResp:
+    properties:
+      lastID:
+        example: 1
+        type: integer
+      msg:
+        example: Successfully created str comment
+        type: string
+    type: object
+  protocol.StrCmtDetailData:
+    properties:
+      comment:
+        items:
+          $ref: '#/definitions/protocol.StrComment'
+        type: array
+      total_count:
+        example: 52
+        type: integer
+    type: object
+  protocol.StrCmtDetailResp:
+    properties:
+      data:
+        $ref: '#/definitions/protocol.StrCmtDetailData'
+      result:
+        example: 0
+        type: integer
+      resultString:
+        example: Success
         type: string
     type: object
   protocol.StrCmtUpdBodyReq:
     properties:
       body:
+        example: updated comment body content
         type: string
       idx:
+        example: "3"
+        type: string
+    type: object
+  protocol.StrCmtUpdBodyResp:
+    properties:
+      affected:
+        example: 1
+        type: integer
+      msg:
+        example: Successfully updated str body comment
         type: string
     type: object
   protocol.StrCmtUpdStatReq:
     properties:
       idx:
+        example: "3"
         type: string
       stat:
+        description: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+        example: "2"
         type: string
+    type: object
+  protocol.StrCmtUpdStatResp:
+    properties:
+      affected:
+        example: 1
+        type: integer
+      msg:
+        example: Successfully updated str stat comment
+        type: string
+    type: object
+  protocol.StrComment:
+    properties:
+      at_create:
+        example: "2026-02-02T13:50:06Z"
+        type: string
+      at_update:
+        example: "2026-02-02T13:50:06Z"
+        type: string
+      body:
+        example: 111111 test comment body
+        type: string
+      idx:
+        example: 2
+        type: integer
+      nick:
+        example: test
+        type: string
+      stat:
+        description: 0,1 visible in list
+        example: 1
+        type: integer
+      str_idx:
+        example: 3
+        type: integer
+      thumb_url:
+        example: https://imagedelivery.net/.../public
+        type: string
+      wage:
+        example: "30"
+        type: string
+      warea:
+        example: "1"
+        type: string
+      wgender:
+        example: "1"
+        type: string
+      wuid:
+        example: 77645423236541
+        type: integer
     type: object
   protocol.UpdateStrBodyReq:
     properties:
@@ -1594,7 +1976,7 @@ paths:
         "200":
           description: Home screen information
           schema:
-            $ref: '#/definitions/ms-gateway_controller.HomeData'
+            $ref: '#/definitions/controller.HomeData'
         "400":
           description: Invalid request
           schema:
@@ -2003,78 +2385,161 @@ paths:
       summary: Get WebRTC configuration
       tags:
       - WebRTC
-  /story/v01/comment/{idx}/{page}:
-    get:
+  /story/v01/buy/{idx}:
+    post:
       consumes:
       - application/json
-      description: Retrieve a paginated list of comments for a specific story. Each
-        comment includes idx, wuid, nick, body, at_create, etc.
+      description: |-
+        JWT 본인이 지정한 스토리(`idx`)를 구매 기록합니다.
+
+        **처리**
+        - `story.idx`로 판매자 UID(`tid`) 조회
+        - `str_pcs`에 INSERT: `str_idx`, `tid`(판매자), `pcs_uid`(JWT 구매자), `qt_payed=0`
+        - 결제 프로세스(잔액 차감 등)는 아직 미구현(TODO)
+
+        **응답 data**: `{"msg":"ok"}`
       parameters:
-      - description: Story Index
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 구매할 스토리 인덱스
         in: path
         name: idx
         required: true
-        type: string
-      - description: Page number (starting from 1)
-        in: path
-        name: page
-        required: true
-        type: string
+        type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: Successfully retrieved story comments - returns {comment_list,
-            total_count}
+          description: msg
           schema:
-            $ref: '#/definitions/protocol.RespDataHeader'
+            additionalProperties: true
+            type: object
         "400":
-          description: Bad request - invalid or missing idx/page
+          description: idx 잘못된 값
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
         "500":
-          description: Internal server error - failed to get story comments
+          description: 스토리 없음 또는 str_pcs 저장 실패
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Get story comment details (list)
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 구매
       tags:
       - Story
+  /story/v01/comment/{idx}/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        JWT 인증 후 특정 스토리의 댓글을 페이징 조회합니다.
+
+        **path**
+        - `idx`: 스토리 idx (`str_cmt.str_idx`)
+        - `page`: 페이지 번호 (1부터, `getPageAndLimit`)
+        - `limit`: 페이지 크기 (1~100, 0이면 DB 기본 20)
+
+        **응답 data** (`StrCmtDetailData`)
+        - `comment`: `[]StrComment` (idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update)
+        - `total_count`: 전체 댓글 수
+
+        **Request example**
+        - GET /story/v01/comment/3/1/20
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"comment":[{"idx":2,"str_idx":3,"wuid":77645423236541,"nick":"test","thumb_url":"https://imagedelivery.net/.../public","wgender":"1","wage":"30","warea":"1","body":"111111 test comment body","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}],"total_count":52}}
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 스토리 idx
+        in: path
+        name: idx
+        required: true
+        type: integer
+      - description: 페이지 번호(1부터)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(1~100)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data.comment, data.total_count
+          schema:
+            $ref: '#/definitions/protocol.StrCmtDetailResp'
+        "400":
+          description: idx/page/limit 오류
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 댓글 목록 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 댓글 목록 조회
+      tags:
+      - Story_Comment
   /story/v01/comment/create:
     post:
       consumes:
       - application/json
-      description: Create a new comment for a story
+      description: |-
+        JWT 인증 후 스토리 댓글을 생성합니다. 작성자 메타(`thumb_url`, `wgender`, `wage`, `warea`)는 `wuid`로 계정에서 조회해 저장합니다.
+
+        **요청 body** (`StrCmtCreateReq`) — 모두 필수(빈 문자열 불가)
+        - `str_idx`: 스토리 idx (숫자 문자열)
+        - `wuid`: 작성자 UID (숫자 문자열)
+        - `nick`: 닉네임
+        - `stat`: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+        - `body`: 댓글 본문 (max 256)
+
+        **응답** (`SimpleRespOK` — result envelope 없음)
+        - `msg`, `lastID` (str_cmt INSERT LastInsertId)
+
+        **Request example**
+        - POST /story/v01/comment/create
+        - Header: Authorization: Bearer {access_token}
+        - Body: {"str_idx":"3","wuid":"77645423236541","nick":"test","stat":"1","body":"111111 test comment body"}
+
+        **Response example**
+        {"msg":"ok","lastID":1}
       parameters:
-      - description: Story index
-        in: query
-        name: str_idx
+      - description: Bearer access token
+        in: header
+        name: Authorization
         required: true
         type: string
-      - description: Writer user ID
-        in: query
-        name: wuid
-        required: true
-        type: string
-      - description: Nickname
-        in: query
-        name: nick
-        required: true
-        type: string
-      - description: Status
-        enum:
-        - 0(default
-        in: query
-        name: stat
-        required: true
-        type: string
-      - description: Comment body (max 256 characters)
-        in: query
-        name: body
-        required: true
-        type: string
-      - description: Comment data
+      - description: 댓글 생성 데이터
         in: body
-        name: data
+        name: request
         required: true
         schema:
           $ref: '#/definitions/protocol.StrCmtCreateReq'
@@ -2082,30 +2547,57 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully created str comment
+          description: msg, lastID
+          schema:
+            $ref: '#/definitions/protocol.StrCmtCreateResp'
+        "400":
+          description: JSON/필수값/숫자 파싱 오류
           schema:
             additionalProperties: true
             type: object
-        "400":
-          description: Bad request - missing or invalid parameters
+        "401":
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal server error
+          description: 계정 조회/댓글 저장 실패
           schema:
             additionalProperties: true
             type: object
-      summary: Create a story comment
+      security:
+      - BearerAuth: []
+      summary: 스토리 댓글 작성
       tags:
-      - Story
+      - Story_Comment
   /story/v01/comment/updbody:
     post:
       consumes:
       - application/json
-      description: Update the body content of a story comment
+      description: |-
+        JWT 인증 후 `str_cmt.body`를 수정합니다.
+
+        **요청 body** (`StrCmtUpdBodyReq`) — 모두 필수
+        - `idx`: 댓글 idx (숫자 문자열)
+        - `body`: 수정할 본문 (빈 문자열 불가)
+
+        **응답** (`SimpleRespOK` — result envelope 없음)
+        - `msg`, `affected` (RowsAffected)
+
+        **Request example**
+        - POST /story/v01/comment/updbody
+        - Header: Authorization: Bearer {access_token}
+        - Body: {"idx":"3","body":"updated comment body content"}
+
+        **Response example**
+        {"msg":"ok","affected":1}
       parameters:
-      - description: Comment body update request
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 댓글 본문 수정
         in: body
         name: request
         required: true
@@ -2115,30 +2607,57 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully updated str body comment
+          description: msg, affected
+          schema:
+            $ref: '#/definitions/protocol.StrCmtUpdBodyResp'
+        "400":
+          description: JSON/idx/body 오류
           schema:
             additionalProperties: true
             type: object
-        "400":
-          description: Bad request - Invalid parameters
+        "401":
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal server error
+          description: DB 업데이트 실패
           schema:
             additionalProperties: true
             type: object
-      summary: Update story comment body
+      security:
+      - BearerAuth: []
+      summary: 스토리 댓글 본문 수정
       tags:
-      - Story
+      - Story_Comment
   /story/v01/comment/updstat:
     post:
       consumes:
       - application/json
-      description: Update the status of a story comment "Status" Enums(0(default),1(private),2(reserved),3(reserved),4(deleted))
+      description: |-
+        JWT 인증 후 `str_cmt.stat`을 변경합니다.
+
+        **요청 body** (`StrCmtUpdStatReq`) — 모두 필수
+        - `idx`: 댓글 idx (숫자 문자열)
+        - `stat`: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+
+        **응답** (`SimpleRespOK` — result envelope 없음)
+        - `msg`, `affected` (RowsAffected)
+
+        **Request example**
+        - POST /story/v01/comment/updstat
+        - Header: Authorization: Bearer {access_token}
+        - Body: {"idx":"3","stat":"2"}
+
+        **Response example**
+        {"msg":"ok","affected":1}
       parameters:
-      - description: Comment status update request
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 댓글 상태 변경
         in: body
         name: request
         required: true
@@ -2148,29 +2667,52 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully updated str stat comment
+          description: msg, affected
+          schema:
+            $ref: '#/definitions/protocol.StrCmtUpdStatResp'
+        "400":
+          description: JSON/idx/stat 오류
           schema:
             additionalProperties: true
             type: object
-        "400":
-          description: Bad request - Invalid parameters
+        "401":
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal server error
+          description: DB 업데이트 실패
           schema:
             additionalProperties: true
             type: object
-      summary: Update story comment status
+      security:
+      - BearerAuth: []
+      summary: 스토리 댓글 상태 변경
       tags:
-      - Story
+      - Story_Comment
   /story/v01/condition/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit}:
     get:
       consumes:
       - application/json
-      description: 다양한 조건(area/stat/type/order/gen/page/limit)으로 스토리 리스트를 조회합니다.
+      description: |-
+        path 파라미터(area/stat/type/order/gen/page/limit)로 스토리 피드를 조회합니다.
+
+        **필터**
+        - `area`: all이면 지역 조건 생략, 그 외 `story.area` 매칭
+        - `stat`: pub/flw/pay/prv/del/rsv → story.stat (0~5)
+        - `type`: img/vdo/all/rsv — all이면 type 조건 생략
+        - `order`: new/old/cmt/god/view/rsv
+        - `gen`: 0=여성, 1=남성 (기본 1)
+
+        **cutout**: JWT가 있으면 해당 사용자의 활성 cutout UID를 피드에서 제외
+
+        **응답 data**: `StoryListResp` 배열
+        (`idx`, `uid`, `nick`, `stat`, `cnt_count`, `cnt_url`, `cnt_type`, `cnt_thumb`, `at_create`)
       parameters:
+      - description: Bearer access token (있으면 cutout 제외 적용)
+        in: header
+        name: Authorization
+        type: string
       - default: all
         description: 지역
         enum:
@@ -2179,89 +2721,126 @@ paths:
         - gyeonggi
         - incheon
         - busan
-        - daejeon/sejong/chungnam
-        - chungbuk/cheonju/chungju
-        - daegu/gyeongbuk
-        - gyeongnam/ulsan
-        - gwangju/jeonnam
-        - jeonbuk/jeonju
-        - gangwon/chuncheon
+        - daejeon
+        - chungbuk
+        - daegu
+        - gyeongnam
+        - gwangju
+        - jeonbuk
+        - gangwon
         - jeju
-        in: query
+        in: path
         name: area
+        required: true
         type: string
       - default: pub
         description: 상태
         enum:
-        - pub(전체공개
-        in: query
+        - pub
+        - flw
+        - pay
+        - prv
+        - del
+        - rsv
+        in: path
         name: stat
+        required: true
         type: string
       - default: img
-        description: 타입
+        description: 미디어 타입
         enum:
-        - img(이미지
-        in: query
+        - img
+        - vdo
+        - all
+        - rsv
+        in: path
         name: type
+        required: true
         type: string
       - default: new
         description: 정렬
         enum:
-        - new(최신순
-        in: query
+        - new
+        - old
+        - cmt
+        - god
+        - view
+        - rsv
+        in: path
         name: order
+        required: true
         type: string
       - default: "1"
-        description: 성별
+        description: 성별 0=여성 1=남성
         enum:
-        - 0(여성
-        in: query
+        - "0"
+        - "1"
+        in: path
         name: gen
+        required: true
         type: string
-      - default: 1
-        description: 페이지 번호(1부터 시작)
-        in: query
+      - description: 페이지 번호(1부터)
+        in: path
         name: page
+        required: true
         type: integer
-      - default: 10
-        description: 페이지 당 데이터 개수
-        in: query
+      - description: 페이지 크기(기본 4, 최대 100)
+        in: path
         name: limit
+        required: true
         type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: 성공적으로 스토리 리스트를 반환합니다. story_home_list 필드는 인덱스별 이미지 URL 정보를
-            포함합니다.
+          description: 'data: StoryListResp 배열'
           schema:
-            $ref: '#/definitions/protocol.RespDataHeader'
+            additionalProperties: true
+            type: object
         "400":
-          description: 잘못된 파라미터 입력 시 반환
+          description: page/limit 잘못된 값
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
+            additionalProperties: true
+            type: object
         "500":
-          description: 서버 에러 시 반환
+          description: cutout 조회 실패 또는 리스트 조회 실패
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: 스토리(Story) 조건부 리스트 조회
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 조건부 리스트 조회
       tags:
       - Story
   /story/v01/create:
     post:
       consumes:
       - application/json
-      description: |
-        JWT 인증 사용자의 스토리를 DB에 저장합니다. 미디어 파일은 직접 받지 않고, **업로드 API의 data.media**를 전달합니다.
+      description: |-
+        JWT 인증 사용자의 스토리를 DB에 저장합니다. 파일 업로드는 하지 않으며, upload API의 `data.media`를 body로 받습니다.
 
         **권장 플로우**
         1. `POST /story/v01/upload` — Cloudflare 업로드 → `data.media` 수신
-        2. `POST /story/v01/create` — JSON body에 `media`(upload 응답 객체) 전달
+        2. `POST /story/v01/create` — JSON body에 `media` 전달 → `SaveStory` INSERT
 
-        **media 슬롯**: 최대 5개. `{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...","thumb":"..."}}`
-        **stat**: 0=del, 1=pub, 2=private(팔로우공개), 3=limit(유료공개), 4=resv
+        **요청 body** (`CreateStoryReq`)
+        - `stat`: 0=pub, 1=private(팔로우공개), 2=limit(유료공개), 3=resv, 4=del
+        - `sbody`: 본문 (최대 512자)
+        - `media`: `StoryStrImg` 슬롯 맵 (1~5개, upload 응답과 동일)
+        `{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...","thumb":"..."}}`
+
+        **서버에서 JWT로 채우는 필드**: uid, nick, birth, gender, area
+        **검증**: `ValidateStoryMedia` (슬롯·type·url·vdo thumb)
+        **저장**: `BuildStrImgForDB`로 `str_img`/`type` 정규화 후 INSERT
+
+        **응답 data**: `{"msg":"ok","idx":<story.idx>}`
       parameters:
-      - description: 스토리 생성 요청
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: stat, sbody, media
         in: body
         name: request
         required: true
@@ -2271,17 +2850,17 @@ paths:
       - application/json
       responses:
         "200":
-          description: '성공: {\"msg\":\"ok\",\"idx\":5}'
+          description: msg, idx
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: JSON 파싱 실패, media 누락, 프로필 필드 부족
+          description: JSON/media 검증 실패, nick·birth·gender 부족
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -2292,16 +2871,29 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 스토리 생성 (미디어 URL + 본문 DB 저장)
+      summary: 스토리 생성
       tags:
       - Story
   /story/v01/cutout/cancel/{tid}:
     post:
       consumes:
       - application/json
-      description: JWT 인증 사용자가 특정 사용자(tid)에 대한 스토리 feed 숨김을 해제합니다(str_cutout.stat=0).
+      description: |-
+        JWT 본인이 대상(`tid`)에 대한 스토리 피드 숨김을 해제합니다 (`str_cutout.stat=0`).
+
+        **규칙**
+        - JWT uid = cutout 주체, path `tid` = 해제 대상
+
+        **처리** (`UnsetCutoutUser`)
+
+        **Request example**
+        - POST /story/v01/cutout/cancel/4033287471439576593
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","affected":1}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2317,20 +2909,19 @@ paths:
         "200":
           description: msg, affected
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.CutoutActionResp'
         "400":
           description: tid invalid
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: 서버 에러
+          description: str_cutout 갱신 실패
           schema:
             additionalProperties: true
             type: object
@@ -2338,14 +2929,22 @@ paths:
       - BearerAuth: []
       summary: 스토리 cutout 해제
       tags:
-      - Story
+      - Story_Cutout
   /story/v01/cutout/count:
     post:
       consumes:
       - application/json
-      description: JWT 인증 사용자의 활성 cutout(str_cutout.stat=1) 개수를 반환합니다.
+      description: |-
+        JWT 본인의 활성 cutout(`str_cutout.stat=1`) 개수를 반환합니다.
+
+        **Request example**
+        - POST /story/v01/cutout/count
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","count":3}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2356,15 +2955,14 @@ paths:
         "200":
           description: msg, count
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.CutoutCountResp'
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: 서버 에러
+          description: 개수 조회 실패
           schema:
             additionalProperties: true
             type: object
@@ -2372,16 +2970,681 @@ paths:
       - BearerAuth: []
       summary: 스토리 cutout 개수 조회
       tags:
-      - Story
+      - Story_Cutout
   /story/v01/cutout/list/{page}/{limit}:
     get:
       consumes:
       - application/json
-      description: JWT 인증 사용자의 활성 cutout 목록을 페이지네이션으로 조회합니다. list 항목은 CutoutUserItem(idx,
-        tid, stat, tnick, tgen, tbirth, tsp_intro, tarea, tthmb_pic, at_crt, at_upd)
-        형식입니다.
+      description: |-
+        JWT 본인의 활성 cutout(`str_cutout.stat=1`) 목록을 페이징 조회합니다.
+
+        **조회 규칙**
+        - JWT uid 기준, `at_upd DESC` 정렬
+        - `page`/`limit`은 path에서 `getPageAndLimit` 파싱 (빈 값이면 page=1, limit=20)
+
+        **응답 data**
+        - `msg`: `"ok"`
+        - `total_count`: 전체 활성 cutout 수
+        - `list`: `CutoutUserItem` 배열
+        (`idx`, `tid`, `stat`, `tnick`, `tgen`, `tbirth`, `age`, `tsp_intro`, `tarea`, `tthmb_pic`, `at_crt`, `at_upd`)
+
+        **Request example**
+        - GET /story/v01/cutout/list/1/10
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","total_count":1,"list":[{"idx":1,"tid":4033287471439576593,"stat":1,"tnick":"푸른 아름다운 양","tgen":1,"tbirth":"1991-12-18","age":34,"tsp_intro":"반가워요 큐피톡에서 만나요!","tarea":1,"tthmb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","at_crt":"2026-06-23T14:30:15Z","at_upd":"2026-06-23T14:30:15Z"}]}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 페이지 번호(1부터, 기본 1)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 20)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, total_count, list(CutoutUserItem[])
+          schema:
+            $ref: '#/definitions/protocol.CutoutListResp'
+        "400":
+          description: page/limit 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 목록 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 목록 조회
+      tags:
+      - Story_Cutout
+  /story/v01/cutout/set/{tid}:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        JWT 본인이 대상(`tid`)을 스토리 피드에서 숨깁니다. 서비스 전체 차단(`user_block`)과 별개입니다.
+
+        **규칙**
+        - JWT uid = cutout 주체, path `tid` = 숨길 대상
+        - 자기 자신 cutout 불가 (`self cutout is not allowed`)
+        - 대상 미존재/성별 파싱 실패 시 400
+
+        **처리**
+        - `GetUserInfoByUID(tid)`로 프로필 스냅샷 조회
+
+        **Request example**
+        - POST /story/v01/cutout/set/4033287471439576593
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","affected":1}}
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: cutout 대상 사용자 UID
+        in: path
+        name: tid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            $ref: '#/definitions/protocol.CutoutActionResp'
+        "400":
+          description: tid invalid / self cutout / target user not found / gender
+            invalid
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: str_cutout 저장 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 cutout 설정
+      tags:
+      - Story_Cutout
+  /story/v01/delpic:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        스토리 `str_img`에서 지정 슬롯을 제거하고 `str_imgbak`으로 이동한 뒤, 남은 슬롯을 `1..N`으로 재번호합니다.
+
+        **요청 body** (`DeleteStrPicReq`)
+        - `idx`: 스토리 인덱스 (문자열 숫자)
+        - `pic_idx`: 삭제할 미디어 슬롯 키 (`"1"`~`"5"`)
+
+        **처리**
+        1. `GetStrPicList`로 `str_img` / `str_imgbak` 조회
+        2. `pic_idx` 슬롯을 bak으로 복사
+        3. `ReIdxAfterDel`로 남은 슬롯 재인덱싱
+        4. `DeleteStrPic`으로 DB 갱신
+
+        **응답 data**: `{"msg":"ok","affected":N}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: idx, pic_idx
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.DeleteStrPicReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: JSON/idx/pic_idx 오류, 빈 목록, 슬롯 없음, str_img 포맷 오류
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 조회/직렬화/DB 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 미디어 슬롯 삭제
+      tags:
+      - Story
+  /story/v01/detail/{idx}/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        특정 스토리 idx를 기준으로 해당 작성자(tid)의 스토리를 페이징 조회합니다.
+
+        **조회 대상**
+        - `tid` 없음: JWT 본인 UID (`/detail/{idx}/{page}/{limit}`)
+        - `tid` 있음: 해당 사용자 UID (`/detail/{idx}/{page}/{limit}/{tid}`)
+
+        **조회 규칙**
+        - `uid = tid` 이고 `story.idx <= idx` 인 행을 `idx DESC`로 페이징
+        - 각 항목에 최신 댓글 최대 2개(`comment_list`)와 `cmt_count` 포함
+        - 조회 성공 시 요청 idx 스토리의 `qt_view`를 +1 (`UpdateStoryView`)
+
+        **응답 data**
+        - `total_count`: 해당 tid의 전체 스토리 수
+        - `story`: `StoryDetailResp` 배열
+        (`idx`, `uid`, `nick`, `body`, `stat`, `qt_good`, `qt_view`, `content_total`,
+        `str_img` 슬롯 맵, `at_create`, `cmt_count`, `comment_list`)
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"total_count":14,"story":[{"idx":15,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"E 둘다","stat":3,"qt_good":16,"qt_view":7,"content_total":3,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/.../public"},"2":{"type":"img","url":"https://imagedelivery.net/.../public"},"3":{"type":"vdo","url":"https://.../video.mp4","thumb":"https://imagedelivery.net/.../public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"comment_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","body":"comment","stat":1,"at_create":"2026-02-02T13:50:06Z"}]}]}}
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 기준 스토리 인덱스 (이 idx 이하부터 조회)
+        in: path
+        name: idx
+        required: true
+        type: integer
+      - description: 페이지 번호(1부터)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 4, 최대 100)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: total_count, story(StoryDetailResp[])
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: idx/page/limit/tid 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: tid 없을 때 JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 상세 조회 또는 조회수 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 상세 목록 조회 (본인/타인)
+      tags:
+      - Story
+  /story/v01/detail/{idx}/{page}/{limit}/{tid}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        특정 스토리 idx를 기준으로 해당 작성자(tid)의 스토리를 페이징 조회합니다.
+
+        **조회 대상**
+        - `tid` 없음: JWT 본인 UID (`/detail/{idx}/{page}/{limit}`)
+        - `tid` 있음: 해당 사용자 UID (`/detail/{idx}/{page}/{limit}/{tid}`)
+
+        **조회 규칙**
+        - `uid = tid` 이고 `story.idx <= idx` 인 행을 `idx DESC`로 페이징
+        - 각 항목에 최신 댓글 최대 2개(`comment_list`)와 `cmt_count` 포함
+        - 조회 성공 시 요청 idx 스토리의 `qt_view`를 +1 (`UpdateStoryView`)
+
+        **응답 data**
+        - `total_count`: 해당 tid의 전체 스토리 수
+        - `story`: `StoryDetailResp` 배열
+        (`idx`, `uid`, `nick`, `body`, `stat`, `qt_good`, `qt_view`, `content_total`,
+        `str_img` 슬롯 맵, `at_create`, `cmt_count`, `comment_list`)
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"total_count":14,"story":[{"idx":15,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"E 둘다","stat":3,"qt_good":16,"qt_view":7,"content_total":3,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/.../public"},"2":{"type":"img","url":"https://imagedelivery.net/.../public"},"3":{"type":"vdo","url":"https://.../video.mp4","thumb":"https://imagedelivery.net/.../public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"comment_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","body":"comment","stat":1,"at_create":"2026-02-02T13:50:06Z"}]}]}}
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 기준 스토리 인덱스 (이 idx 이하부터 조회)
+        in: path
+        name: idx
+        required: true
+        type: integer
+      - description: 페이지 번호(1부터)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 4, 최대 100)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      - description: 스토리 작성자 UID (없으면 JWT 본인)
+        in: path
+        name: tid
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: total_count, story(StoryDetailResp[])
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: idx/page/limit/tid 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: tid 없을 때 JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 상세 조회 또는 조회수 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 상세 목록 조회 (본인/타인)
+      tags:
+      - Story
+  /story/v01/follow/cancel/{tid}:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        JWT 본인(`follower`)이 대상(`tid`=`followee`)에 대한 팔로우를 비활성화합니다 (`stat=0`).
+
+        **규칙**
+        - `follower` = JWT uid, `followee` = path `tid`
+        - 자기 자신 언팔로우 불가 (`self unfollow is not allowed`)
+
+        **응답 data**: `{"msg":"ok","affected":N}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 언팔로우 대상 UID (followee)
+        in: path
+        name: tid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: tid 잘못된 값 또는 자기 자신 언팔로우
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 언팔로우 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 언팔로우 처리
+      tags:
+      - Story
+  /story/v01/follow/set/{tid}:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        JWT 본인(`follower`)이 대상(`tid`=`followee`)을 팔로우합니다. 신규 생성 또는 기존 행 재활성화(`stat=1`).
+
+        **규칙**
+        - `follower` = JWT uid, `followee` = path `tid`
+        - 자기 자신 팔로우 불가 (`self follow is not allowed`)
+        - 차단(block) 검사는 현재 비활성(주석 처리)
+
+        **응답 data**: `{"msg":"ok","affected":N}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 팔로우 대상 UID (followee)
+        in: path
+        name: tid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, affected
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: tid 잘못된 값 또는 자기 자신 팔로우
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 팔로우 저장 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 팔로우 설정
+      tags:
+      - Story
+  /story/v01/follower/list/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        JWT 본인을 followee로 하는 활성 팔로워(`user_follow.stat=1`) 목록을 페이징 조회합니다.
+
+        **조회 규칙**
+        - JWT uid = `followee_uid` (나를 팔로우한 사람들)
+        - `at_update DESC` 정렬
+        - `page`/`limit`은 path에서 읽고 빈 값이면 page=1, limit=20
+
+        **응답 data**
+        - `total_count`: 전체 팔로워 수
+        - `list`: `FollowUserItem` 배열 (`uid`, `nick`, `thumb_pic`, `at_update`)
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 페이지 번호(1부터, 기본 1)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 20)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: total_count, list(FollowUserItem[])
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: page/limit 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 팔로워 목록 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 팔로워 목록 조회
+      tags:
+      - Story
+  /story/v01/following/list/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        JWT 본인을 follower로 하는 활성 팔로잉(`user_follow.stat=1`) 목록을 페이징 조회합니다.
+
+        **조회 규칙**
+        - JWT uid = `follower_uid` (내가 팔로우한 사람들)
+        - `at_update DESC` 정렬
+
+        **응답 data**
+        - `total_count`: 전체 팔로잉 수
+        - `list`: `FollowUserItem` 배열 (`uid`, `nick`, `thumb_pic`, `at_update`)
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 페이지 번호(1부터, 기본 1)
+        in: path
+        name: page
+        required: true
+        type: integer
+      - description: 페이지 크기(기본 20)
+        in: path
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: total_count, list(FollowUserItem[])
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 팔로잉 목록 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 팔로잉 목록 조회
+      tags:
+      - Story
+  /story/v01/like/count/{idx}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        지정한 스토리(`idx`)의 현재 좋아요 수(`story.qt_good`)를 반환합니다.
+
+        **응답 data**: `{"msg":"ok","count":<qt_good>}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 조회할 스토리 인덱스
+        in: path
+        name: idx
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, count
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: idx 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 스토리 없음 또는 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 좋아요 수 조회
+      tags:
+      - Story
+  /story/v01/like/toggle:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        스토리 좋아요/취소를 토글하고 최신 좋아요 수를 반환합니다.
+
+        **요청 body** (`StoryLikeToggleReq`)
+        - `story_idx`: 스토리 인덱스 (문자열 숫자)
+        - `uid`: 좋아요를 누른 사용자 UID (문자열 숫자)
+
+        **처리** (`ToggleStoryLikeTx`)
+        - 차단(block) 검사는 현재 코드에서 비활성(주석 처리)
+
+        **응답 data**: `{"msg":"...","liked":true|false,"like_count":N}`
+        - `liked`: 토글 후 좋아요 여부
+        - `like_count`: 갱신된 `story.qt_good`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: story_idx, uid
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/protocol.StoryLikeToggleReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, liked, like_count
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: JSON/story_idx/uid 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 토글/카운트 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 좋아요 토글
+      tags:
+      - Story
+  /story/v01/list/{page}/{limit}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        페이지네이션으로 스토리 리스트를 최신순으로 조회합니다.
+
+        **조회 대상**
+        - `tid` 없음: JWT 본인 UID로 조회 (`/list/{page}/{limit}`)
+        - `tid` 있음: 해당 사용자 UID로 조회 (`/list/{page}/{limit}/{tid}`)
+
+        **응답 data**: `StoryListResp` 배열
+        - `idx`, `uid`, `nick`, `stat`, `cnt_count`, `cnt_url`, `cnt_type`, `cnt_thumb`, `at_create`
+        - 대표 미디어: `cnt_url`/`cnt_type`/`cnt_thumb` (전체 `str_img` 슬롯 맵은 포함하지 않음)
+
+        **stat**: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":[{"idx":15,"uid":403,"nick":"푸양","stat":1,"cnt_count":2,"cnt_url":"https://imag.net/.../public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-02T13:35:24Z"}]}
+      parameters:
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2400,17 +3663,17 @@ paths:
       - application/json
       responses:
         "200":
-          description: msg, total_count, list
+          description: 'data: StoryListResp 배열'
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: 잘못된 파라미터
+          description: page/limit/tid 잘못된 값
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: tid 없을 때 JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -2421,341 +3684,135 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 스토리 cutout 목록 조회
+      summary: 스토리 기본 목록 조회 (본인/타인)
       tags:
       - Story
-  /story/v01/cutout/set/{tid}:
-    post:
-      consumes:
-      - application/json
-      description: JWT 인증 사용자가 특정 사용자(tid)를 스토리 feed에서 숨김 처리합니다. 서비스 전체 차단(user_block)과
-        별개이며, 대상 프로필 스냅샷(tnick/tgen/tbirth/tsp_intro/tarea/tthmb_pic)을 str_cutout에
-        저장합니다. 자기 자신(tid=본인 uid) cutout은 불가합니다.
-      parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      - description: cutout 대상 사용자 UID
-        in: path
-        name: tid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: msg, affected
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: tid invalid / self cutout / target user not found
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증 실패
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 서버 에러
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: 스토리 cutout 설정
-      tags:
-      - Story
-  /story/v01/delpic:
-    post:
-      consumes:
-      - application/json
-      description: Delete a media slot from story str_img and move it to backup. Unified
-        format reindexes remaining slots 1..N.
-      parameters:
-      - description: Delete story picture request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/protocol.DeleteStrPicReq'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully deleted story picture
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request - Invalid parameters or empty picture list
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete a story picture
-      tags:
-      - Story
-  /story/v01/detail/{idx}:
-    get:
-      consumes:
-      - application/json
-      description: Retrieve detailed information of a specific story including comments
-      parameters:
-      - description: Story Index
-        in: path
-        name: idx
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved story detail - str_img is unified media
-            slot map
-          schema:
-            $ref: '#/definitions/protocol.RespDataHeader'
-        "400":
-          description: Bad request - invalid or missing idx
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "500":
-          description: Internal server error - failed to get story detail or comment
-            list
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Get story detail by story index
-      tags:
-      - Story
-  /story/v01/follow/cancel/{tid}:
-    post:
-      consumes:
-      - application/json
-      description: JWT 인증된 사용자가 지정 대상(tid) 유저에 대한 팔로우 관계를 비활성화(언팔로우)합니다. 자기 자신은 언팔로우할
-        수 없습니다.
-      parameters:
-      - description: 언팔로우할 대상 유저의 uid (followeeUid)
-        in: path
-        name: tid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 'msg: 성공 메시지, affected: 실제로 언팔로우 반영된 row 수'
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 잘못된 요청 파라미터 또는 자기자신 언팔로우 시도
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증되지 않은 사용자
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 내부 서버 에러
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 언팔로우 처리
-      tags:
-      - Story
-  /story/v01/follow/set/{tid}:
-    post:
-      consumes:
-      - application/json
-      description: JWT 인증된 사용자가 지정 대상(tid)의 팔로우를 생성하거나 다시 활성화합니다. 자기 자신은 팔로우할 수 없습니다.
-      parameters:
-      - description: 팔로우할 대상 유저의 uid (followeeUid)
-        in: path
-        name: tid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 'msg: 성공 메시지, affected: 실제 반영된 row count'
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 잘못된 요청 파라미터 또는 자기자신 팔로우 시도
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증되지 않은 사용자
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 내부 서버 에러
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 팔로우(팔로잉) 설정
-      tags:
-      - Story
-  /story/v01/follower/list:
+  /story/v01/list/{page}/{limit}/{tid}:
     get:
       consumes:
       - application/json
       description: |-
-        JWT 인증된 사용자의 팔로워 목록을 페이지네이션과 함께 조회합니다. 결과는 전체 팔로워 수와 팔로워 사용자 개별 정보(UID, Nick, ThumbPic, AtUpdate) 리스트로 반환됩니다.
-        요청 예시: GET /story/v01/follower/list/1/20 (Authorization: Bearer)
-        응답 예시: data.total_count, data.followers[]
+        페이지네이션으로 스토리 리스트를 최신순으로 조회합니다.
+
+        **조회 대상**
+        - `tid` 없음: JWT 본인 UID로 조회 (`/list/{page}/{limit}`)
+        - `tid` 있음: 해당 사용자 UID로 조회 (`/list/{page}/{limit}/{tid}`)
+
+        **응답 data**: `StoryListResp` 배열
+        - `idx`, `uid`, `nick`, `stat`, `cnt_count`, `cnt_url`, `cnt_type`, `cnt_thumb`, `at_create`
+        - 대표 미디어: `cnt_url`/`cnt_type`/`cnt_thumb` (전체 `str_img` 슬롯 맵은 포함하지 않음)
+
+        **stat**: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":[{"idx":15,"uid":403,"nick":"푸양","stat":1,"cnt_count":2,"cnt_url":"https://imag.net/.../public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-02T13:35:24Z"}]}
       parameters:
-      - description: '페이지 번호 (기본값: 1)'
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 페이지 번호(1부터)
         in: path
         name: page
+        required: true
         type: integer
-      - description: '페이지당 항목 개수 (기본값: 20)'
+      - description: 페이지 크기(기본 4, 최대 100)
         in: path
         name: limit
+        required: true
         type: integer
+      - description: 조회 대상 UID (없으면 JWT 본인)
+        in: path
+        name: tid
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: 'data: total_count(전체 팔로워 수), followers(팔로워 목록 배열). followers
-            예시: [{Uid, Nick, ThumbPic, AtUpdate}]'
+          description: 'data: StoryListResp 배열'
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: 잘못된 요청 파라미터
+          description: page/limit/tid 잘못된 값
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증되지 않은 사용자
+          description: tid 없을 때 JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: 내부 서버 에러
+          description: 서버 에러
           schema:
             additionalProperties: true
             type: object
       security:
       - BearerAuth: []
-      summary: 팔로워 목록 조회
+      summary: 스토리 기본 목록 조회 (본인/타인)
       tags:
       - Story
-  /story/v01/following/list/{page}/{limit}:
+  /story/v01/pcs/list/{page}/{limit}:
     get:
       consumes:
       - application/json
-      description: Retrieve following list by uid with pagination
+      description: |-
+        JWT 본인이 구매한 스토리 목록을 페이징 조회합니다.
+
+        **조회 규칙**
+        - `str_pcs.pcs_uid = JWT uid` 인 구매 기록과 `story`를 INNER JOIN
+        - `story.at_create DESC` 최신순
+        - 대표 미디어만 반환 (`cnt_url`/`cnt_type`/`cnt_thumb`, 전체 `str_img` 슬롯 맵 미포함)
+
+        **응답 data**
+        - `msg`: `"ok"`
+        - `total_count`: 구매·조인된 전체 건수
+        - `list`: `StoryListResp` 배열
+        (`idx`, `uid`, `nick`, `stat`, `cnt_count`, `cnt_url`, `cnt_type`, `cnt_thumb`, `at_create`)
       parameters:
-      - description: User ID
-        in: path
-        name: uid
+      - description: Bearer access token
+        in: header
+        name: Authorization
         required: true
         type: string
-      - description: Page number
+      - description: 페이지 번호(1부터)
         in: path
         name: page
         required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved following list
-          schema:
-            $ref: '#/definitions/protocol.RespDataHeader'
-        "400":
-          description: Bad request - invalid parameters
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: 팔로잉 목록 조회
-      tags:
-      - Story
-  /story/v01/like/toggle:
-    post:
-      consumes:
-      - application/json
-      description: Toggle like/unlike for a story and return latest like count
-      parameters:
-      - description: Story like toggle request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/protocol.StoryLikeToggleReq'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully toggled story like
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request - invalid parameters
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: Forbidden - blocked relation
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Toggle story like
-      tags:
-      - Story
-  /story/v01/list/{uid}:
-    get:
-      consumes:
-      - application/json
-      description: 디폴트, 최신순 스토리 리스트 출력
-      parameters:
-      - description: User ID
+        type: integer
+      - description: 페이지 크기(기본 4, 최대 100)
         in: path
-        name: uid
+        name: limit
         required: true
-        type: string
+        type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: Successfully retrieved story list - str_img is unified media
-            slot map
+          description: msg, total_count, list(StoryListResp[])
           schema:
-            $ref: '#/definitions/protocol.RespDataHeader'
+            additionalProperties: true
+            type: object
         "400":
-          description: Bad request - invalid or missing uid
+          description: page/limit 잘못된 값
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
         "500":
-          description: Internal server error - failed to get story list
+          description: 구매 목록 조회 실패
           schema:
-            $ref: '#/definitions/protocol.RespHeader'
-      summary: Get story list by user ID
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 구매한 스토리 목록 조회
       tags:
       - Story
   /story/v01/prf/assets:
@@ -2763,14 +3820,25 @@ paths:
       consumes:
       - application/json
       description: |-
-        JWT 인증 사용자 본인의 보유 화살(포인트), 캐시, DM 미읽음 쪽지 합계를 조회합니다.
+        JWT 본인의 보유 화살(포인트), 캐시, DM 미읽음 쪽지 합계를 조회합니다.
+
+        **처리**
+        - `GetUserAssetInfo(uid)` → `hold_point`, `hold_cash` (NULL이면 0)
+        - `GetAllUnreadForUser(uid)` 합산 → `msg_count` (Redis)
 
         **응답 data**
-        - `hold_point`: 보유 화살/포인트 (`user_info.hold_point`, NULL이면 0)
-        - `hold_cash`: 보유 캐시 (`user_info.hold_cash`, NULL이면 0)
-        - `msg_count`: 전체 DM 미읽음 쪽지 합계 (Redis)
+        - `hold_point`: 보유 화살/포인트
+        - `hold_cash`: 보유 캐시
+        - `msg_count`: 전체 DM 미읽음 쪽지 합계
+
+        **Request example**
+        - GET /story/v01/prf/assets
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"hold_point":0,"hold_cash":0,"msg_count":3}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2779,12 +3847,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: data.hold_point, data.hold_cash, data.msg_count
+          description: hold_point, hold_cash, msg_count
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfAssetsResp'
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -2798,60 +3865,33 @@ paths:
       summary: 스토리 프로필 자산 조회
       tags:
       - Profile
-  /story/v01/prf/info:
-    get:
-      consumes:
-      - application/json
-      description: |-
-        JWT 인증 후 본인 또는 타인의 프로필 정보와 팔로워 수를 조회합니다.
-
-        **tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용. 값이 있으면 해당 사용자 프로필 조회.
-        **응답 data**: `prf_Info`(protocol.PrfInfo), `flw_cnt`(팔로워 수)
-      parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: data.prf_Info, data.flw_cnt
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: tid 형식 오류
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증 실패
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 프로필/팔로워 조회 실패
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: 스토리 프로필 정보 조회
-      tags:
-      - Profile
   /story/v01/prf/info/{tid}:
     get:
       consumes:
       - application/json
       description: |-
-        JWT 인증 후 본인 또는 타인의 프로필 정보와 팔로워 수를 조회합니다.
+        JWT 인증 후 대상 사용자 프로필(`prf_info`)과 팔로워 수를 조회합니다.
 
-        **tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용. 값이 있으면 해당 사용자 프로필 조회.
-        **응답 data**: `prf_Info`(protocol.PrfInfo), `flw_cnt`(팔로워 수)
+        **조회 대상**
+        - path `tid`: 조회할 사용자 UID (본인 조회 시에도 본인 UID 전달)
+        - 핸들러상 `tid`가 비어 있으면 JWT 본인 UID 사용
+
+        **처리**
+        - `GetPrfInfo(tid)` → `prf_Info`
+        - `GetFollowerCount(tid)` → `flw_cnt`
+
+        **응답 data**
+        - `prf_Info`: `PrfInfo` (`uid`, `nick`, `gender`, `birth`, `age`, `area`, `intro`, `main_pic`)
+        - `flw_cnt`: 팔로워 수
+
+        **Request example**
+        - GET /story/v01/prf/info/8697414060736839837
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"flw_cnt":0,"prf_Info":{"uid":8697414060736839837,"nick":"건강한 꼬마 오렌지","gender":"1","birth":"1990-01-01T00:00:00Z","age":"-2","area":"1","intro":"반가워요 큐피톡에서 만나요!","main_pic":""}}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2865,17 +3905,16 @@ paths:
       - application/json
       responses:
         "200":
-          description: data.prf_Info, data.flw_cnt
+          description: prf_Info, flw_cnt
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfInfoResp'
         "400":
           description: tid 형식 오류
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -2896,11 +3935,20 @@ paths:
       description: |-
         JWT 인증 사용자의 `prf_info.sub_pic{slot}`를 삭제하고, 뒤 슬롯을 앞으로 당깁니다.
 
-        **idx**(path): 삭제할 슬롯 번호 1~5. 예: 2 → sub_pic2 삭제 후 sub_pic3→2, sub_pic4→3, sub_pic5→4, sub_pic5=NULL
-        슬롯 JSON은 `{"url","stat"}`만 저장(idx 없음). 순번은 컬럼 위치.
-        **응답**: `SendResponse` — `desc=success` (data 필드 없음)
+        **idx**(path): 삭제할 슬롯 번호 1~5
+        - 예: `2` → sub_pic2 삭제 후 sub_pic3→2, sub_pic4→3, sub_pic5→4, sub_pic5=NULL
+        - 슬롯 JSON은 `{"url","stat"}`만 저장(idx 없음). 순번은 컬럼 위치
+
+        **응답**: `SendResponse` → `RespHeader` (`desc=success`, data 필드 없음)
+
+        **Request example**
+        - POST /story/v01/prf/pic/delete/2
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","desc":"success"}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2923,12 +3971,12 @@ paths:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: DB 삭제 실패
+          description: DB 삭제 실패 (슬롯 범위 포함)
           schema:
             additionalProperties: true
             type: object
@@ -2944,13 +3992,24 @@ paths:
       description: |-
         JWT 인증 후 프로필 사진(`prf_info.sub_pic1`~`sub_pic5`) 목록을 조회합니다.
 
-        **조회 대상**: 현재 라우트는 `/prf/pic/list` (본인 JWT UID). 코드상 `tid` path가 있으면 해당 UID 조회.
-        **응답 data**: 비어 있지 않은 슬롯만 포함한 맵
-        `{"1":{"url":"...","stat":3},"2":{"url":"...","stat":3}}` (키=`sub_pic` 번호)
+        **조회 대상**
+        - 등록 라우트: `GET /prf/pic/list` → JWT 본인 UID
+        - 핸들러상 path `tid`가 있으면 해당 UID 조회 (라우트 미등록 시 본인만)
+
+        **응답 data**: 비어 있지 않은 슬롯만 포함한 `PrfPicMap`
+        - 키: `"1"`~`"5"` (`sub_pic` 컬럼 번호)
+        - 값: `PrfPicInfo` (`url`, `stat`)
 
         **PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제
+
+        **Request example**
+        - GET /story/v01/prf/pic/list
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"1":{"url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","stat":3},"2":{"url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","stat":3}}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -2961,61 +4020,14 @@ paths:
         "200":
           description: 'data: PrfPicMap'
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfPicListResp'
         "400":
           description: tid 형식 오류
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 프로필 사진 조회 실패
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: 프로필 사진 목록 조회
-      tags:
-      - Profile
-  /story/v01/prf/pic/list/{tid}:
-    get:
-      consumes:
-      - application/json
-      description: |-
-        JWT 인증 후 프로필 사진(`prf_info.sub_pic1`~`sub_pic5`) 목록을 조회합니다.
-
-        **조회 대상**: 현재 라우트는 `/prf/pic/list` (본인 JWT UID). 코드상 `tid` path가 있으면 해당 UID 조회.
-        **응답 data**: 비어 있지 않은 슬롯만 포함한 맵
-        `{"1":{"url":"...","stat":3},"2":{"url":"...","stat":3}}` (키=`sub_pic` 번호)
-
-        **PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제
-      parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 'data: PrfPicMap'
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: tid 형식 오류
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3034,13 +4046,28 @@ paths:
       consumes:
       - application/json
       description: |-
-        승인 대기 목록(`GetPrfPicWaitingList`)의 특정 항목을 승인합니다. `prf_info.sub_pic{slot}` JSON의 `stat`을 **3(승인)** 으로 변경합니다.
+        승인 대기 목록(`GetPrfPicWaitingList`)의 특정 항목을 승인합니다.
+        `prf_info.sub_pic{slot}` JSON의 `stat`을 **3(승인)** 으로 변경합니다.
 
-        **요청 body**: `uid`(대상 사용자), `slot`(1~5, sub_pic 슬롯)
-        **조건**: 해당 슬롯의 현재 stat이 1 또는 2일 때만 갱신
-        **응답 data**: `msg`, `affected` (0이면 대상 없음/이미 처리됨)
+        **요청 body** (`SetPrfPicStatReq`)
+        - `uid`: 대상 사용자 UID (필수, 0 불가)
+        - `slot`: sub_pic 슬롯 1~5
+
+        **조건**: 해당 슬롯의 현재 `stat`이 1 또는 2일 때만 갱신
+
+        **응답 data** (`SetPrfPicStatData`)
+        - `msg`: `"ok"`
+        - `affected`: 갱신 행 수 (0이면 대상 없음/이미 처리됨)
+
+        **Request example**
+        - POST /story/v01/prf/pic/stat
+        - Header: Authorization: Bearer {access_token}
+        - Body: {"uid":8697414060736839837,"slot":1}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","affected":1}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -3055,17 +4082,16 @@ paths:
       - application/json
       responses:
         "200":
-          description: msg, affected
+          description: data.msg, data.affected
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.SetPrfPicStatResp'
         "400":
-          description: JSON/파라미터 오류
+          description: JSON/uid/slot 오류
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3086,21 +4112,32 @@ paths:
       description: |-
         JWT 인증 사용자의 프로필 사진을 Cloudflare Images에 업로드하고 `prf_info.sub_pic1~5`에 저장합니다.
 
+        **미들웨어**: `ValidateFileUpload(5, 5)` — `files` 최대 5개, 이미지 ≤5MB. 이미지 전용(`thbnl` 첨부 시 400)
+
         **요청 (multipart/form-data)**
-        - `files`: 신규 이미지 (JPG/PNG/GIF/WEBP, 각 ≤5MB, 최대 5개). **thbnl 금지**(이미지 전용).
-        - `urls`: 유지할 기존 사진 URL JSON 배열 문자열. 신규만이면 `[]`.
+        - `files`: 신규 이미지 (JPG/PNG/GIF/WEBP). 업로드 순서가 슬롯에 반영
+        - `urls`: 유지할 기존 사진 URL JSON 배열 문자열. 신규만이면 `[]` (생략 시 `[]`)
 
         **처리 순서**
-        1. `urls` 기존 URL을 앞에서부터 채움 (stat=3 승인)
-        2. `files` 신규 업로드 URL을 이어 붙임 (stat=1 요청중)
-        3. 합계 최대 5장. 순차적으로 `sub_pic1`~`sub_picN`에 `{"url","stat"}` JSON 저장 (idx 없음)
+        1. `urls` 기존 URL을 앞에서부터 채움 (`stat=3` 승인)
+        2. `files` 신규 업로드 URL을 이어 붙임 (`stat=1` 요청중)
+        3. 합계 최대 5장 → `sub_pic1`~`sub_picN`에 `{"url","stat"}` JSON 저장 (idx 없음, 나머지 슬롯 NULL)
 
         **PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제
-        "stat" Enums(1(요청중),2(승인대기),3(승인),4(거절/삭제)) default(1)
 
-        **응답 data**: `msg`, `pics`([]PrfPicInfo — url/stat만, 배열 순서=슬롯)
+        **응답 data**
+        - `msg`: `"ok"`
+        - `pics`: `[]PrfPicInfo` (url/stat만, 배열 순서=슬롯 1..N)
+
+        **Request example**
+        - POST /story/v01/prf/pic/upload
+        - Header: Authorization: Bearer {access_token}
+        - multipart: files=@a.jpg, files=@b.jpg, urls=["https://imagedelivery.net/.../public"]
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","pics":[{"url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public","stat":3},{"url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","stat":1}]}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -3120,15 +4157,14 @@ paths:
         "200":
           description: data.msg, data.pics
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfPicUploadResp'
         "400":
-          description: 파일 없음, urls JSON 오류, 저장할 사진 없음
+          description: 파일 없음, urls JSON 오류, 저장할 사진 없음, thbnl 첨부
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3149,12 +4185,25 @@ paths:
       description: |-
         `prf_info.sub_pic1`~`sub_pic5` JSON 중 `stat`이 1(요청중) 또는 2(승인대기)인 항목을 전체 사용자 대상으로 페이징 조회합니다.
 
-        **응답 data**
-        - `msg`: success
+        **path**
+        - `page`: 페이지 번호 (1부터, `getPageAndLimit`)
+        - `limit`: 페이지 크기 (1~100)
+
+        **응답 data** (`PrfPicWaitingListData`)
+        - `msg`: `"ok"`
         - `total_count`: 대기 항목 전체 개수
-        - `list`: []PrfPicWaitingItem (uid, nick, slot, url, stat) — slot=sub_pic 컬럼 번호
+        - `list`: `[]PrfPicWaitingItem` (`uid`, `nick`, `slot`, `url`, `stat`) — `slot`=sub_pic 컬럼 번호
+
+        **PrfPicWaitingItem.stat**: 1=요청중, 2=승인대기
+
+        **Request example**
+        - GET /story/v01/prf/pic/waiting/1/20
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok","total_count":2,"list":[{"uid":8697414060736839837,"nick":"건강한 꼬마 오렌지","slot":1,"url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","stat":1}]}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -3173,17 +4222,16 @@ paths:
       - application/json
       responses:
         "200":
-          description: msg, total_count, list
+          description: data.msg, total_count, list
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfPicWaitingListResp'
         "400":
           description: page/limit 오류
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3204,19 +4252,26 @@ paths:
       description: |-
         JWT 인증 사용자의 `prf_info.main_pic`을 설정하거나 삭제합니다.
 
-        **url path**
-        - 값이 있으면 해당 URL을 대표사진으로 저장
+        **url**(path)
+        - 값이 있으면 해당 URL을 대표사진으로 저장 (`IFNULL` → 빈 문자열 허용)
         - 비어 있으면 대표사진 삭제(`main_pic` 빈 문자열)
-        - URL에 `/`가 포함되면 path-escape 필요 (예: `url.PathEscape`)
+        - URL에 `/`가 포함되면 path-escape 필수 (예: `url.PathEscape`)
 
-        **응답 data**: `{"msg":"success"}`
+        **응답 data**: `{"msg":"ok"}`
+
+        **Request example (설정)**
+        - POST /story/v01/prf/set/mainpic/https%3A%2F%2Fimagedelivery.net%2FbhnuJ7hC7hq1zO__1yxVLg%2F5bca857f-75b1-4548-af93-ffa9fdd05600%2Fpublic
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok"}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
         type: string
-      - description: 대표사진 URL (삭제 시 빈 값 또는 placeholder)
+      - description: 대표사진 URL (PathEscape). 삭제 시 빈 값
         in: path
         name: url
         required: true
@@ -3225,12 +4280,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: data.msg=success
+          description: data.msg=ok
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfUpdResp'
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3244,64 +4298,29 @@ paths:
       summary: 프로필 대표사진 설정/삭제
       tags:
       - Profile
-  /story/v01/prf/story/lists:
-    get:
-      consumes:
-      - application/json
-      description: |-
-        JWT 인증 후 본인 또는 타인의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.
-
-        **tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용.
-        **응답 data**
-        - `str_imgs`: 이미지 스토리 대표 URL 맵 (key=story idx, value=URL)
-        - `str_thmbls`: 동영상 스토리 썸네일 URL 맵 (key=story idx, value=thumb URL)
-      parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: data.str_imgs, data.str_thmbls
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: tid 형식 오류
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 인증 실패
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 스토리 목록 조회 실패
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: 프로필 최근 스토리 대표 이미지 목록
-      tags:
-      - Profile
   /story/v01/prf/story/lists/{tid}:
     get:
       consumes:
       - application/json
       description: |-
-        JWT 인증 후 본인 또는 타인의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.
+        JWT 인증 후 대상 UID의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.
 
-        **tid**: 조회 대상 UID. 비어 있으면 JWT 본인 UID 사용.
-        **응답 data**
+        **조회 대상**
+        - 등록 라우트: `GET /prf/story/lists/:tid` → path `tid` UID
+        - 핸들러상 `tid`가 비어 있으면 JWT 본인 UID (라우트는 `:tid` 필수)
+
+        **응답 data** (`PrfStoryListsData`)
         - `str_imgs`: 이미지 스토리 대표 URL 맵 (key=story idx, value=URL)
         - `str_thmbls`: 동영상 스토리 썸네일 URL 맵 (key=story idx, value=thumb URL)
+
+        **Request example**
+        - GET /story/v01/prf/story/lists/8697414060736839837
+        - Header: Authorization: Bearer {access_token}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"str_imgs":{"4":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public","5":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e7b2b58b-a7ec-49a1-5e6d-175e42609b00/public"},"str_thmbls":{"11":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -3315,17 +4334,16 @@ paths:
       - application/json
       responses:
         "200":
-          description: data.str_imgs, data.str_thmbls
+          description: 'data: str_imgs, str_thmbls'
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfStoryListsResp'
         "400":
           description: tid 형식 오류
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3347,13 +4365,22 @@ paths:
         JWT 인증 사용자의 `prf_info`를 부분 수정합니다. UID는 JWT에서 강제 설정합니다.
 
         **요청 body** (`protocol.PrfInfo`): 값이 있는 필드만 UPDATE (빈 문자열은 무시)
-        - `nick`, `gender`, `age`, `area`, `intro`
-        - `uid` / `birth` / `main_pic` 는 본 API에서 사용하지 않음 (대표사진은 `/prf/set/mainpic`)
-        - `area`는 지역명 문자열 → 서버에서 area code로 변환
+        - 반영 필드: `nick`, `gender`, `age`, `area`, `intro`
+        - 미사용: `uid`(JWT 강제), `birth`, `main_pic` (대표사진은 `/prf/set/mainpic`)
+        - `area`: 지역명 문자열 → 서버에서 area code로 변환 (`GetAreaCode`)
+        - 모든 반영 필드가 비어 있으면 DB UPDATE 없이 성공 응답
 
-        **응답 data**: `{"msg":"success"}`
+        **응답 data**: `{"msg":"ok"}`
+
+        **Request example**
+        - POST /story/v01/prf/upd
+        - Header: Authorization: Bearer {access_token}
+        - Body: {"nick":"prf_test_nick","intro":"프로필 소개 — automated prf test","area":"서울"}
+
+        **Response example**
+        {"result":0,"resultString":"Success","data":{"msg":"ok"}}
       parameters:
-      - description: 'Bearer access token. Example: Bearer {access_token}'
+      - description: Bearer access token
         in: header
         name: Authorization
         required: true
@@ -3368,17 +4395,16 @@ paths:
       - application/json
       responses:
         "200":
-          description: data.msg=success
+          description: data.msg=ok
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/protocol.PrfUpdResp'
         "400":
           description: JSON 바인딩 실패
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
@@ -3396,9 +4422,21 @@ paths:
     post:
       consumes:
       - application/json
-      description: Update the body content of a story
+      description: |-
+        지정한 스토리(`idx`)의 본문(`body`)을 갱신합니다.
+
+        **요청 body** (`UpdateStrBodyReq`)
+        - `idx`: 스토리 인덱스 (문자열 숫자)
+        - `body`: 수정할 본문 (빈 문자열 불가, DB 컬럼 최대 512자)
+
+        **응답 data**: `{"msg":"ok","affected":N}`
       parameters:
-      - description: Update story body request
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: idx, body
         in: body
         name: request
         required: true
@@ -3408,31 +4446,50 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully updated story body
+          description: msg, affected
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: Bad request - Invalid parameters
+          description: JSON/idx/body 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal server error
+          description: 본문 갱신 실패
           schema:
             additionalProperties: true
             type: object
-      summary: Update story body
+      security:
+      - BearerAuth: []
+      summary: 스토리 본문 수정
       tags:
       - Story
   /story/v01/updstat:
     post:
       consumes:
       - application/json
-      description: Update the status of a story
+      description: |-
+        지정한 스토리(`idx`)의 `stat`을 갱신합니다.
+
+        **요청 body** (`UpdateStrStatReq`)
+        - `idx`: 스토리 인덱스 (문자열 숫자)
+        - `stat`: 상태 코드 (문자열 숫자)
+        0=public, 1=private(팔로우공개), 2=limit(유료공개), 3=rsv, 4=del
+
+        **응답 data**: `{"msg":"ok","affected":N}`
       parameters:
-      - description: 'Update story status request stat=0 : del, stat=1 : pub, stat=2
-          : private, stat=3 : limit, stat=4 :resv'
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: idx, stat
         in: body
         name: request
         required: true
@@ -3442,21 +4499,28 @@ paths:
       - application/json
       responses:
         "200":
-          description: Successfully updated story stat
+          description: msg, affected
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: Bad request - Invalid parameters
+          description: JSON/idx/stat 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal server error
+          description: 상태 갱신 실패
           schema:
             additionalProperties: true
             type: object
-      summary: Update story status
+      security:
+      - BearerAuth: []
+      summary: 스토리 상태 변경
       tags:
       - Story
   /story/v01/upload:
@@ -3464,24 +4528,38 @@ paths:
       consumes:
       - multipart/form-data
       description: |-
-        JWT 인증 후 스토리용 미디어만 Cloudflare에 업로드합니다. DB 저장 없이 **통합 media** URL만 반환합니다.
+        JWT 인증 후 스토리용 미디어를 Cloudflare에 업로드하고, DB 저장 없이 통합 `media` 슬롯 맵만 반환합니다.
 
-        **용량**: 이미지·썸네일 각 5MB 이하, 동영상(MP4) 각 100MB 이하, files 최대 5개.
+        **미들웨어**: `ValidateFileUpload(5, 5)` — `files` 최대 5개, 이미지·썸네일 ≤5MB, MP4 ≤100MB
 
-        **응답 data.media**: 업로드 순서 슬롯 맵
+        **요청 (multipart/form-data)**
+        - `files`: 이미지(JPG/PNG/GIF/WEBP) 또는 MP4, 업로드 순서가 슬롯 `1..N`
+        - `thbnl`: 동영상 썸네일 이미지. MP4마다 1장 필수(개수·순서 1:1)
+
+        **처리**
+        - 동영상 포함: Stream/Images 혼합 업로드 + `thbnl` 업로드
+        - 이미지만: Images 업로드
+        - `BuildStrImgForDB` → `LoadStoryStrImg`로 정규화된 media 응답 (최대 5슬롯)
+
+        **응답 data**
+        - `msg`: `"ok"`
+        - `media`: `StoryStrImg` 슬롯 맵
         `{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb":"..."}}`
-        - `type`: `img` | `vdo`
-        - `url`: 본편 URL
-        - `thumb`: 동영상 썸네일 (vdo만)
+        - `type`: `img` | `vdo` / `url`: 본편 / `thumb`: vdo만
 
-        **동영상 포함**: `files`의 MP4마다 `thbnl` 썸네일 1장 필수(순서 1:1).
+        **다음 단계**: 응답 `media`를 `POST /story/v01/create` body에 넣어 스토리 생성
       parameters:
-      - description: 미디어 (이미지 JPG/PNG/GIF/WEBP ≤5MB 또는 MP4 ≤100MB, 최대 5개)
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 미디어 (이미지 ≤5MB 또는 MP4 ≤100MB, 최대 5개)
         in: formData
         name: files
         required: true
         type: file
-      - description: 동영상 썸네일 (이미지 ≤5MB). 동영상 있을 때만 필수, 개수·순서 1:1
+      - description: 동영상 썸네일 (이미지 ≤5MB). 동영상마다 1장 필수
         in: formData
         name: thbnl
         type: file
@@ -3489,28 +4567,126 @@ paths:
       - application/json
       responses:
         "200":
-          description: '{\"msg\":\"ok\",\"media\":{...}}'
+          description: msg, media(StoryStrImg)
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: 파일 없음, 용량 초과, thbnl 불일치 등
+          description: 파일 없음, thbnl 부족, media 검증 실패
           schema:
             additionalProperties: true
             type: object
         "401":
-          description: 인증 실패
+          description: JWT 인증 실패
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Cloudflare 업로드 실패
+          description: Cloudflare 업로드 또는 media 구성 실패
           schema:
             additionalProperties: true
             type: object
       security:
       - BearerAuth: []
-      summary: 스토리 미디어 업로드 (Cloudflare Images / Stream)
+      summary: 스토리 미디어 업로드 (Cloudflare)
+      tags:
+      - Story
+  /story/v01/view/count/{idx}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        지정한 스토리(`idx`)의 현재 조회수(`story.qt_view`)를 반환합니다.
+
+        **응답 data**: `{"msg":"ok","count":<qt_view>}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 조회할 스토리 인덱스
+        in: path
+        name: idx
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg, count
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: idx 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 스토리 없음 또는 조회 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 조회수 조회
+      tags:
+      - Story
+  /story/v01/view/update/{idx}:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        지정한 스토리(`idx`)의 `qt_view`를 +1 합니다.
+
+        **처리**
+        - 대상 행이 없으면 500 (`story not found`)
+        - 응답에는 증가 후 조회수 값을 포함하지 않음 (`msg`만 반환)
+
+        **응답 data**: `{"msg":"ok"}`
+      parameters:
+      - description: Bearer access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 조회수를 올릴 스토리 인덱스
+        in: path
+        name: idx
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: msg
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: idx 잘못된 값
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: JWT 인증 실패
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 스토리 없음 또는 조회수 갱신 실패
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 스토리 조회수 증가
       tags:
       - Story
   /user/v01/getset/{uid}:

@@ -14,9 +14,9 @@ func TestParseStoryMedia_Unified(t *testing.T) {
 	  "2": {"type": "vdo", "url": "https://customer-xxx.cloudflarestream.com/abc/manifest/video.m3u8", "thumb": "https://imagedelivery.net/.../thumb2/public"},
 	  "3": {"type": "img", "url": "https://imagedelivery.net/.../pic3/public"}
 	}`
-	media, err := ParseStoryMedia(raw)
-	if err != nil {
-		t.Fatalf("ParseStoryMedia: %v", err)
+	var media ptc.StoryStrImg
+	if err := json.Unmarshal([]byte(raw), &media); err != nil {
+		t.Fatalf("invalid media JSON: %v", err)
 	}
 	if media["1"].Type != ptc.StoryMediaTypeImg || media["2"].Thumb == "" || media["3"].URL == "" {
 		t.Fatalf("unexpected media: %+v", media)
@@ -28,7 +28,8 @@ func TestParseStoryMedia_Unified(t *testing.T) {
 
 func TestParseStoryMedia_RejectsLegacyFlat(t *testing.T) {
 	raw := `{"1":"https://v.mp4","thumb1":"https://t/public"}`
-	if _, err := ParseStoryMedia(raw); err == nil {
+	var out ptc.StoryStrImg
+	if err := json.Unmarshal([]byte(raw), &out); err == nil {
 		t.Fatal("expected error for legacy flat format")
 	}
 }
@@ -39,7 +40,7 @@ func TestGetFirstPicUrl_VdoUsesThumb(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFirstPicUrl: %v", err)
 	}
-	if kind != 1 || url != "https://thumb/public" {
+	if kind != 1 || url.Thumb != "https://thumb/public" {
 		t.Fatalf("want thumb url kind=1, got %q kind=%d", url, kind)
 	}
 }
@@ -56,7 +57,10 @@ func TestBuildStrImgForDB(t *testing.T) {
 	if mtype != 2 {
 		t.Fatalf("expected mtype=2, got %d", mtype)
 	}
-	out, err := ParseStoryMedia(string(raw))
+	var out ptc.StoryStrImg
+	if err := json.Unmarshal([]byte(raw), &media); err != nil {
+		t.Fatalf("invalid media JSON: %v", err)
+	}
 	if err != nil {
 		t.Fatalf("ParseStoryMedia: %v", err)
 	}
@@ -85,7 +89,7 @@ func TestValidateStoryMedia_MaxSlots(t *testing.T) {
 	for i := 1; i <= MaxStoryMediaSlots+1; i++ {
 		media[strconv.Itoa(i)] = ptc.StoryMediaItem{Type: ptc.StoryMediaTypeImg, URL: "https://a/" + strconv.Itoa(i)}
 	}
-	if err := ValidateStoryMedia(media); err == nil {
+	if _, err := ValidateStoryMedia(media); err == nil {
 		t.Fatal("expected error when media exceeds max slots")
 	}
 
@@ -93,7 +97,7 @@ func TestValidateStoryMedia_MaxSlots(t *testing.T) {
 	for i := 1; i <= MaxStoryMediaSlots; i++ {
 		okMedia[strconv.Itoa(i)] = ptc.StoryMediaItem{Type: ptc.StoryMediaTypeImg, URL: "https://a/" + strconv.Itoa(i)}
 	}
-	if err := ValidateStoryMedia(okMedia); err != nil {
+	if _, err := ValidateStoryMedia(okMedia); err != nil {
 		t.Fatalf("5 slots should pass: %v", err)
 	}
 }
@@ -104,7 +108,7 @@ func TestReindexStoryMediaAfterDelete(t *testing.T) {
 		"2": {Type: ptc.StoryMediaTypeVdo, URL: "b", Thumb: "tb"},
 		"3": {Type: ptc.StoryMediaTypeImg, URL: "c"},
 	}
-	out := ReindexStoryMediaAfterDelete(media, "2")
+	out := ReIdxAfterDel(media, "2")
 	if len(out) != 2 || out["1"].URL != "a" || out["2"].URL != "c" {
 		t.Fatalf("reindex failed: %+v", out)
 	}

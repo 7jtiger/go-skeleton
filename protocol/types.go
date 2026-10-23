@@ -130,18 +130,58 @@ type CallResponse struct {
 }
 
 type CutoutUserItem struct {
-	Idx      int       `json:"idx"`
-	Tid      uint64    `json:"tid"`
-	Stat     int       `json:"stat"`
-	Tnick    string    `json:"tnick"`
-	Tgen     int       `json:"tgen"`
-	Tbirth   string    `json:"tbirth"`
-	Age      int       `json:"age"`
-	TspIntro string    `json:"tsp_intro"`
-	Tarea    int       `json:"tarea"`
-	TthmbPic string    `json:"tthmb_pic"`
-	AtCreate time.Time `json:"at_crt"`
-	AtUpdate time.Time `json:"at_upd"`
+	Idx      int       `json:"idx" example:"12"`
+	Tid      uint64    `json:"tid" example:"4033287471439576593"`
+	Stat     int       `json:"stat" example:"1"`
+	Tnick    string    `json:"tnick" example:"푸른 아름다운 양"`
+	Tgen     int       `json:"tgen" example:"1"`
+	Tbirth   string    `json:"tbirth" example:"1991-12-18"`
+	Age      int       `json:"age" example:"34"`
+	TspIntro string    `json:"tsp_intro" example:"반가워요"`
+	Tarea    int       `json:"tarea" example:"1"`
+	TthmbPic string    `json:"tthmb_pic" example:"https://i.ibb.co/99MhfMXt/icon-male-03.webp"`
+	AtCreate time.Time `json:"at_crt" example:"2026-06-23T14:30:15Z"`
+	AtUpdate time.Time `json:"at_upd" example:"2026-06-23T14:30:15Z"`
+}
+
+// CutoutActionData is set/cancel cutout response payload (data field).
+type CutoutActionData struct {
+	Msg      string `json:"msg" example:"success"`
+	Affected int64  `json:"affected" example:"1"`
+}
+
+// CutoutActionResp is full API envelope for cutout set/cancel Swagger (@Success).
+type CutoutActionResp struct {
+	Result       int              `json:"result" example:"0"`
+	ResultString string           `json:"resultString" example:"Success"`
+	Data         CutoutActionData `json:"data"`
+}
+
+// CutoutCountData is GetCutoutCount response payload (data field).
+type CutoutCountData struct {
+	Msg   string `json:"msg" example:"success"`
+	Count int64  `json:"count" example:"3"`
+}
+
+// CutoutCountResp is full API envelope for GetCutoutCount Swagger (@Success).
+type CutoutCountResp struct {
+	Result       int             `json:"result" example:"0"`
+	ResultString string          `json:"resultString" example:"Success"`
+	Data         CutoutCountData `json:"data"`
+}
+
+// CutoutListData is GetCutoutList response payload (data field).
+type CutoutListData struct {
+	Msg        string           `json:"msg" example:"success"`
+	TotalCount int              `json:"total_count" example:"1"`
+	List       []CutoutUserItem `json:"list"`
+}
+
+// CutoutListResp is full API envelope for GetCutoutList Swagger (@Success).
+type CutoutListResp struct {
+	Result       int            `json:"result" example:"0"`
+	ResultString string         `json:"resultString" example:"Success"`
+	Data         CutoutListData `json:"data"`
 }
 
 func CvtParamAtoi(param string, ty int) int {

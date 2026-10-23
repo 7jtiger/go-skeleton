@@ -108,27 +108,45 @@
 - `GET /mission/v01/detail/:id`: Endpoint to retrieve specific mission details
 
 ### story/v01 - Story Feature (Security Headers Applied)
+- `GET /story/v01/prf/info/:tid`: 프로필 + 팔로워 수 (`PrfInfoResp`: `prf_Info`, `flw_cnt`)
+- `GET /story/v01/prf/assets`: JWT 본인 자산 (화살/캐시/쪽지, `PrfAssetsResp`)
+- `GET /story/v01/prf/pic/list`: JWT 본인 프로필 사진 슬롯 맵 (`PrfPicListResp`)
+- `GET /story/v01/prf/story/lists/:tid`: 대상 UID 최근 스토리 대표 미디어 (`PrfStoryListsResp`)
+- `POST /story/v01/prf/upd`: JWT 본인 프로필 부분 수정 (`PrfUpdResp`)
+- `POST /story/v01/prf/set/mainpic/:url`: 대표사진 설정/삭제 (`PrfUpdResp`, URL PathEscape)
+- `POST /story/v01/prf/pic/upload`: 프로필 사진 업로드 (`ValidateFileUpload(5,5)`, `PrfPicUploadResp`)
+- `POST /story/v01/prf/pic/delete/:idx`: 프로필 사진 슬롯 삭제+shift (`RespHeader`)
+- `GET /story/v01/prf/pic/waiting/:page/:limit`: 승인 대기 프로필 사진 목록 (`PrfPicWaitingListResp`)
+- `POST /story/v01/prf/pic/stat`: 프로필 사진 승인 (`SetPrfPicStatResp`)
 - `GET /story/v01/home/:id`: Endpoint to retrieve user's story home (placeholder)
-- `GET /story/v01/list/:uid`: Endpoint to retrieve user's public story list (stat=1 or 0)
-- `GET /story/v01/detail/:idx`: Endpoint to retrieve specific story details with comments
+- `GET /story/v01/list/:page/:limit`: 본인 스토리 기본 목록 (JWT UID, `StoryListResp`)
+- `GET /story/v01/list/:page/:limit/:tid`: 타인 스토리 기본 목록 (`tid` = 대상 UID)
+- `GET /story/v01/condition/list/:area/:stat/:type/:order/:gen/:page/:limit`: 조건부 피드 (`StoryListResp` 배열, JWT 시 cutout 제외)
+- `GET /story/v01/detail/:idx/:page/:limit`: 본인 스토리 상세 목록 (JWT UID, `idx` 이하·최신순)
+- `GET /story/v01/detail/:idx/:page/:limit/:tid`: 타인 스토리 상세 목록 (`tid` = 작성자 UID)
 - `POST /story/v01/upload`: 스토리 미디어만 Cloudflare 업로드 (Images/Stream). `ValidateFileUpload` (이미지·썸네일 5MB, 동영상 100MB). 응답 **`data.media`** 통합 슬롯 맵 `{"N":{"type":"img|vdo","url":"...","thumb":"..."}}`
-- `POST /story/v01/create`: JSON 스토리 생성 — `stat`, `sbody`, **`media` 객체**(upload `data.media`). DB에 `BuildStrImgForDB`로 정규 저장. JwtAuth.
-- `POST /story/v01/updstat`: Endpoint to update story status (0=del, 1=pub, 2=private, 3=limit, 4=reserved)
-- `POST /story/v01/updbody`: Endpoint to update story body content (max 512 chars)
-- `POST /story/v01/delpic`: Endpoint to delete specific picture from story
-- `POST /story/v01/comment/create`: Endpoint to create new comment on story
-- `GET /story/v01/comment/detail/:idx/:page`: Endpoint to get paginated story comments
-- `POST /story/v01/comment/updstat`: Endpoint to update comment status
-- `POST /story/v01/comment/updbody`: Endpoint to update comment body content
-- `POST /story/v01/like/toggle`: Story like/unlike toggle endpoint (transaction-safe count sync)
-- `POST /story/v01/follow/create`: Follow user endpoint
-- `POST /story/v01/follow/cancel`: Unfollow user endpoint
-- `GET /story/v01/follow/follower/:uid/:page`: Follower list endpoint
-- `GET /story/v01/follow/following/:uid/:page`: Following list endpoint
+- `POST /story/v01/create`: JSON 스토리 생성 — body `{stat,sbody,media}`(upload `data.media`), JWT 프로필 필드 포함 INSERT, 응답 `{msg,idx}`
+- `POST /story/v01/updstat`: 스토리 상태 변경 — body `{idx,stat}` (0=del,1=pub,2=private,3=limit,4=resv)
+- `POST /story/v01/updbody`: 스토리 본문 수정 — body `{idx,body}` (최대 512자)
+- `POST /story/v01/delpic`: 스토리 미디어 슬롯 삭제 — body `{idx,pic_idx}`, bak 이동 + 1..N 재번호
+- `POST /story/v01/comment/create`: 스토리 댓글 작성 (`StrCmtCreateResp`, SimpleRespOK)
+- `GET /story/v01/comment/:idx/:page/:limit`: 스토리 댓글 페이징 목록 (`StrCmtDetailResp`)
+- `POST /story/v01/comment/updstat`: 댓글 상태 변경 (`StrCmtUpdStatResp`, SimpleRespOK)
+- `POST /story/v01/comment/updbody`: 댓글 본문 수정 (`StrCmtUpdBodyResp`, SimpleRespOK)
+- `POST /story/v01/like/toggle`: 좋아요 토글 (`story_idx`,`uid`) → `{liked,like_count}` (`ToggleStoryLikeTx`)
+- `POST /story/v01/follow/set/:tid`: 팔로우 설정 (JWT=follower, tid=followee, upsert stat=1)
+- `POST /story/v01/follow/cancel/:tid`: 언팔로우 (JWT=follower, tid=followee, `stat=0`)
+- `GET /story/v01/follower/list/:page/:limit`: JWT 본인 팔로워 목록 (`FollowUserItem[]`, total_count)
+- `GET /story/v01/following/list/:page/:limit`: JWT 본인 팔로잉 목록 (`FollowUserItem[]`, total_count)
 - `POST /story/v01/cutout/set/:tid`: 스토리 cutout 설정 (대상 feed 숨김)
-- `POST /story/v01/cutout/cancel/:tid`: 스토리 cutout 해제
-- `POST /story/v01/cutout/count`: 활성 cutout 개수 조회
-- `GET /story/v01/cutout/list/:page/:limit`: 활성 cutout 목록 조회
+- `POST /story/v01/cutout/cancel/:tid`: 스토리 cutout 해제 (`stat=0`, 응답 `CutoutActionResp`)
+- `POST /story/v01/cutout/count`: 활성 cutout 개수 조회 (응답 `CutoutCountResp`)
+- `GET /story/v01/cutout/list/:page/:limit`: 활성 cutout 목록 (응답 `CutoutListResp`)
+- `GET /story/v01/pcs/list/:page/:limit`: JWT 본인이 구매한 스토리 목록 (`str_pcs` → `story`, 최신순)
+- `POST /story/v01/buy/:idx`: JWT 본인이 스토리 구매 기록 (`str_pcs` INSERT, 결제 TODO)
+- `POST /story/v01/view/update/:idx`: 스토리 조회수(`qt_view`) +1
+- `GET /story/v01/view/count/:idx`: 스토리 조회수(`qt_view`) 조회
+- `GET /story/v01/like/count/:idx`: 스토리 좋아요 수(`qt_good`) 조회
 - `POST /story/v01/block/create`: Block user endpoint
 - `POST /story/v01/block/cancel`: Unblock user endpoint
 - `GET /story/v01/block/list/:uid/:page/:limit`: Blocked user list endpoint (page starts at 1, limit 1~100)

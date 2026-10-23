@@ -188,19 +188,59 @@ type FavoriteUserItem struct {
 }
 
 type PrfInfo struct {
-	Uid     uint64    `json:"uid"`
-	Nick    string    `json:"nick"`
-	Gender  string    `json:"gender"`
-	Birth   time.Time `json:"birth"`
-	Age     string    `json:"age"`
-	Area    string    `json:"area"`
-	Intro   string    `json:"intro"`
-	MainPic string    `json:"main_pic"`
+	Uid     uint64    `json:"uid" example:"8697414060736839837"`
+	Nick    string    `json:"nick" example:"건강한 꼬마 오렌지"`
+	Gender  string    `json:"gender" example:"1"`
+	Birth   time.Time `json:"birth" example:"1990-01-01T00:00:00Z"`
+	Age     string    `json:"age" example:"-2"`
+	Area    string    `json:"area" example:"1"`
+	Intro   string    `json:"intro" example:"반가워요 큐피톡에서 만나요!"`
+	MainPic string    `json:"main_pic" example:""`
+}
+
+// PrfInfoData is GetPrfInfo response payload (data field).
+type PrfInfoData struct {
+	PrfInfo PrfInfo `json:"prf_Info"`
+	FlwCnt  int64   `json:"flw_cnt" example:"0"`
+}
+
+// PrfInfoResp is full API envelope for GetPrfInfo Swagger (@Success).
+type PrfInfoResp struct {
+	Result       int         `json:"result" example:"0"`
+	ResultString string      `json:"resultString" example:"Success"`
+	Data         PrfInfoData `json:"data"`
+}
+
+// PrfUpdData is UpdatePrfInfo response payload (data field).
+type PrfUpdData struct {
+	Msg string `json:"msg" example:"success"`
+}
+
+// PrfUpdResp is full API envelope for UpdatePrfInfo Swagger (@Success).
+type PrfUpdResp struct {
+	Result       int        `json:"result" example:"0"`
+	ResultString string     `json:"resultString" example:"Success"`
+	Data         PrfUpdData `json:"data"`
+}
+
+// PrfAssetsData is GetPrfAssets response payload (data field).
+type PrfAssetsData struct {
+	HoldPoint int64 `json:"hold_point" example:"0"`
+	HoldCash  int64 `json:"hold_cash" example:"0"`
+	MsgCount  int64 `json:"msg_count" example:"3"`
+}
+
+// PrfAssetsResp is full API envelope for GetPrfAssets Swagger (@Success).
+type PrfAssetsResp struct {
+	Result       int           `json:"result" example:"0"`
+	ResultString string        `json:"resultString" example:"Success"`
+	Data         PrfAssetsData `json:"data"`
 }
 
 type CreateStoryReq struct {
-	Stat  int         `json:"stat" example:"1"`       // 0=del, 1=pub, 2=private, 3=limit, 4=resv
+	Stat  int         `json:"stat" example:"1"`       // 0=pub, 1=private, 2=limitrivate, 3=rsv, 4=del
 	Sbody string      `json:"sbody" example:"스토리 본문"` // 최대 512자
+	Price int         `json:"price" example:"10"`     // 스토리 가격
 	Media StoryStrImg `json:"media"`                  // story.str_img와 동일 슬롯 맵
 }
 
@@ -219,7 +259,7 @@ type StoryStrImg map[string]StoryMediaItem
 type StoryMediaItem struct {
 	Type  string `json:"type" example:"img"` // "img" | "vdo"
 	URL   string `json:"url" example:"https://imagedelivery.net/.../public"`
-	Thumb string `json:"thumb,omitempty" example:"https://imagedelivery.net/.../public"` // vdo only
+	Thumb string `json:"thumb1,omitempty" example:"https://imagedelivery.net/.../public"` // vdo only
 }
 
 // PrfPicInfo is stored in prf_info.sub_pic{1..5} as {"url":"...","stat":N} (slot = column number).
@@ -231,6 +271,42 @@ type PrfPicInfo struct {
 // PrfPicMap is list/query response: {"1":{"url":"...","stat":3},"2":{"url":"...","stat":3}}
 type PrfPicMap map[string]PrfPicInfo
 
+// PrfPicListResp is full API envelope for GetPrfPicLists Swagger (@Success).
+// data is PrfPicMap (non-empty slots only).
+type PrfPicListResp struct {
+	Result       int       `json:"result" example:"0"`
+	ResultString string    `json:"resultString" example:"Success"`
+	Data         PrfPicMap `json:"data"`
+}
+
+// PrfPicUploadData is UploadPrfPic response payload (data field).
+// pics 배열 순서 = sub_pic1..N 슬롯.
+type PrfPicUploadData struct {
+	Msg  string       `json:"msg" example:"success"`
+	Pics []PrfPicInfo `json:"pics"`
+}
+
+// PrfPicUploadResp is full API envelope for UploadPrfPic Swagger (@Success).
+type PrfPicUploadResp struct {
+	Result       int              `json:"result" example:"0"`
+	ResultString string           `json:"resultString" example:"Success"`
+	Data         PrfPicUploadData `json:"data"`
+}
+
+// PrfStoryListsData is GetPrfStoryLists response payload (data field).
+// Keys are story idx (JSON object keys). Latest stories LIMIT 4.
+type PrfStoryListsData struct {
+	StrImgs   map[string]string `json:"str_imgs" example:"{\"12\":\"https://imagedelivery.net/.../public\"}"`
+	StrThmbls map[string]string `json:"str_thmbls" example:"{\"15\":\"https://imagedelivery.net/.../public\"}"`
+}
+
+// PrfStoryListsResp is full API envelope for GetPrfStoryLists Swagger (@Success).
+type PrfStoryListsResp struct {
+	Result       int               `json:"result" example:"0"`
+	ResultString string            `json:"resultString" example:"Success"`
+	Data         PrfStoryListsData `json:"data"`
+}
+
 // PrfPicWaitingItem 관리자용 — sub_pic 슬롯 중 stat=1|2 대기 항목
 type PrfPicWaitingItem struct {
 	Uid  uint64 `json:"uid" example:"8697414060736839837"`
@@ -240,8 +316,35 @@ type PrfPicWaitingItem struct {
 	Stat int    `json:"stat" example:"1"` // 1=요청중, 2=승인대기
 }
 
+// PrfPicWaitingListData is GetPrfPicWaitingList response payload (data field).
+type PrfPicWaitingListData struct {
+	Msg        string              `json:"msg" example:"success"`
+	TotalCount int                 `json:"total_count" example:"2"`
+	List       []PrfPicWaitingItem `json:"list"`
+}
+
+// PrfPicWaitingListResp is full API envelope for GetPrfPicWaitingList Swagger (@Success).
+type PrfPicWaitingListResp struct {
+	Result       int                   `json:"result" example:"0"`
+	ResultString string                `json:"resultString" example:"Success"`
+	Data         PrfPicWaitingListData `json:"data"`
+}
+
 // SetPrfPicStatReq 관리자용 — 특정 슬롯 프로필 사진 승인(stat=3)
 type SetPrfPicStatReq struct {
 	Uid  uint64 `json:"uid" example:"8697414060736839837"`
 	Slot int    `json:"slot" example:"1"` // sub_pic1~5
+}
+
+// SetPrfPicStatData is SetPrfPicStat response payload (data field).
+type SetPrfPicStatData struct {
+	Msg      string `json:"msg" example:"success"`
+	Affected int64  `json:"affected" example:"1"` // 0이면 대상 없음/이미 처리됨
+}
+
+// SetPrfPicStatResp is full API envelope for SetPrfPicStat Swagger (@Success).
+type SetPrfPicStatResp struct {
+	Result       int               `json:"result" example:"0"`
+	ResultString string            `json:"resultString" example:"Success"`
+	Data         SetPrfPicStatData `json:"data"`
 }

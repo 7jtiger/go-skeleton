@@ -60,11 +60,13 @@ type StoryImage struct {
 	Birth     string          `json:"birth"`
 	Area      int             `json:"area"`
 	Gender    int             `json:"gender"`
+	MainPic   string          `json:"main_pic"`
 	Body      string          `json:"body"`
 	MType     int             `json:"type"`
 	Stat      int             `json:"stat"`
 	QtGood    int             `json:"qt_good"`
 	QtChecked int             `json:"qt_checked"`
+	Price     int             `json:"price"`
 	StrImg    json.RawMessage `json:"str_img"`
 	AtUpdate  time.Time       `json:"at_update"`
 	AtCreate  time.Time       `json:"at_create"`
@@ -81,19 +83,44 @@ type StorySearchReq struct {
 	Limit string `json:"limit"`
 }
 
-type StoryListResp struct {
+/* type StoryListResp struct {
 	Idx      int         `json:"idx"`
+	Uid      uint64      `json:"uid"`
 	Nick     string      `json:"nick"`
 	StrImg   StoryStrImg `json:"str_img"` // {"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...","thumb":"..."}}
 	AtCreate time.Time   `json:"at_create"`
 }
+*/
+
+type StoryListResp struct {
+	Idx      int       `json:"idx"`
+	Uid      uint64    `json:"uid"`
+	Nick     string    `json:"nick"`
+	Stat     int       `json:"stat"`
+	CntCount int       `json:"cnt_count"`
+	CntUrl   string    `json:"cnt_url"`
+	CntType  string    `json:"cnt_type"`
+	CntThumb string    `json:"cnt_thumb"`
+	AtCreate time.Time `json:"at_create"`
+}
 
 type StoryDetailResp struct {
-	Nick        string       `json:"nick"`
-	Body        string       `json:"body"`
-	StrImg      StoryStrImg  `json:"str_img"` // story.str_img 슬롯 맵 (img|vdo)
-	AtCreate    time.Time    `json:"at_create"`
-	CommentList []StrComment `json:"comment_list"`
+	Idx          int          `json:"idx"`
+	Uid          uint64       `json:"uid"`
+	Nick         string       `json:"nick"`
+	MainPic      string       `json:"main_pic"`
+	Body         string       `json:"body"`
+	Stat         int          `json:"stat"`
+	QtGood       int          `json:"qt_good"`
+	QtView       int          `json:"qt_view"`
+	ContentTotal int          `json:"content_total"`
+	Price        int          `json:"price"`
+	IsPaid       int          `json:"is_paid"`     // 0=not paid, 1=paid
+	IsFollowed   int          `json:"is_followed"` // 0=not followed, 1=followed
+	StrImg       StoryStrImg  `json:"str_img"`     // story.str_img 슬롯 맵 (img|vdo)
+	AtCreate     time.Time    `json:"at_create"`
+	CmtCount     int          `json:"cmt_count"`
+	CommentList  []StrComment `json:"comment_list"`
 }
 
 type UpdateStrStatReq struct {
@@ -132,36 +159,67 @@ CREATE TABLE `str_cmt` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 */
 type StrComment struct {
-	Idx      int       `json:"idx"`
-	StrIdx   int       `json:"str_idx"`
-	Wuid     uint64    `json:"wuid"`
-	Nick     string    `json:"nick"`
-	ThumbUrl string    `json:"thumb_url"`
-	WGender  string    `json:"wgender"`
-	WAge     string    `json:"wage"`
-	WArea    string    `json:"warea"`
-	Body     string    `json:"body"`
-	Stat     int       `json:"stat"`
-	AtCreate time.Time `json:"at_create"`
-	AtUpdate time.Time `json:"at_update"`
+	Idx      int       `json:"idx" example:"2"`
+	StrIdx   int       `json:"str_idx" example:"3"`
+	Wuid     uint64    `json:"wuid" example:"77645423236541"`
+	Nick     string    `json:"nick" example:"test"`
+	ThumbUrl string    `json:"thumb_url" example:"https://imagedelivery.net/.../public"`
+	WGender  string    `json:"wgender" example:"1"`
+	WAge     string    `json:"wage" example:"30"`
+	WArea    string    `json:"warea" example:"1"`
+	Body     string    `json:"body" example:"111111 test comment body"`
+	Stat     int       `json:"stat" example:"1"` // 0,1 visible in list
+	AtCreate time.Time `json:"at_create" example:"2026-02-02T13:50:06Z"`
+	AtUpdate time.Time `json:"at_update" example:"2026-02-02T13:50:06Z"`
 }
 
 type StrCmtCreateReq struct {
-	StrIdx string `json:"str_idx"`
-	Wuid   string `json:"wuid"`
-	Nick   string `json:"nick"`
-	Stat   string `json:"stat"`
-	Body   string `json:"body"`
+	StrIdx string `json:"str_idx" example:"3"`
+	Wuid   string `json:"wuid" example:"77645423236541"`
+	Nick   string `json:"nick" example:"test"`
+	Stat   string `json:"stat" example:"1"`                        // 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+	Body   string `json:"body" example:"111111 test comment body"` // max 256
+}
+
+// StrCmtCreateResp is CreateStrComment response (SimpleRespOK — no result envelope).
+type StrCmtCreateResp struct {
+	Msg    string `json:"msg" example:"Successfully created str comment"`
+	LastID int64  `json:"lastID" example:"1"`
+}
+
+// StrCmtDetailData is GetStrCmtDetail response payload (data field).
+type StrCmtDetailData struct {
+	Comment    []StrComment `json:"comment"`
+	TotalCount int          `json:"total_count" example:"52"`
+}
+
+// StrCmtDetailResp is full API envelope for GetStrCmtDetail Swagger (@Success).
+type StrCmtDetailResp struct {
+	Result       int              `json:"result" example:"0"`
+	ResultString string           `json:"resultString" example:"Success"`
+	Data         StrCmtDetailData `json:"data"`
 }
 
 type StrCmtUpdStatReq struct {
-	Idx  string `json:"idx"`
-	Stat string `json:"stat"`
+	Idx  string `json:"idx" example:"3"`
+	Stat string `json:"stat" example:"2"` // 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+}
+
+// StrCmtUpdStatResp is UpdateStrStatComment response (SimpleRespOK — no result envelope).
+type StrCmtUpdStatResp struct {
+	Msg      string `json:"msg" example:"Successfully updated str stat comment"`
+	Affected int64  `json:"affected" example:"1"`
 }
 
 type StrCmtUpdBodyReq struct {
-	Idx  string `json:"idx"`
-	Body string `json:"body"`
+	Idx  string `json:"idx" example:"3"`
+	Body string `json:"body" example:"updated comment body content"`
+}
+
+// StrCmtUpdBodyResp is UpdateStrBodyComment response (SimpleRespOK — no result envelope).
+type StrCmtUpdBodyResp struct {
+	Msg      string `json:"msg" example:"Successfully updated str body comment"`
+	Affected int64  `json:"affected" example:"1"`
 }
 
 type StoryLikeToggleReq struct {
@@ -195,29 +253,25 @@ type BlockUserItem struct {
 	AtUpdate time.Time `json:"at_update"`
 }
 
-// stat : 0=PUB(public 전체공개), 1=FLW(follower only), 2=PAY(paid only), 3=PRV(Private 비공개), 4=DEL(Deleted) 5=RSV(reserved)
+// stat : 0 = pub, 1 = private(follower only), 2 = limit(paid only), 3 = all(pub/prv/limit), 4 : del
 func GetStatCode(stat string) int {
 	switch strings.ToLower(stat) {
 	case "pub":
 		return 0
-	case "flw":
-		return 1
-	case "pay":
-		return 2
 	case "prv":
+		return 1
+	case "lmt":
+		return 2
+	case "all":
 		return 3
-	case "del":
-		return 4
-	case "rsv":
-		return 5
 	}
 	return 0
 }
 
-// order : 0=OLD(oldest), 1=NEW(latest), 2=CMT(comMost), 3=GOD(goodMost), 4=VIEW(viewMost), 5=RSV(reserved)
+// order : 0=old(oldest), 1=new(latest)/all, 2=cmt(comMost), 3=god(goodMost), 4=view(viewMost), 5=rsv(reserved)
 func GetOrderQuery(order string) string {
 	switch strings.ToLower(order) {
-	case "new":
+	case "new", "all":
 		return "at_create DESC"
 	case "old":
 		return "at_create ASC"
@@ -233,7 +287,7 @@ func GetOrderQuery(order string) string {
 	return "at_create DESC"
 }
 
-// type : 0=IMG(only img), 1 = VDO(only video), 2 = ALL(img + video), 3=RSV(reserved)
+// type : 0=img, 1 = vdo, 2 = all, 3=rsv(reserved)
 func GetTypeCode(mtype string) int {
 	switch strings.ToLower(mtype) {
 	case "img":

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	ptc "ms-gateway/protocol"
 )
@@ -21,6 +20,8 @@ const MaxStoryMediaSlots = 5
 //	  "2": {"type":"vdo","url":"https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8","thumb":"https://imagedelivery.net/.../thumb2/public"},
 //	  "3": {"type":"img","url":"https://imagedelivery.net/.../pic3/public"}
 //	}
+
+/*
 func ParseStoryMedia(strImg string) (ptc.StoryStrImg, error) {
 	strImg = strings.TrimSpace(strImg)
 	if strImg == "" || strImg == "null" {
@@ -35,8 +36,8 @@ func ParseStoryMedia(strImg string) (ptc.StoryStrImg, error) {
 		return nil, err
 	}
 	return media, nil
-}
-
+} */
+/*
 // LoadStoryStrImg loads DB str_img bytes into StoryStrImg.
 // Empty object "{}" is allowed (all slots deleted).
 func LoadStoryStrImg(raw json.RawMessage) (ptc.StoryStrImg, error) {
@@ -44,13 +45,23 @@ func LoadStoryStrImg(raw json.RawMessage) (ptc.StoryStrImg, error) {
 	if s == "" || s == "null" || s == "{}" {
 		return ptc.StoryStrImg{}, nil
 	}
-	return ParseStoryMedia(s)
+	// return ParseStoryMedia(s)
+	var media ptc.StoryStrImg
+	if err := json.Unmarshal([]byte(s), &media); err != nil {
+		return nil, fmt.Errorf("invalid media JSON: %w", err)
+	}
+	if err := ValidateStoryMedia(media); err != nil {
+		return nil, err
+	}
+	return media, nil
+
 }
+*/
 
 // BuildStrImgForDB builds canonical story.str_img JSON for DB storage.
 // Slots are renumbered 1..N; img keeps type+url, vdo keeps type+url+thumb.
 func BuildStrImgForDB(media ptc.StoryStrImg) (json.RawMessage, int, error) {
-	if err := ValidateStoryMedia(media); err != nil {
+	if _, err := ValidateStoryMedia(media); err != nil {
 		return nil, 0, err
 	}
 
@@ -106,43 +117,64 @@ func MediaMType(media ptc.StoryStrImg) int {
 }
 
 // ValidateStoryMedia checks StoryStrImg before save / upload response (1..5 slots).
-func ValidateStoryMedia(media ptc.StoryStrImg) error {
+// ValidateStoryMedia checks StoryStrImg before save/upload response (1..5 slots)
+// Returns: 0 (img only), 1 (vdo only), 2 (both), and error if invalid
+func ValidateStoryMedia(media ptc.StoryStrImg) (int, error) {
 	if len(media) == 0 {
-		return fmt.Errorf("media is required")
+		return 0, fmt.Errorf("media is required")
 	}
 	if len(media) > MaxStoryMediaSlots {
-		return fmt.Errorf("media allows at most %d items", MaxStoryMediaSlots)
+		return 0, fmt.Errorf("media allows at most %d items", MaxStoryMediaSlots)
 	}
+	hasImg, hasVdo := false, false
 	for k, item := range media {
 		n, err := strconv.Atoi(k)
 		if err != nil || n <= 0 {
-			return fmt.Errorf("media key %q must be positive numeric slot", k)
+			return 0, fmt.Errorf("media key %q must be positive numeric slot", k)
 		}
 		if n > MaxStoryMediaSlots {
-			return fmt.Errorf("media key %q exceeds max slot %d", k, MaxStoryMediaSlots)
+			return 0, fmt.Errorf("media key %q exceeds max slot %d", k, MaxStoryMediaSlots)
 		}
 		if item.URL == "" {
-			return fmt.Errorf("media[%s].url is required", k)
+			return 0, fmt.Errorf("media[%s].url is required", k)
 		}
 		switch item.Type {
 		case ptc.StoryMediaTypeImg:
+			hasImg = true
 		case ptc.StoryMediaTypeVdo:
+			hasVdo = true
 			if item.Thumb == "" {
-				return fmt.Errorf("media[%s].thumb is required for vdo", k)
+				return 0, fmt.Errorf("media[%s].thumb is required for vdo", k)
 			}
 		default:
-			return fmt.Errorf("media[%s].type must be img or vdo", k)
+			return 0, fmt.Errorf("media[%s].type must be img or vdo", k)
 		}
+
 	}
-	return nil
+
+	switch {
+	case hasImg && hasVdo:
+		return 2, nil
+	case hasVdo:
+		return 1, nil
+	default:
+		return 0, nil
+	}
 }
 
 // GetFirstPicUrl returns representative list URL and type (0=img, 1=vdo).
-func GetFirstPicUrl(strImg string) (string, int, error) {
-	media, err := ParseStoryMedia(strImg)
-	if err != nil {
-		return "", 0, err
+func GetFirstPicUrl(strImg string) (*ptc.StoryMediaItem, int, error) {
+	// media, err := ParseStoryMedia(strImg)
+	// var StoryMediaItem
+	var media map[string]ptc.StoryMediaItem
+	if err := json.Unmarshal([]byte(strImg), &media); err != nil {
+		return nil, 0, fmt.Errorf("invalid media JSON: %w", err)
 	}
+
+	// media, err := LoadStoryStrImg(json.RawMessage(strImg))
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	minNum := 0
 	hasNum := false
@@ -157,18 +189,20 @@ func GetFirstPicUrl(strImg string) (string, int, error) {
 		}
 	}
 	if !hasNum {
-		return "", 0, fmt.Errorf("no media slot found")
+		return nil, 0, fmt.Errorf("no media slot found")
 	}
 
-	item := media[strconv.Itoa(minNum)]
-	if item.Type == ptc.StoryMediaTypeVdo && item.Thumb != "" {
-		return item.Thumb, 1, nil
+	var item ptc.StoryMediaItem
+	var ok bool
+	if item, ok = media[strconv.Itoa(minNum)]; ok {
+		return &item, len(media), nil
 	}
-	return item.URL, 0, nil
+
+	return nil, 0, fmt.Errorf("no media slot found")
 }
 
 // ReindexStoryMediaAfterDelete removes slot key and renumbers remaining 1..N.
-func ReindexStoryMediaAfterDelete(media ptc.StoryStrImg, delKey string) ptc.StoryStrImg {
+func ReIdxAfterDel(media ptc.StoryStrImg, delKey string) ptc.StoryStrImg {
 	delete(media, delKey)
 
 	nums := make([]int, 0, len(media))

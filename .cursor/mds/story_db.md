@@ -61,6 +61,17 @@ Main table for storing user stories with images.
 - img: `{type,url}` / vdo: `{type,url,thumb}`
 - 반환: `str_img` JSON + `type`(0=img, 1=vdo, 2=both)
 
+### str_pcs Table
+스토리 구매 기록 테이블.
+
+**Columns:**
+- `idx` (int, PK): 구매 레코드 ID
+- `str_idx` (int, NOT NULL): 구매한 스토리 `story.idx`
+- `tid` (bigint, NULL): 판매자 UID
+- `pcs_uid` (bigint, NOT NULL): 구매자 UID
+- `at_create` / `at_update` (date, NULL)
+- `qt_payed` (bigint, NULL): 결제 금액
+
 ### str_cmt Table
 Table for storing comments on stories.
 
@@ -148,11 +159,11 @@ func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []int
 Retrieves condition-based story map (`idx -> first image url`) with dynamic filters.
 
 **Query behavior:**
-- Base filter: `stat IN (0,1)`
-- Extra filters are appended as `AND ...` when `conds` is not empty
+- Base query has no hardcoded `stat` filter — `conds` from controller drive WHERE (e.g. `stat = ?`)
+- Extra filters are appended as `WHERE ... AND ...` when `conds` is not empty
 - Sorting always uses `ORDER BY <orderQuery>`
 - Pagination uses `LIMIT ? OFFSET ?` from `args`
-- Special case: if condition includes `area = 0` (all), it is expanded to `area BETWEEN 1 AND 12`
+- `area=0`(all) is omitted in controller so all regions are queried
 
 **Notes:**
 - `stories` map is initialized before scan loop
@@ -164,6 +175,20 @@ Retrieves condition-based story map (`idx -> first image url`) with dynamic filt
 - 슬롯 키 `"1"`, `"2"`, ... (업로드 순서, 1-based)
 - 값: `{"type":"img"|"vdo","url":"...","thumb":"..."}` (`thumb`은 vdo만)
 - 입력(upload/create)에서만 생성. 조회 시 변환 없음
+
+#### BuyStory
+```go
+func (p *StoryDB) BuyStory(pcsUid uint64, strIdx int) error
+```
+`story`에서 판매자 `tid` 조회 후 `str_pcs`에 INSERT (`pcs_uid`=구매자, `qt_payed=0`). 결제 로직은 컨트롤러 TODO.
+
+#### GetPurchaseList
+```go
+func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, int, error)
+```
+`str_pcs.pcs_uid = uid`인 구매 스토리를 `story`와 INNER JOIN 후 `story.at_create DESC`로 페이징.
+
+**Returns:** `StoryListResp` 슬라이스(대표 미디어 포함), total_count
 
 #### GetStory
 ```go
@@ -177,13 +202,35 @@ Retrieves single story detail by index. `str_img`는 DB 저장값 그대로 반�
 - `ParseStoryMedia`: 통합 media JSON → `map[string]StoryMediaItem` (그 외 포맷 거부)
 - `GetFirstPicUrl`: 리스트용 대표 URL (vdo면 thumb)
 - `MediaMType`: story.type 계산 (0=img, 1=vdo, 2=both)
-- `ReindexStoryMediaAfterDelete`: 슬롯 삭제 후 1..N 재번호
+- `ReIdxAfterDel`: 슬롯 삭제 후 남은 키를 1..N 재번호
+
+#### GetStoryViewCount
+```go
+func (p *StoryDB) GetStoryViewCount(strIdx int) (int, error)
+```
+`SELECT qt_view FROM story WHERE idx = ?` — 현재 조회수 반환.
+
+#### GetStoryLikeCount
+```go
+func (p *StoryDB) GetStoryLikeCount(strIdx int) (int, error)
+```
+`SELECT qt_good FROM story WHERE idx = ?` — 현재 좋아요 수 반환.
+
+#### UpdateStoryView
+```go
+func (p *StoryDB) UpdateStoryView(strIdx int) error
+```
+조회수(`qt_view`)를 +1 합니다.
+
+- SQL: `SET qt_view = LAST_INSERT_ID(COALESCE(qt_view, 0) + 1)` — 원자적 +1
+- 대상 행 없으면 `"story not found"`
+- API(`UpdateStoryViewCnt`) 응답에는 증가 후 값을 포함하지 않음
 
 #### UpdateStoryStat
 ```go
 func (p *StoryDB) UpdateStoryStat(strIdx int, stat int) (int64, error)
 ```
-Updates story status and at_update timestamp.
+`UPDATE story SET stat=?, at_update=NOW() WHERE idx=?` — 상태 갱신.
 
 **Returns:** Rows affected count
 
@@ -191,7 +238,7 @@ Updates story status and at_update timestamp.
 ```go
 func (p *StoryDB) UpdateStrBody(strIdx int, body string) (int64, error)
 ```
-Updates story body content.
+`UPDATE story SET body=?, at_update=NOW() WHERE idx=?` — 본문 갱신.
 
 **Returns:** Rows affected count
 
@@ -209,13 +256,13 @@ Retrieves str_img and str_imgbak JSON for a story.
 ```go
 func (p *StoryDB) DeleteStrPic(strIdx int, pic, picback json.RawMessage) (int64, error)
 ```
-Moves deleted image from str_img to str_imgbak.
+컨트롤러가 재구성한 `str_img`/`str_imgbak` JSON을 DB에 저장합니다.
 
-**Process:**
-1. Unmarshal str_img and str_imgbak
-2. Move target image URL to backup
-3. Delete from active images
-4. Marshal and update both JSON fields
+**컨트롤러 처리:**
+1. `GetStrPicList`로 현재 JSON 조회
+2. `pic_idx` 슬롯을 bak으로 복사
+3. `ReIdxAfterDel`로 남은 슬롯 1..N 재번호
+4. `DeleteStrPic`으로 UPDATE
 
 **Returns:** Rows affected count
 
@@ -430,8 +477,10 @@ type StrComment struct {
 
 ### Added repository methods
 - `ToggleStoryLikeTx()`: transactional like toggle + `story.qt_good` sync
-- `SetFollow()`, `SetUnfollow()`, `GetFollowerList()`, `GetFollowingList()`
-- `GetFollowerList()`: returns follower page list and `total_count` via separate `COUNT(*)` on `user_follow` (`followee_uid`, `stat=1`)
+- `SetFollow(follower,followee)`: `user_follow` INSERT ON DUPLICATE KEY UPDATE `stat=1`
+- `SetUnfollow(follower,followee)`: `user_follow.stat=0` 업데이트
+- `GetFollowerList(uid,page,limit)`: `followee_uid=uid AND stat=1`, `FollowUserItem` + total_count
+- `GetFollowingList(uid,page,limit)`: `follower_uid=uid AND stat=1`, `FollowUserItem` + total_count
 - `SetBlock()`, `SetUnblock()`, `GetBlockList()`, `IsBlockedPair()`
 - `GetStoryOwnerUID()` for ownership lookup in block checks
 - `SetCutoutUser()`: upsert 방식으로 cutout 활성화 및 대상 프로필 스냅샷 갱신

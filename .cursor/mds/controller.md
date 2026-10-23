@@ -216,47 +216,58 @@
 - `NewStoryController()`: Creates StoryController instance with AccountDB, HistoryDB, and StoryDB connections
 
 ### Profile Functions (`/story/v01/prf/*`, JWT)
-- `GetPrfInfo()`: `GET /prf/info/:tid` — 프로필 + 팔로워 수 (`prf_Info`, `flw_cnt`). Swagger 문서화됨.
-- `GetPrfAssets()`: `GET /prf/assets` — 화살/캐시/쪽지 (`hold_point`, `hold_cash`, `msg_count`). Swagger 문서화됨.
-- `GetPrfPicLists()`: `GET /prf/pic/list` — `{"1":{"url","stat"},"2":{...}}` 슬롯 맵 응답 (비어 있는 슬롯 제외).
-- `GetPrfPicWaitingList()`: `GET /prf/pic/waiting/:page/:limit` — 전체 사용자 `sub_pic` 중 stat=1|2 대기 항목 페이징 (`list`: uid/nick/slot/url/stat). 관리자용.
-- `SetPrfPicStat()`: `POST /prf/pic/stat` — body `{uid, slot}`로 해당 `sub_pic{slot}` JSON `stat`을 3(승인)으로 변경. 현재 1|2일 때만 갱신. 관리자용.
-- `GetPrfStoryLists()`: `GET /prf/story/lists/:tid` — 최신 스토리 최대 4개. `str_imgs`(이미지), `str_thmbls`(동영상 썸네일). key=story idx. Swagger 문서화됨.
-- `UpdatePrfInfo()`: `POST /prf/upd` — JSON partial update (`nick`/`gender`/`age`/`area`/`intro` 빈 값 무시). UID는 JWT. Swagger 문서화됨.
-- `SetMainPic()`: `POST /prf/set/mainpic/:url` — 대표사진 설정(URL path-escape). 빈 url이면 삭제. 응답 `SendDataResponse`. Swagger 문서화됨.
-- `DeletePrfPic()`: `POST /prf/pic/delete/:idx` — `sub_pic{idx}` 삭제 후 뒤 슬롯을 앞으로 당김 (1~5). JSON에 idx 없음.
-- `UploadPrfPic()`: `POST /prf/pic/upload` — multipart `files` + `urls`. 앞에서부터 순차 `sub_pic1..N`에 `{"url","stat"}` 저장, 나머지 NULL. 최대 5장.
+- `GetPrfInfo()`: `GET /prf/info/{tid}` — 프로필 + 팔로워 수 (`prf_Info`, `flw_cnt`), Swagger=`PrfInfoResp`
+- `GetPrfAssets()`: `GET /prf/assets` — 화살/캐시/쪽지 (`hold_point`, `hold_cash`, `msg_count`), Swagger=`PrfAssetsResp`
+- `GetPrfPicLists()`: `GET /prf/pic/list` — JWT 본인 `PrfPicMap` (비어 있는 슬롯 제외), Swagger=`PrfPicListResp`
+- `GetPrfPicWaitingList()`: `GET /prf/pic/waiting/:page/:limit` — 전체 사용자 `sub_pic` 중 stat=1|2 대기 항목 페이징. Swagger=`PrfPicWaitingListResp`
+- `SetPrfPicStat()`: `POST /prf/pic/stat` — body `{uid, slot}` → `stat=3` 승인 (현재 1|2만). Swagger=`SetPrfPicStatResp`
+- `GetPrfStoryLists()`: `GET /prf/story/lists/:tid` — 최신 스토리 최대 4개. `str_imgs`/`str_thmbls` (key=story idx), Swagger=`PrfStoryListsResp`
+- `UpdatePrfInfo()`: `POST /prf/upd` — JSON partial update (`nick`/`gender`/`age`/`area`/`intro` 빈 값 무시). UID는 JWT. Swagger=`PrfUpdResp`
+- `SetMainPic()`: `POST /prf/set/mainpic/:url` — 대표사진 설정(PathEscape). 빈 url이면 삭제. Swagger=`PrfUpdResp`
+- `DeletePrfPic()`: `POST /prf/pic/delete/:idx` — `sub_pic{idx}` 삭제 후 뒤 슬롯 shift (1~5). 응답=`RespHeader`(`desc=success`)
+- `UploadPrfPic()`: `POST /prf/pic/upload` — multipart `files` + `urls`. 순차 `sub_pic1..N`에 `{"url","stat"}` 저장(최대 5). Swagger=`PrfPicUploadResp`
 - E2E 테스트: `controller/stry_prf_test.go` (`Test_GetPrfInfo` … `Test_UploadPrfPic`, `Test_PrfProcess`)
 
 ### Story Management Functions
 - `GetStoryHomeList()`: Retrieves story home list for a specific user (currently connected opposite gender users)
-- `GetStoryList()` / `GetStoryDefaultList()`: 공개 스토리 목록. 응답 `str_img`는 DB에 저장된 통합 media 슬롯 맵 그대로
-- `GetStoryDetail()`: 스토리 상세. 응답 `str_img`는 DB 저장값 그대로
-- `UploadStoryContent()`: multipart 업로드 → `data.media`를 `StoryStrImg`로 구성 (**최대 5슬롯**, `BuildStrImgForDB`와 동일 포맷)
+- `GetStoryDefaultList()`: `GET /list/{page}/{limit}`(JWT 본인) / `.../{tid}`(타인). 응답 `StoryListResp` 배열(대표 미디어 `cnt_*`)
+- `GetStoryDetail()`: `GET /detail/{idx}/{page}/{limit}`(JWT 본인) / `.../{tid}`(타인). `StoryDetailResp` 배열 + `total_count`, 조회 시 `qt_view` +1
+- `UploadStoryContent()`: `POST /upload` — multipart `files`(+`thbnl`), CF 업로드, DB 미저장. 응답 `{msg,media(StoryStrImg)}` 최대 5슬롯 → create에 전달
+- `CreateStory()`: `POST /create` — body `{stat,sbody,media}`, JWT 프로필로 INSERT, 응답 `{msg,idx}`
 - `CreateStory()`: `media`(StoryStrImg, 1~5개) → `SaveStory` → `story.str_img`에 동일 슬롯 맵 저장
-- `GetStoryDefaultList()` / `GetStoryDetail()`: DB `str_img`를 `StoryStrImg`로 파싱해 응답
-- `DeleteStrPic()`: 슬롯 삭제 → `1..N` 재인덱싱 → `BuildStrImgForDB`로 다시 저장, bak은 `str_imgbak`
-
+- 상세 `str_img`: DB 통합 media 슬롯 맵을 `StoryStrImg`로 파싱해 응답 (리스트는 대표 `cnt_*`만)
 ### Story Update Functions
-- `UpdateStoryStat()`: Updates story status (0=deleted, 1=public, 2=private, 3=limited, 4=reserved)
-- `UpdateStrBody()`: Updates story body content (max 512 characters)
-- `DeleteStrPic()`: media 슬롯 삭제 후 `str_imgbak`으로 이동, 남은 슬롯 `1..N` 재인덱싱
+- `UpdateStoryStat()`: `POST /updstat` — body `{idx,stat}`(문자열), 0=del~4=resv, 응답 `{msg,affected}`
+- `UpdateStrBody()`: `POST /updbody` — body `{idx,body}`, 최대 512자, 응답 `{msg,affected}`
+- `DeleteStrPic()`: `POST /delpic` — body `{idx,pic_idx}`, 슬롯→`str_imgbak`, `ReIdxAfterDel` 1..N, 응답 `{msg,affected}`
 
 ### Story Comment Functions
-- `CreateStrComment()`: Creates new comment on a story with writer uid, nickname, body (max 256 chars), and status
-- `CreateStrComment()`: 작성자 메타데이터(`thumb_url`, `wgender`, `wage`, `warea`)를 함께 저장
-- `CreateStrComment()`: 댓글 작성 전 차단 관계(`user_block`) 검증
+- `CreateStrComment()`: `POST /comment/create` — body `StrCmtCreateReq`, 작성자 메타(`thumb_url`/`wgender`/`wage`/`warea`) 저장. 응답=`StrCmtCreateResp`(`SimpleRespOK`). 차단 검증은 현재 주석 처리.
+- `GetStrCmtDetail()`: `GET /comment/:idx/:page/:limit` — 스토리 댓글 페이징 (`stat IN (0,1)`). Swagger=`StrCmtDetailResp`
+- `UpdateStrStatComment()`: `POST /comment/updstat` — body `{idx,stat}`. 응답=`StrCmtUpdStatResp`(`SimpleRespOK`)
+- `UpdateStrBodyComment()`: `POST /comment/updbody` — body `{idx,body}`. 응답=`StrCmtUpdBodyResp`(`SimpleRespOK`)
 - `GetStrCmtDetail()`: `idx/page` 기반 댓글 페이지 조회 (응답에 `comment_list`, `total_count` 포함)
 - `UpdateStrStatComment()`: Updates comment status (0=default, 1=private, 2=reserved, 3=reserved, 4=deleted)
 - `UpdateStrBodyComment()`: Updates comment body content
 
 ### Story Social Functions (2026-04)
 - `ToggleStoryLike()`: story like/unlike 토글, 트랜잭션 기반 카운트 반영
-- `FollowUser()`, `UnfollowUser()`: 팔로우/언팔로우 처리
-- `GetFollowerList()`, `GetFollowingList()`: 팔로워/팔로잉 페이지 조회 (`GetFollowerList` 응답: `total_count`, `followers`)
+- `FollowUser()`: `POST /follow/set/{tid}` — JWT→follower, tid→followee, `SetFollow` upsert `stat=1`, 자기팔로우 불가
+- `UnfollowUser()`: `POST /follow/cancel/{tid}` — JWT→follower, tid→followee, `SetUnfollow` `stat=0`, 자기언팔 불가
+- `GetFollowerList()`: `GET /follower/list/{page}/{limit}` — `getPageAndLimit` 파싱, JWT 본인 팔로워, 응답 `{total_count,list}`
+- `GetFollowingList()`: `GET /following/list/{page}/{limit}` — JWT 본인 팔로잉, 응답 `{total_count,list(FollowUserItem[])}`
 - `BlockUser()`, `UnblockUser()`, `GetBlockList()`: 차단/해제/목록 조회 (`uid/page/limit`, page starts at 1, limit 1~100)
-- `SetCutoutUser()`, `UnsetCutoutUser()`, `GetCutoutCount()`, `GetCutoutList()`: 스토리 cutout(피드 숨김) 설정/해제/개수/목록
-- `GetStoryConditionList()`: 인증 사용자의 활성 cutout 대상(`str_cutout.stat=1`)을 피드에서 제외
+- `SetCutoutUser()`: `POST /cutout/set/{tid}` — 프로필 스냅샷 upsert(`stat=1`), 자기 cutout 불가, Swagger=`CutoutActionResp`
+- `UnsetCutoutUser()`: `POST /cutout/cancel/{tid}` — `stat=0`, Swagger=`CutoutActionResp`
+- `GetCutoutCount()`: `POST /cutout/count` — 활성 cutout 개수, Swagger=`CutoutCountResp`
+- `GetCutoutList()`: `GET /cutout/list/{page}/{limit}` — `getPageAndLimit`, 응답 `{msg,total_count,list}`, Swagger=`CutoutListResp`
+- `GetPurchaseList()`: `GET /pcs/list/{page}/{limit}` — JWT 본인 `str_pcs`↔`story` JOIN, `at_create DESC`, 응답 `{msg,total_count,list(StoryListResp[])}`
+- `BuyStory()`: `POST /buy/{idx}` — JWT 본인을 `pcs_uid`로 `str_pcs` INSERT (결제 TODO)
+- `UpdateStoryViewCnt()`: `POST /view/update/{idx}` — `qt_view` 원자적 +1, 응답 `{msg:success}`
+- `GetStoryViewCount()`: `GET /view/count/{idx}` — `qt_view` 조회, 응답 `{msg,count}`
+- `GetStoryLikeCount()`: `GET /like/count/{idx}` — `qt_good` 조회, 응답 `{msg,count}`
+- `UpdateStoryLike()`: `POST /like/toggle` — body `{story_idx,uid}`, `ToggleStoryLikeTx`, 응답 `{msg,liked,like_count}` (block 검사 비활성)
+- `GetStoryConditionList()`: `GET /condition/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit}` — 모든 조건·페이징을 path에서 읽음. 응답 `StoryListResp` 배열. `area=all`이면 지역 생략, JWT 있으면 활성 cutout UID 제외
 
 #### Story Cutout API 예시 (JWT Bearer 필요)
 - `POST /story/v01/cutout/set/{tid}` → `{"result":0,"resultString":"Success","data":{"msg":"success","affected":1}}`

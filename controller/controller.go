@@ -47,10 +47,10 @@ func NewCTL(cf *conf.Config, hch *haredis.HAChecker, rep *models.Repositories) (
 		return nil, err
 	}
 
-	if r.PfCtl, err = NewProfileController(r, rep); err != nil {
-		return nil, err
-	}
-
+	/* 	if r.PfCtl, err = NewProfileController(r, rep); err != nil {
+	   		return nil, err
+	   	}
+	*/
 	if r.NotiCtl, err = NewNotiController(r, rep); err != nil {
 		return nil, err
 	}

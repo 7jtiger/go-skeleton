@@ -238,6 +238,7 @@ func Test_CreateStory_Test(t *testing.T) {
 	createPayload, err := json.Marshal(map[string]interface{}{
 		"stat":  1,
 		"sbody": "테스트 동영상 스토리 — CreateStory from automated video+thumb test",
+		"price": 100,
 		"media": uploadedMedia,
 	})
 	if err != nil {
@@ -288,30 +289,59 @@ func Test_CreateStory_Test(t *testing.T) {
 // 개개인별 피드 리스트 -> 클릭 -> 해당 개인 디테일 -> 컨텐츠 + 본문 + 댓글 리스트 조회
 // 타겟 uid
 func TestGetStoryDetail(t *testing.T) {
+	// story.GET("/detail/:idx/:page/:limit/:tid", p.st.GetStoryDetail)
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	idx := "3"
-	qurl := fmt.Sprintf("/story/v01/detail/%s", idx)
+	// idx := "15"
+	tid := "4033287471439576593"
+	qurl := fmt.Sprintf("/story/v01/list/1/20/%s", tid)
+	// qurl := fmt.Sprintf("/story/v01/detail/%s/1/20", idx)
 
-	res, err := Get(*targetUrl, qurl, nil, nil)
+	// res, err := Get(*targetUrl, qurl, nil, nil)
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
 	if err != nil {
 		t.Errorf("Failed to get story detail: %v", err)
 	}
-
+	/*
+		{"result":0,"resultString":"Success","data":{"story":[
+		{"idx":15,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"E 둘다","stat":3,"qt_good":16,"qt_view":6,"content_total":3,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"},"3":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"comment_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","wgender":"0","wage":"2019-01-02T00:00:00Z","warea":"10","body":"dsafasdfqwerwqe","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]},
+		{"idx":14,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"D 혼합","stat":2,"qt_good":15,"qt_view":7,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":0,"comment_list":null},
+		{"idx":13,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"C 동영상만","stat":1,"qt_good":14,"qt_view":8,"content_total":1,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:23Z","cmt_count":0,"comment_list":null},
+		{"idx":12,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"테스트 B 디코딩JSON","stat":1,"qt_good":13,"qt_view":9,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"}},"at_create":"2026-09-02T13:34:58Z","cmt_count":0,"comment_list":null},
+		{"idx":10,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"[claude] img+thbnl","stat":1,"qt_good":11,"qt_view":11,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/669744da-bd95-4226-b618-291f36529c00/public"}},"at_create":"2026-08-26T15:15:18Z","cmt_count":0,"comment_list":null},
+		{"idx":9,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"나나나나나","stat":1,"qt_good":9,"qt_view":12,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/38fff373-1d2e-4f15-d7bc-bbf6516ebd00/public"}},"at_create":"2026-08-26T14:15:37Z","cmt_count":0,"comment_list":null},
+		{"idx":8,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"t","stat":1,"qt_good":8,"qt_view":13,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"}},"at_create":"2026-08-26T14:15:18Z","cmt_count":0,"comment_list":null},
+		{"idx":7,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"t","stat":3,"qt_good":7,"qt_view":14,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5fa14918-f7a2-4063-b83b-1fac891f7700/public"}},"at_create":"2026-08-26T14:15:16Z","cmt_count":0,"comment_list":null},
+		{"idx":6,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"[claude] 업로드 응답 형태 확인용 테스트","stat":1,"qt_good":6,"qt_view":15,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/59f51a37-c5b7-424e-75dd-a9706280e300/public"}},"at_create":"2026-08-26T14:14:21Z","cmt_count":0,"comment_list":null}],"total_count":14}}
+	*/
 	fmt.Println(res)
 }
 
 func TestGetDefStoryList(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/list" + "/7766493213763375817"
+	// qurl := "/story/v01/list/1/10"
+	qurl := "/story/v01/list/1/10/7766493213763375817"
+	// qurl := "/story/v01/list"
 
 	// var key = []string{"uid"}
 	// var value = []string{"7766493213763375817"}
 
 	// res, err := GetWithToken(*targetUrl, qurl, key, value, *dmToken)
-	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
 	if err != nil {
 		t.Errorf("Failed to get story list: %v", err)
 	}
+	/*
+	   [{"idx": 20, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 5, "cnt_url": "https://imaged", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-09T12:56:23Z"},
+	   {"idx": 19, "uid": "403", "nick": "푸양", "stat": 1,"cnt_count": 2, "cnt_url": "https://imag", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-09T12:08:23Z"},
+	   {"idx": 17, "uid": "403", "nick": "푸양", "stat": 2, "cnt_count": 2, "cnt_url": "https://image", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-08T13:16:21Z"},
+	   {"idx": 16, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://imaged", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-04T10:57:04Z"},
+	   {"idx": 15, "uid": "403", "nick": "푸양", "stat": 3, "cnt_count": 3, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:35:24Z"},
+	   {"idx": 14, "uid": "403", "nick": "푸양", "stat": 2, "cnt_count": 2, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:35:24Z"},
+	   {"idx": 13, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://video.mp4", "cnt_type": "vdo", "cnt_thumb": "https://imaged", "at_create": "2026-09-02T13:35:23Z"},
+	   {"idx": 12, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 2, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:34:58Z"},
+	   {"idx": 11, "uid": "869", "nick": "건지", "stat": 1, "cnt_count": 1, "cnt_url": "https://st/video.mp4", "cnt_type": "vdo", "cnt_thumb": "https://imaged", "at_create": "2026-08-28T15:01:54Z"},
+	   {"idx": 10, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-08-26T15:15:18Z"}]
+	*/
 
 	fmt.Println(res)
 }
@@ -336,16 +366,52 @@ func TestGetCondStoryList(t *testing.T) {
 	order := "new" // 최신순
 	gen := "1"
 	page := "1"
-	limit := "5"
+	limit := "20"
 
 	qurl := fmt.Sprintf("/story/v01/condition/list/%s/%s/%s/%s/%s/%s/%s", area, stat, mtype, order, gen, page, limit)
 
-	res, err := Get(*targetUrl, qurl, nil, nil)
+	// res, err := Get(*targetUrl, qurl, nil, nil)
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
 	if err != nil {
 		t.Errorf("Failed to get conditional story list: %v", err)
 		return
 	}
 
+	//"result":0,"resultString":"Success","data":[{"idx":1,"uid":2345091823,"nick":"testnick","stat":0,"cnt_count":3,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-02-02T07:24:25Z"}]}
+	fmt.Println(res)
+}
+
+// story.GET("/pcs/list/:page/:limit", p.st.GetPurchaseList)
+// story.POST("/buy/:idx", p.st.BuyStory)
+func TestGetPurchaseList(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/pcs/list/1/10"
+
+	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
+	if err != nil {
+		t.Errorf("Failed to get purchase list: %v", err)
+	}
+
+	/*
+	   {"result":0,"resultString":"Success","data":{"list":[
+	   {"idx":20,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":1,"cnt_count":5,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-09T12:56:23Z"},
+	   {"idx":18,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":0,"cnt_count":2,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ff91b39d-bb4f-47a7-f2a2-cf1ff98a5300/public","at_create":"2026-09-09T12:08:23Z"},
+	   {"idx":17,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":2,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5339e07e-cd0b-4a8d-d419-02c64cc91e00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-08T13:16:21Z"}],"msg":"success","total_count":3}}
+	*/
+
+	fmt.Println(res)
+}
+
+func TestBuyStory(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/buy/20"
+
+	// res, err := PostWithToken(*targetUrl, qurl, nil, nil, *dmToken)
+	res, err := PostWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
+	if err != nil {
+		t.Errorf("Failed to buy story: %v", err)
+	}
+	//{"result":0,"resultString":"Success","data":{"msg":"success"}}
 	fmt.Println(res)
 }
 
@@ -360,8 +426,24 @@ func TestGetStoryListByUid(t *testing.T) {
 	}
 
 	/*
-		{"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:27:44Z"},{"idx":1,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
+		{"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:27:44Z"},
+		{"idx":1,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
 	*/
+	fmt.Println(res)
+}
+
+func TestUpdateStoryView(t *testing.T) {
+	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	qurl := "/story/v01/view/update"
+
+	var key = []string{"idx"}
+	var value = []string{"3"}
+
+	res, err := PostWithToken(*targetUrl, qurl, key, value, *dmToken)
+	if err != nil {
+		t.Errorf("Failed to update story view: %v", err)
+	}
+
 	fmt.Println(res)
 }
 
@@ -475,12 +557,14 @@ func TestToggleStoryLike(t *testing.T) {
 	var key = []string{"story_idx", "uid"}
 	var value = []string{"3", "77645423234236541"}
 
-	res, err := PostJson(*targetUrl, qurl, key, value)
+	// res, err := PostJson(*targetUrl, qurl, key, value)
+	res, err := PostWithToken(*targetUrl, qurl, key, value, *dmToken)
 	if err != nil {
 		t.Errorf("Failed to toggle story like: %v", err)
+		return
 	}
-
-	fmt.Println(res)
+	//{"like_count":3,"liked":false,"msg":"Successfully toggled story like"}
+	fmt.Println(string(res))
 }
 
 func TestFollowUser(t *testing.T) {

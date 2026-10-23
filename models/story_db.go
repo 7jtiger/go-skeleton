@@ -19,6 +19,26 @@ import (
 )
 
 /*
+CREATE TABLE `prf_info` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `nick` varchar(20) DEFAULT NULL,
+  `gender` tinyint(1) NOT NULL COMMENT 'woman = 0, man = 1',
+  `birth` date DEFAULT '1900-12-30',
+  `age` varchar(3) DEFAULT '0' COMMENT '+3 ~ -3',
+  `area` tinyint DEFAULT NULL,
+  `intro` varchar(128) DEFAULT NULL,
+  `main_pic` varchar(128) DEFAULT NULL,
+  `sub_pic1` json DEFAULT NULL,
+  `sub_pic2` json DEFAULT NULL,
+  `sub_pic3` json DEFAULT NULL,
+  `sub_pic4` json DEFAULT NULL,
+  `sub_pic5` json DEFAULT NULL,
+  `at_update` date DEFAULT NULL,
+  `at_create` date DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 CREATE TABLE `story` (
   `idx` int unsigned NOT NULL AUTO_INCREMENT,
   `uid` bigint NOT NULL,
@@ -28,15 +48,18 @@ CREATE TABLE `story` (
   `gender` int DEFAULT '1' COMMENT '0=woman, 1=man',
   `body` varchar(512) DEFAULT NULL,
   `type` tinyint DEFAULT '1' COMMENT '0=only img, 1=only video, 2=img+video',
-  `stat` tinyint DEFAULT '1' COMMENT 'stat=0 : del, stat=1 : pub, stat=2 : private, stat=3 : limit, stat=4 : ',
+  `stat` tinyint DEFAULT '1' COMMENT 'stat : 0=PUB(public 전체공개), 1=FLW(follower only), 2=PAY(paid only), 3=PRV(Private 비공개), 4=DEL(Deleted) 5=RSV(reserved)',
   `qt_good` int DEFAULT '0',
+  `qt_view` int DEFAULT '0' COMMENT 'view count',
   `qt_checked` int DEFAULT '0' COMMENT '조회수',
-  `str_img` json NOT NULL COMMENT '슬롯맵 최대5 {"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb":"..."},...}',
+  `price` int DEFAULT '0',
+  `str_img` json NOT NULL,
   `at_update` datetime DEFAULT NULL,
   `at_create` datetime DEFAULT NULL,
-  `str_imgbak` json DEFAULT NULL COMMENT '삭제된 슬롯 백업 (동일 StoryStrImg 포맷)',
+  `str_imgbak` json DEFAULT NULL,
   PRIMARY KEY (`idx`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 
 CREATE TABLE `str_cmt` (
   `idx` int unsigned NOT NULL AUTO_INCREMENT,
@@ -45,7 +68,7 @@ CREATE TABLE `str_cmt` (
   `nick` varchar(20) DEFAULT NULL,
   `thumb_url` varchar(256) DEFAULT NULL,
   `wgender` varchar(2) DEFAULT NULL,
-  `wage` varchar(45) DEFAULT NULL,
+  `wage` date DEFAULT NULL COMMENT '1900-12-30',
   `warea` varchar(45) DEFAULT NULL,
   `body` varchar(256) DEFAULT NULL,
   `stat` tinyint DEFAULT NULL COMMENT 'stat=0:default, stat=1:private, stat=2::rerv, stat=3:rerv,stat=4:del',
@@ -53,32 +76,43 @@ CREATE TABLE `str_cmt` (
   `at_update` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `idx_UNIQUE` (`idx`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 CREATE TABLE `story_like` (
-  `idx` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `story_idx` INT UNSIGNED NOT NULL,
-  `uid` BIGINT UNSIGNED NOT NULL,
-  `stat` TINYINT NOT NULL DEFAULT 1 COMMENT '1:like, 0:unlike',
-  `at_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `at_update` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `idx` int unsigned NOT NULL AUTO_INCREMENT,
+  `story_idx` int unsigned NOT NULL,
+  `uid` bigint NOT NULL,
+  `stat` tinyint NOT NULL DEFAULT '1' COMMENT '1:like, 0:unlike',
+  `at_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `at_update` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_story_user_like` (`story_idx`, `uid`),
-  KEY `idx_story_stat` (`story_idx`, `stat`, `at_update`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY `idx_story_like_story_idx_uid` (`story_idx`,`uid`),
+  KEY `idx_story_stat` (`story_idx`,`stat`,`at_update`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `str_pcs` (
+  `idx` int NOT NULL,
+  `str_idx` int NOT NULL,
+  `tid` bigint DEFAULT NULL COMMENT '판매자',
+  `pcs_uid` bigint NOT NULL COMMENT '구매자 uid',
+  `at_create` date DEFAULT NULL,
+  `at_update` date DEFAULT NULL,
+  `qt_payed` bigint DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='스토리 구매 목록 리스트'
 
 CREATE TABLE `user_follow` (
-  `idx` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `uid` BIGINT UNSIGNED NOT NULL,
-  `followee_uid` BIGINT UNSIGNED NOT NULL,
-  `stat` TINYINT NOT NULL DEFAULT 1 COMMENT '1:follow, 0:unfollow',
-  `at_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `at_update` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `uid` bigint NOT NULL,
+  `followee_uid` bigint NOT NULL,
+  `stat` tinyint NOT NULL DEFAULT '1' COMMENT '1:follow, 0:unfollow',
+  `at_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `at_update` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_follow_pair` (`follower_uid`, `followee_uid`),
-  KEY `idx_follower_stat` (`follower_uid`, `stat`, `at_update`),
-  KEY `idx_followee_stat` (`followee_uid`, `stat`, `at_update`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY `uk_follow_pair` (`uid`,`followee_uid`),
+  KEY `idx_uid_stat` (`uid`,`stat`,`at_update`),
+  KEY `idx_followee_stat` (`followee_uid`,`stat`,`at_update`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 
 CREATE TABLE `str_cutout` (
@@ -98,26 +132,7 @@ CREATE TABLE `str_cutout` (
   UNIQUE KEY `uk_cutout_pair` (`uid`,`tid`),
   KEY `idx_cutout_uid_stat` (`uid`,`stat`,`at_upd` DESC),
   CONSTRAINT `chk_cutout_not_self` CHECK ((`uid` <> `tid`))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-
-CREATE TABLE `prf_info` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `uid` bigint NOT NULL,
-  `nick` varchar(20) DEFAULT NULL,
-  `birth` date DEFAULT '1900-12-30',
-  `age` varchar(3) DEFAULT NULL,
-  `area` tinyint DEFAULT NULL,
-  `intro` varchar(128) DEFAULT NULL,
-  `main_pic` varchar(128) DEFAULT NULL,
-  `sub_pic1` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot1',
-  `sub_pic2` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot2',
-  `sub_pic3` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot3',
-  `sub_pic4` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot4',
-  `sub_pic5` json DEFAULT NULL COMMENT '{"url":"...","stat":N} slot5',
-  `at_update` date DEFAULT NULL,
-  `at_create` date DEFAULT NULL,
-  PRIMARY KEY (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 */
 
@@ -408,15 +423,10 @@ func (p *StoryDB) GetStoryFirstPicUrls(uid uint64) (*map[int]string, *map[int]st
 		}
 		//strImg := {"1": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public", "2": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0125d18e-aa56-45a0-98ac-853ecd3c1600/public"}
 
-		firstURL, tcnts, err := GetFirstPicUrl(strImg)
-		if err != nil {
-			return nil, nil, err
-		}
-		if tcnts == 1 {
-			strthmbls[idx] = firstURL
-		} else {
-			strImgs[idx] = firstURL
-		}
+		// firstURL, tcnts, err := GetFirstPicUrl(strImg)
+		// if err != nil {
+		// 	return nil, nil, err
+		// }
 
 		i++
 	}
@@ -520,6 +530,22 @@ func (p *StoryDB) UploadPrfPic(picInfos *[]ptc.PrfPicInfo, uid uint64) error {
 }
 
 // --- story profile ----------------------------------------------------------------------
+func (p *StoryDB) GetPFMainPic(uid uint64) (string, error) {
+	query := "SELECT main_pic FROM prf_info WHERE uid = ? LIMIT 1"
+	row := p.conndb.QueryRow(query, uid)
+
+	var mainPic string
+	err := row.Scan(&mainPic)
+	if err != nil {
+		// 허용: NULL(main_pic)도 OK → ""로 반환
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+
+	return mainPic, nil
+}
 
 func (p *StoryDB) GetSList() (string, string, error) {
 	row := p.conndb.QueryRow("SELECT privacy_url, terms_url FROM terms_info")
@@ -539,11 +565,11 @@ func (p *StoryDB) SaveStory(simg *ptc.StoryImage, media ptc.StoryStrImg) (int64,
 	simg.StrImg = strImg
 	simg.MType = mtype
 
-	query := `INSERT INTO story (uid, nick, birth, area, gender, body, type, stat, str_img, at_create, at_update) 
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
+	query := `INSERT INTO story (uid, nick, birth, area, gender, main_pic, body, type, stat, price, str_img, at_create, at_update) 
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
 	result, err := p.conndb.Exec(query, simg.Uid, simg.Nick, simg.Birth,
-		simg.Area, simg.Gender, simg.Body, simg.MType,
-		simg.Stat, simg.StrImg)
+		simg.Area, simg.Gender, simg.MainPic, simg.Body, simg.MType,
+		simg.Stat, simg.Price, simg.StrImg)
 	if err != nil {
 		return 0, err
 	}
@@ -552,41 +578,60 @@ func (p *StoryDB) SaveStory(simg *ptc.StoryImage, media ptc.StoryStrImg) (int64,
 	if err != nil {
 		return 0, err
 	}
+
 	return lastID, nil
 }
 
 // stat = 0 : pub, stat = 1 : private, stat = 2 : limit, stat = 3 : resv, stat = 4 : del
-func (p *StoryDB) GetDefStoryList(uid uint64) (*[]ptc.StoryListResp, error) {
-	query := `SELECT idx, nick, str_img, at_create FROM story WHERE uid = ? AND stat IN (1, 0) ORDER BY at_create DESC`
-	rows, err := p.conndb.Query(query, uid)
+func (p *StoryDB) GetDefStoryList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, error) {
+	query := `SELECT idx, uid, nick, stat, str_img, at_create FROM story WHERE stat IN (1, 2, 3) ORDER BY at_create DESC LIMIT ? OFFSET ?`
+	rows, err := p.conndb.Query(query, limit, (page-1)*limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var stories []ptc.StoryListResp
+	// var stories []ptc.StoryListResp
+	var stories = make([]ptc.StoryListResp, 0)
+	story := ptc.StoryListResp{}
 	for rows.Next() {
-		var (
-			story ptc.StoryListResp
-			raw   json.RawMessage
-		)
-		err := rows.Scan(&story.Idx, &story.Nick, &raw, &story.AtCreate)
+		var raw json.RawMessage
+		// var fstCnts ptc.StoryMediaItem
+		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate)
 		if err != nil {
 			return nil, err
 		}
-		story.StrImg, err = LoadStoryStrImg(raw)
+
+		// fstCnts, err = LoadStoryStrImg(raw)
+		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
 		if err != nil {
 			return nil, fmt.Errorf("story %d str_img: %w", story.Idx, err)
 		}
-		stories = append(stories, story)
+
+		tmp := ptc.StoryListResp{
+			Idx:      story.Idx,
+			Uid:      story.Uid,
+			Nick:     story.Nick,
+			Stat:     story.Stat,
+			CntCount: nMaxCount,
+			CntUrl:   fstItem.URL,
+			CntType:  fstItem.Type,
+			CntThumb: fstItem.Thumb,
+			AtCreate: story.AtCreate,
+		}
+
+		stories = append(stories, tmp)
 	}
+
 	return &stories, nil
 }
 
-func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []interface{}) (*map[int]string, error) {
-	base := `SELECT idx, str_img FROM story WHERE stat IN (0,1)`
+// GetCondStoryList builds a filtered story feed.
+// stat filter comes from conds (controller): 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV
+func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []interface{}) (*[]ptc.StoryListResp, error) {
+	base := `SELECT idx, uid, nick, stat, str_img, at_create FROM story`
 	if len(conds) > 0 {
-		base += " AND " + strings.Join(conds, " AND ")
+		base += " WHERE " + strings.Join(conds, " AND ")
 	}
 	query := base + " ORDER BY " + orderQuery + " LIMIT ? OFFSET ?"
 	// fmt.Println("query", query, " args ", args)
@@ -596,25 +641,197 @@ func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []int
 	}
 	defer rows.Close()
 
-	stories := make(map[int]string)
+	var stories = make([]ptc.StoryListResp, 0)
+	story := ptc.StoryListResp{}
 	for rows.Next() {
-		var idx int
-		var strImg string
-		err := rows.Scan(&idx, &strImg)
+		var raw json.RawMessage
+		// var fstCnts ptc.StoryMediaItem
+		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate)
 		if err != nil {
 			return nil, err
 		}
 
-		// str_img 통합 media에서 대표 URL 추출 (img→url, vdo→thumb)
-		firstURL, _, err := GetFirstPicUrl(strImg)
+		// fstCnts, err = LoadStoryStrImg(raw)
+		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
 		if err != nil {
-			stories[idx] = strImg
-			continue
+			return nil, fmt.Errorf("story %d str_img: %w", story.Idx, err)
 		}
-		stories[idx] = firstURL
+
+		tmp := ptc.StoryListResp{
+			Idx:      story.Idx,
+			Uid:      story.Uid,
+			Nick:     story.Nick,
+			Stat:     story.Stat,
+			CntCount: nMaxCount,
+			CntUrl:   fstItem.URL,
+			CntType:  fstItem.Type,
+			CntThumb: fstItem.Thumb,
+			AtCreate: story.AtCreate,
+		}
+
+		stories = append(stories, tmp)
 	}
 
 	return &stories, nil
+}
+
+// BuyStory records a purchase in str_pcs (pcs_uid = buyer, tid = story owner).
+func (p *StoryDB) BuyStory(pcsUid uint64, strIdx int) error {
+	var tid uint64
+	err := p.conndb.QueryRow(`SELECT uid FROM story WHERE idx = ?`, strIdx).Scan(&tid)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("story not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	query := `
+		INSERT INTO str_pcs (idx, str_idx, tid, pcs_uid, at_create, at_update, qt_payed)
+		SELECT COALESCE(MAX(idx), 0) + 1, ?, ?, ?, NOW(), NOW(), 0
+		FROM str_pcs
+	`
+	_, err = p.conndb.Exec(query, strIdx, tid, pcsUid)
+	return err
+}
+
+func (p *StoryDB) isPaid(idx int, tid uint64) (int, error) {
+	query := `SELECT COUNT(1) FROM str_pcs WHERE str_idx = ? AND tid = ?`
+	var count int
+	err := p.conndb.QueryRow(query, idx, tid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetPurchaseList returns stories the user purchased (str_pcs.pcs_uid), newest first.
+// pcs_uid = my uid, 구매한 사람
+func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, int, error) {
+	offset := (page - 1) * limit
+	if offset < 0 {
+		offset = 0
+	}
+
+	var totalCount int
+	cntQuery := `
+		SELECT COUNT(1)
+		FROM str_pcs p
+		INNER JOIN story s ON s.idx = p.str_idx
+		WHERE p.pcs_uid = ?
+	`
+	if err := p.conndb.QueryRow(cntQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT s.idx, s.uid, s.nick, s.stat, s.str_img, s.at_create
+		FROM str_pcs p
+		INNER JOIN story s ON s.idx = p.str_idx
+		WHERE p.pcs_uid = ?
+		ORDER BY s.at_create DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := p.conndb.Query(query, uid, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	stories := make([]ptc.StoryListResp, 0, limit)
+	for rows.Next() {
+		var (
+			story ptc.StoryListResp
+			raw   json.RawMessage
+		)
+		if err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate); err != nil {
+			return nil, 0, err
+		}
+
+		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
+		if err != nil {
+			return nil, 0, fmt.Errorf("story %d str_img: %w", story.Idx, err)
+		}
+
+		stories = append(stories, ptc.StoryListResp{
+			Idx:      story.Idx,
+			Uid:      story.Uid,
+			Nick:     story.Nick,
+			Stat:     story.Stat,
+			CntCount: nMaxCount,
+			CntUrl:   fstItem.URL,
+			CntType:  fstItem.Type,
+			CntThumb: fstItem.Thumb,
+			AtCreate: story.AtCreate,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return &stories, totalCount, nil
+}
+
+func (p *StoryDB) GetDetailList(tid uint64, nPage int, nLimit int) (*[]ptc.StoryDetailResp, int, error) {
+	cntQuery := `SELECT COUNT(1) FROM story WHERE stat IN (0, 1, 2, 3)`
+	var totalCount int
+	if err := p.conndb.QueryRow(cntQuery).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	// query := `SELECT idx, uid, nick, stat, str_img, at_create FROM story WHERE idx = ? AND uid = ? ORDER BY at_create DESC LIMIT ? OFFSET ?`
+	// query := `SELECT idx, uid, nick, body, stat, qt_good, qt_view, price, str_img, at_create FROM story WHERE uid = ? AND idx <= ? ORDER BY idx DESC LIMIT ? OFFSET ?`
+	query := `SELECT idx, uid, nick, stat, main_pic, body, qt_good, qt_view, price, str_img, at_create FROM story WHERE stat IN (0,1,2,3) ORDER BY at_create DESC LIMIT ? OFFSET ?`
+	rows, err := p.conndb.Query(query, nLimit, (nPage-1)*nLimit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	stlist := make([]ptc.StoryDetailResp, 0)
+	for rows.Next() {
+		var raw json.RawMessage
+		story := ptc.StoryDetailResp{}
+		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &story.MainPic, &story.Body, &story.QtGood, &story.QtView, &story.Price, &raw, &story.AtCreate)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// story.StrImg, err = LoadStoryStrImg(raw)
+		var media ptc.StoryStrImg
+		if err := json.Unmarshal([]byte(raw), &media); err != nil {
+			return nil, 0, fmt.Errorf("invalid media JSON: %w", err)
+		}
+
+		cmtlist, tcount, err := p.GetStrComment2Low(int64(story.Idx))
+		if err != nil {
+			return nil, 0, err
+		}
+
+		story.ContentTotal = len(media)
+		story.StrImg = media
+		if tcount > 0 {
+			story.CmtCount = tcount
+			story.CommentList = *cmtlist
+		} else {
+			story.CmtCount = 0
+			story.CommentList = nil
+		}
+
+		paid, err := p.isPaid(story.Idx, tid)
+		if err != nil {
+			return nil, 0, err
+		}
+		story.IsPaid = paid // 0=not paid, 1=paid
+
+		Followed, err := p.IsFollowed(tid, story.Uid)
+		if err != nil {
+			return nil, 0, err
+		}
+		story.IsFollowed = Followed // 0=not followed, 1=followed
+
+		stlist = append(stlist, story)
+	}
+	return &stlist, totalCount, nil
 }
 
 func (p *StoryDB) GetStory(strIdx int) (*ptc.StoryDetailResp, error) {
@@ -631,11 +848,53 @@ func (p *StoryDB) GetStory(strIdx int) (*ptc.StoryDetailResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	story.StrImg, err = LoadStoryStrImg(raw)
-	if err != nil {
-		return nil, fmt.Errorf("story %d str_img: %w", strIdx, err)
+	var media ptc.StoryStrImg
+	if err := json.Unmarshal([]byte(raw), &media); err != nil {
+		return nil, fmt.Errorf("invalid media JSON: %w", err)
 	}
+	story.StrImg = media
 	return &story, nil
+}
+
+func (p *StoryDB) GetStoryViewCount(strIdx int) (int, error) {
+	query := `SELECT qt_view FROM story WHERE idx = ?`
+	row := p.conndb.QueryRow(query, strIdx)
+	var qtView int
+	err := row.Scan(&qtView)
+	if err != nil {
+		return 0, err
+	}
+	return qtView, nil
+}
+
+func (p *StoryDB) GetStoryLikeCount(strIdx int) (int, error) {
+	query := `SELECT qt_good FROM story WHERE idx = ?`
+	row := p.conndb.QueryRow(query, strIdx)
+	var qtGood int
+	err := row.Scan(&qtGood)
+	if err != nil {
+		return 0, err
+	}
+	return qtGood, nil
+}
+
+// UpdateStoryView increments story.qt_view by 1 and returns the new value.
+// Uses LAST_INSERT_ID(expr) so one UPDATE covers both increment and return.
+func (p *StoryDB) UpdateStoryView(strIdx int) error {
+	query := `UPDATE story SET qt_view = LAST_INSERT_ID(COALESCE(qt_view, 0) + 1), at_update = NOW() WHERE idx = ?`
+	result, err := p.conndb.Exec(query, strIdx)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("story not found")
+	}
+
+	return nil
 }
 
 func (p *StoryDB) UpdateStoryStat(strIdx int, stat int) (int64, error) {
@@ -677,9 +936,13 @@ func (p *StoryDB) SetStrComment(cmt *ptc.StrComment) (int64, error) {
 	return result.LastInsertId()
 }
 
-func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int, error) {
-	const pageSize = 20
-	offset := (page - 1) * pageSize
+// func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int, error) {
+func (p *StoryDB) GetStrCmtDetail(cmtIdx, page, limit int) (*[]ptc.StrComment, int, error) {
+	if limit == 0 {
+		limit = 20
+	}
+
+	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
 	}
@@ -695,13 +958,14 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int,
 	          WHERE str_idx = ? AND stat IN (0,1)
 	          ORDER BY at_create DESC
 	          LIMIT ? OFFSET ?`
-	rows, err := p.conndb.Query(query, cmtIdx, pageSize, offset)
+	rows, err := p.conndb.Query(query, cmtIdx, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	comments := []ptc.StrComment{}
+	// comments := []ptc.StrComment{}
+	comments := make([]ptc.StrComment, 0)
 	for rows.Next() {
 		var comment ptc.StrComment
 		var nick, thumbUrl, wgender, wage, warea, body sql.NullString
@@ -722,6 +986,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int,
 		if err != nil {
 			return nil, 0, err
 		}
+
 		// NULL string 처리
 		comment.Nick = ""
 		if nick.Valid {
@@ -752,29 +1017,29 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int,
 	return &comments, totalCount, nil
 }
 
-func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptc.StrComment, error) {
+func (p *StoryDB) GetStrComment2Low(strIdx int64) (*[]ptc.StrComment, int, error) {
+	var totalCount int
+	countQuery := `SELECT COUNT(1) FROM str_cmt WHERE str_idx = ? AND stat IN (0,1)`
+	if err := p.conndb.QueryRow(countQuery, strIdx).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
 	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
 	          FROM str_cmt
 	          WHERE str_idx = ? AND stat IN (0,1)
-	          ORDER BY at_create DESC`
+	          ORDER BY at_create DESC LIMIT 2`
 	// var comments []ptl.StrComment
 	rows, err := p.conndb.Query(query, strIdx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	comments := []ptc.StrComment{}
+	// comments := []ptc.StrComment{}
+	comments := make([]ptc.StrComment, 0)
 	for rows.Next() {
-		var (
-			comment  ptc.StrComment
-			nick     sql.NullString
-			thumbUrl sql.NullString
-			wgender  sql.NullString
-			wage     sql.NullString
-			warea    sql.NullString
-			body     sql.NullString
-		)
+		var comment ptc.StrComment
+		var nick, thumbUrl, wgender, wage, warea, body sql.NullString
 		err := rows.Scan(
 			&comment.Idx,
 			&comment.StrIdx,
@@ -790,8 +1055,10 @@ func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptc.StrComment, error) {
 			&comment.AtUpdate,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
+
+		// NULL string 처리
 		comment.Nick = ""
 		if nick.Valid {
 			comment.Nick = nick.String
@@ -818,7 +1085,8 @@ func (p *StoryDB) GetStrCommentList(strIdx int64) (*[]ptc.StrComment, error) {
 		}
 		comments = append(comments, comment)
 	}
-	return &comments, nil
+
+	return &comments, totalCount, nil
 }
 
 func (p *StoryDB) GetStrPicList(strIdx int) (json.RawMessage, json.RawMessage, error) {
@@ -926,6 +1194,16 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 	}
 	rollback = false
 	return stat == 1, likeCount, nil
+}
+
+func (p *StoryDB) IsFollowed(tid, uid uint64) (int, error) {
+	query := `SELECT COUNT(1) FROM user_follow WHERE uid = ? AND followee_uid = ?`
+	var count int
+	err := p.conndb.QueryRow(query, uid, tid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (p *StoryDB) SetFollow(followerUid, followeeUid uint64) (int64, error) {

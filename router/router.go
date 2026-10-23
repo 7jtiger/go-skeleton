@@ -1,9 +1,7 @@
 package router
 
 import (
-	"encoding/base32"
-
-	"ms-gateway/common/logger"
+	log "ms-gateway/common/logger"
 	"ms-gateway/conf"
 	"ms-gateway/models"
 
@@ -12,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pquerna/otp/totp"
 
 	"ms-gateway/docs"
 
@@ -64,7 +61,7 @@ func convertWhiteList(wl []string) map[string]string {
 	return converted
 }
 
-func validateOTP(otp string) bool {
+/* func validateOTP(otp string) bool {
 	secret := "123456"
 	if otp == "" {
 		return false
@@ -77,11 +74,12 @@ func validateOTP(otp string) bool {
 
 	return true
 }
+*/
 
 func liteAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("X-Totp")
-		logger.Info("auth : ", auth)
+		log.Info("auth : ", auth)
 		c.Next()
 	}
 }
@@ -96,7 +94,7 @@ func (p *Router) otpAuth() gin.HandlerFunc {
 		}
 
 		auth := c.GetHeader("X-Otp")
-		logger.Info("auth : ", auth)
+		log.Info("auth : ", auth)
 		c.Next()
 	}
 }
@@ -114,11 +112,11 @@ func (p *Router) Idx() *gin.Engine {
 	// MultipartForm: 동영상 최대 100MB 업로드를 위해 여유 있게 설정 (초과분은 임시 디스크)
 	e.MaxMultipartMemory = 128 << 20 // 128MB
 
-	e.Use(logger.GinLogger())
-	e.Use(logger.GinRecovery(true))
+	e.Use(log.GinLogger())
+	e.Use(log.GinRecovery(true))
 	e.Use(CORS())
 
-	logger.Info("start server : ", p.cfg.Server.Port)
+	log.Info("start server : ", p.cfg.Server.Port)
 
 	e.GET("/swagger/:any", ginSwg.WrapHandler(swgFiles.Handler))
 	docs.SwaggerInfo.Host = "localhost"
@@ -264,7 +262,11 @@ func (p *Router) Idx() *gin.Engine {
 		story.GET("/prf/info/:tid", p.st.GetPrfInfo)
 		story.GET("/prf/assets", p.st.GetPrfAssets)
 		story.GET("/prf/pic/list", p.st.GetPrfPicLists)
-		story.GET("/prf/story/lists/:tid", p.st.GetPrfStoryLists)
+		// TODO : 확인
+		story.GET("/prf/story/:tid", p.st.GetPrfStoryLists)
+		story.GET("/prf/story/list/:page/:limit", p.st.GetPrfStoryList)
+		story.GET("/prf/story/list/:page/:limit/:tid", p.st.GetPrfStoryList)
+
 		story.POST("/prf/upd", p.st.UpdatePrfInfo)
 
 		story.POST("/prf/set/mainpic/:url", p.st.SetMainPic)
@@ -278,10 +280,18 @@ func (p *Router) Idx() *gin.Engine {
 		// story.GET("/home/:id")
 		story.POST("/upload", p.ValidateFileUpload(5, 5), p.st.UploadStoryContent)
 		story.POST("/create", p.st.CreateStory)
+
+		// ------------- story list -------------
 		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
 
-		story.GET("/list/:uid", p.st.GetStoryDefaultList)
-		story.GET("/detail/:idx", p.st.GetStoryDetail)
+		story.GET("/list/:page/:limit", p.st.GetStoryList)
+		story.GET("/list/:page/:limit/:tid", p.st.GetStoryList)
+		// story.GET("/detail/:idx/:page/:limit/:tid", p.st.GetStoryDetail)
+		// story.GET("/detail/:idx/:page/:limit", p.st.GetStoryDetail)
+
+		// ------------- purchase -------------
+		story.GET("/pcs/list/:page/:limit", p.st.GetPurchaseList)
+		story.POST("/buy/:idx", p.st.BuyStory)
 
 		// ------------- story -------------
 		story.POST("/updstat", p.st.UpdateStoryStat)
@@ -289,13 +299,18 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/delpic", p.st.DeleteStrPic)
 
 		// ------------- comment -------------
-		story.GET("/comment/:idx/:page", p.st.GetStrCmtDetail)
+		story.GET("/comment/:idx/:page/:limit", p.st.GetStrCmtDetail)
 		story.POST("/comment/create", p.st.CreateStrComment)
 		story.POST("/comment/updstat", p.st.UpdateStrStatComment)
 		story.POST("/comment/updbody", p.st.UpdateStrBodyComment)
 
 		// ------------- like/follow/block -------------
-		story.POST("/like/toggle", p.st.ToggleStoryLike)
+		story.POST("/view/update/:idx", p.st.UpdateStoryViewCnt)
+		story.GET("/view/count/:idx", p.st.GetStoryViewCount)
+
+		story.GET("/like/count/:idx", p.st.GetStoryLikeCount)
+		story.POST("/like/toggle", p.st.UpdateStoryLike)
+
 		story.POST("/follow/set/:tid", p.st.FollowUser)
 		story.POST("/follow/cancel/:tid", p.st.UnfollowUser)
 
@@ -309,7 +324,6 @@ func (p *Router) Idx() *gin.Engine {
 		/* story.POST("/block/create", p.st.BlockUser)
 		story.POST("/block/cancel", p.st.UnblockUser)
 		story.GET("/block/list/:uid/:page/:limit", p.st.GetBlockList) */
-
 	}
 
 	//누드, 음모 확인 기능

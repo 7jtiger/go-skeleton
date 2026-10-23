@@ -128,6 +128,10 @@
 - **Notification Structures**: Personal user notifications (1 structure)
 - **Announcement Structures**: Public announcements (1 structure)
 - **Story Comment Structures**: `StrComment` 확장 필드 포함 (`thumb_url`, `wgender`, `wage(string)`, `warea`)
+- `StrCmtCreateReq` / `StrCmtCreateResp`: CreateStrComment 요청·응답 (`msg`, `lastID`, SimpleRespOK)
+- `StrCmtDetailData` / `StrCmtDetailResp`: GetStrCmtDetail Swagger 응답 (`comment[]`, `total_count`)
+- `StrCmtUpdStatReq` / `StrCmtUpdStatResp`: UpdateStrStatComment 요청·응답 (`msg`, `affected`, SimpleRespOK)
+- `StrCmtUpdBodyReq` / `StrCmtUpdBodyResp`: UpdateStrBodyComment 요청·응답 (`msg`, `affected`, SimpleRespOK)
 
 ### home.go (5 structures)
 - **Request Structures**: Home screen data request (1 structure)
@@ -177,14 +181,30 @@
 - **Internationalization**: Multi-language response support
 - **Story Social**: Like toggle, follow/unfollow, block/unblock DTO support
 
+### Profile DTOs
+- `PrfInfo`: 프로필 (`uid`, `nick`, `gender`, `birth`, `age`, `area`, `intro`, `main_pic`)
+- `PrfInfoData` / `PrfInfoResp`: GetPrfInfo Swagger 응답 (`prf_Info`, `flw_cnt`)
+- `PrfAssetsData` / `PrfAssetsResp`: GetPrfAssets Swagger 응답 (`hold_point`, `hold_cash`, `msg_count`)
+- `PrfPicMap` / `PrfPicListResp`: GetPrfPicLists Swagger 응답 (슬롯 맵 `{"N":{"url","stat"}}`)
+- `PrfPicUploadData` / `PrfPicUploadResp`: UploadPrfPic Swagger 응답 (`msg`, `pics[]`)
+- `PrfPicWaitingListData` / `PrfPicWaitingListResp`: GetPrfPicWaitingList Swagger 응답 (`msg`, `total_count`, `list`)
+- `SetPrfPicStatReq` / `SetPrfPicStatData` / `SetPrfPicStatResp`: SetPrfPicStat 요청·응답 (`msg`, `affected`)
+- `PrfStoryListsData` / `PrfStoryListsResp`: GetPrfStoryLists Swagger 응답 (`str_imgs`, `str_thmbls`)
+- `PrfUpdData` / `PrfUpdResp`: UpdatePrfInfo / SetMainPic Swagger 응답 (`msg=success`)
+
 ### Story Social DTOs (2026-04)
-- `StoryLikeToggleReq`: story like toggle request
+- `StoryLikeToggleReq`: `{story_idx, uid}` — 좋아요 토글 요청 (문자열 숫자)
 - `FollowReq`: follow/unfollow request
 - `FollowUserItem`: follower/following list item response
 - `BlockReq`: block/unblock request
 - `BlockUserItem`: block list item response
+- `StoryDetailListData` / `StoryDetailListResp`: GetStoryDetail Swagger 응답
+- `CutoutActionData` / `CutoutActionResp`: cutout set/cancel Swagger 응답 (`msg`, `affected`)
+- `CutoutCountData` / `CutoutCountResp`: cutout count Swagger 응답 (`msg`, `count`)
+- `CutoutListData` / `CutoutListResp`: cutout list Swagger 응답 (`msg`, `total_count`, `list`)
+- 참고: `@Example`는 swag 미지원 → `@Description` + typed `@Success` + struct `example` 사용
 
 ---
 *Created: 2025-09-15*
-*Last Updated: 2026-04-21*
+*Last Updated: 2026-10-15*
 *File Location: /home/jino/go/src/ms-gateway/protocol/*

@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 )
 
 func joinMsg(args ...interface{}) string {
@@ -74,4 +76,31 @@ func firstFormValue(m map[string][]string, key string) (string, bool) {
 		return "", false
 	}
 	return vs[0], true
+}
+
+func getPageAndLimit(page string, limit string) (int, int, error) {
+	if page == "" {
+		page = "1"
+	}
+	if limit == "" {
+		limit = "20"
+	}
+
+	nPage, err := strconv.Atoi(page)
+	if err != nil {
+		return 0, 0, errors.New("page is invalid")
+	}
+	nLimit, err := strconv.Atoi(limit)
+	if err != nil {
+		return 0, 0, errors.New("limit is invalid")
+	}
+
+	return nPage, nLimit, nil
+}
+
+func switchDefParam(param string, def string) string {
+	if param == "" {
+		return def
+	}
+	return param
 }
