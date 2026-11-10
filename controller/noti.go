@@ -39,16 +39,23 @@ func NewNotiController(ctl *Controller, rep *models.Repositories) (*NotiControll
 }
 
 // GetNotiList godoc
-// @Summary      알림 목록 조회
-// @Description  사용자의 알림 목록을 조회합니다 (JWT 인증 기반)
-// @Tags         Noti
+// @Summary      알림 목록 조회 (미완성)
+// @Description  알림 목록 조회 (미완성) API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: 등록된 /list 경로에는 id가 없지만 핸들러가 path id를 요구하므로 항상 400입니다. 목록 조회는 구현되지 않았습니다.
+// @Description
+// @Description  **응답**: 오류 헤더.
+// @Tags         Notification
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  protocol.RespHeader
-// @Failure      400  {object}  protocol.RespHeader "Bad request"
-// @Failure      401  {object}  protocol.RespHeader "Unauthorized"
+// @Param        Authorization header string true "Bearer access token"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
 // @Router       /noti/v01/list [get]
+// @Example Request: GET /noti/v01/list
 func (p *NotiController) GetNotiList(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -81,15 +88,26 @@ func (p *NotiController) GetNotiNewCount(uid uint64) (int, error) {
 
 // GetNotiDetail godoc
 // @Summary      알림 상세 조회
-// @Description  알림 상세 정보를 조회하고 읽음 처리합니다
-// @Tags         Noti
+// @Description  알림 상세 조회 API입니다.
+// @Description
+// @Description  **요청**: path idx: 알림 인덱스.
+// @Description
+// @Description  **처리**: 알림을 조회한 뒤 읽음 표시를 갱신합니다. 읽음 표시 실패는 기록하고 조회 결과를 반환합니다.
+// @Description
+// @Description  **응답 data**: 알림 상세.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Notification
 // @Accept       json
 // @Produce      json
-// @Param        idx  path      string  true  "Noti index"
-// @Success      200  {object}  protocol.Noti
-// @Failure      400  {object}  protocol.RespHeader "idx is required"
-// @Failure      500  {object}  protocol.RespHeader "Failed to get noti detail"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        idx path int true "대상 인덱스"
+// @Success      200 {object} protocol.RespDataHeader "data: 알림 상세."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
 // @Router       /noti/v01/detail/{idx} [get]
+// @Example Request: GET /noti/v01/detail/15
 func (p *NotiController) GetNotiDetail(c *gin.Context) {
 	idx := c.Param("idx")
 	if idx == "" {
@@ -118,14 +136,25 @@ func (p *NotiController) GetNotiDetail(c *gin.Context) {
 }
 
 // GetAnnouncement godoc
-// @Summary      공지사항 목록 조회
-// @Description  공지사항 목록을 조회합니다 (일주일 이내 공지는 new 표시)
-// @Tags         Noti
+// @Summary      공지 목록 조회
+// @Description  공지 목록 조회 API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: 공지 목록을 조회합니다.
+// @Description
+// @Description  **응답 data**: 공지 목록.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Notification
 // @Accept       json
 // @Produce      json
-// @Success      200  {array}   protocol.Announcement
-// @Failure      500  {object}  protocol.RespHeader "Failed to get announcement list"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Success      200 {object} protocol.RespDataHeader "data: 공지 목록."
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
 // @Router       /noti/v01/anc/list [get]
+// @Example Request: GET /noti/v01/anc/list
 func (p *NotiController) GetAnnouncement(c *gin.Context) {
 	announcementList, err := p.hdb.GetAnnouncementList()
 	if err != nil {
@@ -162,21 +191,32 @@ func (p *NotiController) SetAnnouncement(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
 // GetAnnouncementDetail godoc
-// @Summary      공지사항 상세 조회
-// @Description  공지사항 상세 정보를 조회합니다
-// @Tags         Noti
+// @Summary      공지 상세 조회
+// @Description  공지 상세 조회 API입니다.
+// @Description
+// @Description  **요청**: path idx: 공지 인덱스.
+// @Description
+// @Description  **처리**: 공지 상세를 조회합니다. 현재 sql.ErrNoRows도 일반 오류 분기에 포함되어 500을 반환합니다.
+// @Description
+// @Description  **응답 data**: 공지 상세.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Notification
 // @Accept       json
 // @Produce      json
-// @Param        idx  path      string  true  "Announcement index"
-// @Success      200  {object}  protocol.Announcement
-// @Failure      400  {object}  protocol.RespHeader "idx is required"
-// @Failure      404  {object}  protocol.RespHeader "Announcement not found"
-// @Failure      500  {object}  protocol.RespHeader "Failed to get announcement detail"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        idx path int true "대상 인덱스"
+// @Success      200 {object} protocol.RespDataHeader "data: 공지 상세."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      404 {object} protocol.RespHeader "공지사항 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
 // @Router       /noti/v01/anc/detail/{idx} [get]
+// @Example Request: GET /noti/v01/anc/detail/15
 func (p *NotiController) GetAnnouncementDetail(c *gin.Context) {
 	idx := c.Param("idx")
 	if idx == "" {

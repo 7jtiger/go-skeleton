@@ -1,4 +1,10 @@
 [server] ##nomal type
+# Upload resource limits: total request bytes and simultaneous multipart requests.
+uploadMaxBytes = 555745280 # 530 MiB, including thumbnails/form overhead
+uploadConcurrency = 8
+# Profile photo moderation admins; empty denies all users. Set trusted JWT UIDs on the server.
+profileAdminUIDs = []
+commentAdminUIDs = [] # 댓글 수정 관리자 UID. 비어 있으면 작성자만 허용
 name = "gateway"
 mode = "dev"
 port = ":8080"

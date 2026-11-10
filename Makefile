@@ -69,3 +69,15 @@ $(GO_FILES): go.mod go.sum
 
 # Parallel execution support
 .NOTPARALLEL:
+
+# Project-scoped DB tools; no credentials are passed on the command line.
+DB_CONFIG ?= $(BASE)/conf/config.toml
+.PHONY: db-check db-migrate db-test
+db-check:
+	$(GORUN) ./cmd/dbtool -config "$(DB_CONFIG)"
+
+db-migrate:
+	$(GORUN) ./cmd/dbtool -config "$(DB_CONFIG)" -apply
+
+db-test:
+	MS_GATEWAY_DB_CONFIG="$(DB_CONFIG)" $(GOTEST) ./models ./migrations -run 'Test(Story(Follow|FollowList|Revision|Batch|View|Purchase|PurchasePOC|Freshness)MySQL|ProjectMigrationsMySQL)$$' -count=1 -v

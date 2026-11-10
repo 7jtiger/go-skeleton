@@ -15,9 +15,9 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/acc/v01/check/:id": {
+        "/acc/v01/check/{id}": {
             "get": {
-                "description": "When /acc/v01/check/:id is called, it returns \"ok\" on success and a message on failure.\nid : user id",
+                "description": "아이디 중복 확인 API입니다.\n\n**요청**: path id: 확인할 값.\n\n**처리**: 사용 가능하면 msg=ok입니다. **현재 제한**: 중복 시 비표준 HTTP 상태 14를 전달하여 net/http 응답 처리에 실패할 수 있습니다. 409 응답으로 구현되어 있지 않습니다.\n\n**응답**: 사용 가능할 때 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -25,34 +25,53 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "check user id",
+                "summary": "아이디 중복 확인",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "계정 아이디",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
-                    "14": {
-                        "description": "result: ID is duplicate",
+                    "200": {
+                        "description": "사용 가능할 때 최상위 msg.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "200": {
-                        "description": "result: ok",
+                    "409": {
+                        "description": "이미 사용 중인 ID",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "400": {
-                        "description": "result: request failed",
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
-        "/acc/v01/ckemail/:email": {
+        "/acc/v01/ckemail/{email}": {
             "get": {
-                "description": "When /acc/v01/ckemail/:email is called, it returns \"ok\" on success and a message on failure.\nemail : user email",
+                "description": "이메일 중복 확인 API입니다.\n\n**요청**: path email: 확인할 값.\n\n**처리**: 사용 가능하면 msg=ok입니다. **현재 제한**: 중복 시 비표준 HTTP 상태 15를 전달하여 net/http 응답 처리에 실패할 수 있습니다. 409 응답으로 구현되어 있지 않습니다.\n\n**응답**: 사용 가능할 때 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -60,34 +79,47 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "check user email",
+                "summary": "이메일 중복 확인",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "이메일",
+                        "name": "email",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
-                    "15": {
-                        "description": "result: email is duplicate",
+                    "200": {
+                        "description": "사용 가능할 때 최상위 msg.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "200": {
-                        "description": "result: ok",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
-                        }
-                    },
-                    "400": {
-                        "description": "result: request failed",
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/acc/v01/cngpw": {
             "post": {
-                "description": "Change the password of a user",
+                "description": "비밀번호 변경 API입니다.\n\n**요청**: 일반 JSON body: id, uid, email, pw, newpw (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: 전달된 계정 정보와 기존 비밀번호로 변경을 처리합니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -95,57 +127,67 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Change user password",
+                "summary": "비밀번호 변경",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx, pw : hash, newpw : hash}",
-                        "name": "data",
+                        "description": "필수 문자열 필드: id, uid, email, pw, newpw",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "type": "string"
+                                },
+                                "newpw": {
+                                    "type": "string"
+                                },
+                                "pw": {
+                                    "type": "string"
+                                },
+                                "uid": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "109": {
-                        "description": "Failed to change pw",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "msg: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "error: error message",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "email": "user@example.com",
+                    "id": "example",
+                    "newpw": "\u003cnew-password\u003e",
+                    "pw": "\u003ccurrent-password\u003e",
+                    "uid": "4033287471439576593"
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/acc/v01/fnid": {
             "post": {
-                "description": "Find user ID by name and birth date",
+                "description": "아이디 찾기 API입니다.\n\n**요청**: 일반 JSON body: name, birth, gender (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: 입력 정보로 계정을 조회합니다.\n\n**응답 data**: ids.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -153,41 +195,34 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Find user ID",
+                "summary": "아이디 찾기",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01, gener : 1}",
-                        "name": "data",
+                        "description": "필수 문자열 필드: name, birth, gender",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "birth": {
+                                    "type": "string"
+                                },
+                                "gender": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "111": {
-                        "description": "Failed to find id",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "OK",
+                        "description": "아이디 문자열 배열.",
                         "schema": {
                             "allOf": [
                                 {
@@ -208,17 +243,27 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "birth": "1990-01-01",
+                    "gender": "1",
+                    "name": "홍길동"
+                },
+                "x-response-example": {
+                    "data": [],
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
         "/acc/v01/fnpw": {
             "post": {
-                "description": "Find user password by id and birth date",
+                "description": "비밀번호 찾기 API입니다.\n\n**요청**: 일반 JSON body: sid, name, birth, gender (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: 입력 정보로 이메일을 조회합니다.\n\n**응답**: 최상위 msg, email.",
                 "consumes": [
                     "application/json"
                 ],
@@ -226,47 +271,95 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Find user PW",
+                "summary": "비밀번호 찾기",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018, gender : 1}",
-                        "name": "data",
+                        "description": "필수 문자열 필드: sid, name, birth, gender",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "birth": {
+                                    "type": "string"
+                                },
+                                "gender": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "sid": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "All fields are required",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "104": {
-                        "description": "Failed Decrypt",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed Parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "112": {
-                        "description": "Failed to find pw",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "success with {msg : ok, email : xxx}",
+                        "description": "최상위 msg, email.",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "msg": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "birth": "1990-01-01",
+                    "gender": "1",
+                    "name": "홍길동",
+                    "sid": "example"
+                },
+                "x-response-example": {
+                    "email": "user@example.com",
+                    "msg": "ok"
+                }
+            }
+        },
+        "/acc/v01/login": {
+            "post": {
+                "description": "로그인 API입니다.\n\n**요청**: 실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화된 LoginReq는 id, pw가 필요합니다.\n\n**처리**: 로그인 검증 후 JWT 발급·Redis 저장, WebRTC 설정과 대기실 정보를 구성합니다.\n\n**응답 data**: LoginUserResp (msg, acTok, refTok, uid, meta, wrtc).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "로그인",
+                "parameters": [
+                    {
+                        "description": "실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화된 LoginReq는 id, pw가 필요합니다.",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.AesDataForm"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: LoginUserResp (msg, acTok, refTok, uid, meta, wrtc).",
                         "schema": {
                             "allOf": [
                                 {
@@ -276,7 +369,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "object"
+                                            "$ref": "#/definitions/protocol.LoginUserResp"
                                         }
                                     }
                                 }
@@ -284,87 +377,20 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
-                }
-            }
-        },
-        "/acc/v01/login": {
-            "post": {
-                "description": "Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success. Also sets x-meta header with user metadata.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Login a user",
-                "parameters": [
-                    {
-                        "description": "Login request data {id : xxx, pw : hash}",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.LoginReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "104": {
-                        "description": "Failed to login user",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "200": {
-                        "description": "Login success with token, uid, and webrtc config",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.LoginUserResp"
-                        },
-                        "headers": {
-                            "x-meta": {
-                                "type": "string",
-                                "description": "User metadata in format: uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
+                },
+                "x-request-example": {
+                    "data": "\u003cAES-GCM encrypted LoginReq\u003e"
                 }
             }
         },
         "/acc/v01/refresh": {
             "post": {
-                "description": "Reissues access and refresh token using a valid refresh token.",
+                "description": "인증 토큰 재발급 API입니다.\n\n**요청**: Authorization: Bearer refresh_token 또는 body RefreshTokenReq의 refTok. 유효한 형식의 헤더 토큰이 우선합니다.\n\n**처리**: refresh JWT와 Redis 저장값 검증 후 access/refresh 토큰을 재발급합니다.\n\n**응답 data**: RefreshTokenResp (msg, acTok, refTok, uid).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -372,19 +398,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Refresh access token",
+                "summary": "인증 토큰 재발급",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer refresh_token",
+                        "description": "Bearer refresh_token (body보다 우선)",
                         "name": "Authorization",
                         "in": "header"
                     },
                     {
-                        "description": "Refresh token payload { refTok: xxx }",
-                        "name": "data",
+                        "description": "Authorization: Bearer refresh_token 또는 body RefreshTokenReq의 refTok. 유효한 형식의 헤더 토큰이 우선합니다.",
+                        "name": "request",
                         "in": "body",
                         "schema": {
                             "$ref": "#/definitions/protocol.RefreshTokenReq"
@@ -393,7 +419,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "data: RefreshTokenResp (msg, acTok, refTok, uid).",
                         "schema": {
                             "allOf": [
                                 {
@@ -410,24 +436,27 @@ const docTemplate = `{
                             ]
                         }
                     },
-                    "400": {
-                        "description": "Invalid request",
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "401": {
-                        "description": "Invalid refresh token",
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "refTok": "\u003crefresh_token\u003e"
                 }
             }
         },
         "/acc/v01/regist": {
             "post": {
-                "description": "Calls /acc/v01/regist to register a new user. Returns \"success\" message on success.\nRequired fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email\nOptional fields: did (device ID), dos (device OS)\nSystem generates: uid (unique user ID), nick (default nickname), main_pic (default profile image), thmb_pic (default thumbnail), sp_intro (default introduction)",
+                "description": "회원 가입 API입니다.\n\n**요청**: 실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화 후 RegistReq의 id/pw/area/name/birth/email 등 필드를 검증합니다.\n\n**처리**: AesDecrypt 미들웨어가 JSON을 복호화합니다. 서버 UID·닉네임 생성, 비밀번호 해시와 초기 정보를 저장합니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -435,69 +464,52 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Register a new user",
+                "summary": "회원 가입",
                 "parameters": [
                     {
-                        "description": "register request data",
+                        "description": "실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화 후 RegistReq의 id/pw/area/name/birth/email 등 필드를 검증합니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/protocol.RegistReq"
+                            "$ref": "#/definitions/protocol.AesDataForm"
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "104": {
-                        "description": "Failed Register User",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "14": {
-                        "description": "ID is duplicate",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "15": {
-                        "description": "Email is duplicate",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "result: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request",
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "data": "\u003cAES-GCM encrypted RegistReq\u003e"
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/acc/v01/verifyotp": {
             "post": {
-                "description": "Verify OTP code for authentication",
+                "description": "OTP 확인 API입니다.\n\n**요청**: 일반 JSON body: email, otp (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: 이메일 OTP를 검증합니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -505,340 +517,152 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Verify OTP authentication code",
+                "summary": "OTP 확인",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 {email : xxx, otp : xxx}",
-                        "name": "data",
+                        "description": "필수 문자열 필드: email, otp",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "otp": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "116": {
-                        "description": "Failed to verify OTP",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "msg: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "error: error message",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "email": "user@example.com",
+                    "otp": "\u003cotp\u003e"
+                },
+                "x-response-example": {
+                    "msg": "ok"
+                }
+            }
+        },
+        "/block/v01/cancel/{tid}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "사용자 차단 해제 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path tid, body 없음.\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "사용자 차단 해제 (현재 인증 컨텍스트 제한)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
             }
         },
-        "/account/block/count": {
+        "/block/v01/count": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the total number of users blocked by the authenticated user.\n요청 예시: GET /account/block/count (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
+                "description": "차단 사용자 수 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "account"
+                    "Account"
                 ],
-                "summary": "Get blocked user count",
+                "summary": "차단 사용자 수 (현재 인증 컨텍스트 제한)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer Token",
+                        "description": "Bearer access token",
                         "name": "Authorization",
                         "in": "header",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Blocked user count",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
                     "400": {
-                        "description": "failed to parse uid",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "user not found in context",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "failed to get block count",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/account/v01/favorite/cancel/{tid}": {
-            "post": {
-                "description": "현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에서 제거합니다.\nrequest : POST /account/v01/favorite/cancel/{tid}\nresponse : {\"result\":0,\"msg\":\"Success\"}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "account"
-                ],
-                "summary": "즐겨찾기 해제",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "즐겨찾기 해제 대상 사용자 uid",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/account/v01/favorite/set/{tid}": {
-            "post": {
-                "description": "현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에 추가합니다.\nrequest : POST /account/v01/favorite/set/{tid}\nresponse : {\"result\":0,\"msg\":\"Success\"}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "account"
-                ],
-                "summary": "즐겨찾기 등록",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "즐겨찾기 등록 대상 사용자 uid",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/account/v01/unblock/{tid}": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "지정된 상대방(tid)에 대한 차단을 해제합니다. 성공 시 unblock 후 현재 차단 유저수(count)를 반환합니다.\n요청 예시: POST /account/v01/unblock/7\n응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":2}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Account"
-                ],
-                "summary": "차단 해제 (Unblock User)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "차단 해제 대상 유저 ID (Target User ID)",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "차단 해제 성공 - result=0, msg=Success, count=차단 유저수",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "잘못된 요청 (tid/uid 변환 오류)",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패 (user not found in context)",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 에러 (차단 해제 실패 또는 블록 카운트 조회 실패)",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/block/v01/add/{tid}": {
-            "post": {
-                "description": "현재 로그인한 사용자가 대상 사용자를 차단합니다. reason 값이 없으면 \"etc\"로 처리됩니다.\n요청 예시: POST /block/v01/add/125 Body {\\\"reason\\\":\\\"욕설\\\"}\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Account"
-                ],
-                "summary": "사용자 차단하기 (Block a User)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "차단할 대상 사용자 ID (target user id)",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "차단 사유 JSON {\\",
-                        "name": "reason",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "성공 예시: {\\\"result\\\":0, \\\"msg\\\":\\\"Success\\\", \\\"count\\\":5}",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "400": {
-                        "description": "잘못된 요청(파라미터/바디 오류) 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "401": {
-                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "500": {
-                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
-                        "schema": {
-                            "type": "object"
+                            "type": "string"
                         }
                     }
                 }
@@ -848,10 +672,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "Bearer": []
+                        "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves the list of users blocked by the authenticated user, with paging.\n요청 예시: GET /block/v01/list/1/10\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":2,\\\"list\\\":[...]}",
+                "description": "차단 사용자 목록 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path page/limit은 사용하지 않으며 query page/limit을 사용합니다(기본 1/4).\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다.\n\n**응답 data**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -859,57 +683,76 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Get blocked user list",
+                "summary": "차단 사용자 목록 (현재 인증 컨텍스트 제한)",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "경로 호환용이며 무시합니다. query 값을 사용하세요.",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "경로 호환용이며 무시합니다. query 값을 사용하세요.",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "integer",
                         "default": 1,
-                        "description": "Page number",
+                        "description": "실제 조회 페이지",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "default": 10,
-                        "description": "Number of results per page",
+                        "default": 4,
+                        "description": "실제 페이지 크기",
                         "name": "limit",
                         "in": "query"
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "list: blocked user list, count: 총 차단 인원",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
                     "400": {
-                        "description": "파라미터 오류 혹은 파싱 에러",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패 (user not found in context)",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 에러 (차단 리스트 조회 실패)",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "string"
                         }
                     }
                 }
             }
         },
-        "/dm/v01/history/{room_id}": {
-            "get": {
-                "description": "특정 채팅방(room_id)의 과거 메시지 목록을 커서 기반으로 페이징하여 조회합니다.\n실시간 신규 메시지는 WebSocket으로 수신하고, 본 API는 과거 구간(기록/이력) 보완용입니다.\ncursor 미지정시 최신 limit개를 반환하며, 이전 응답의 next_cursor를 전달하면 해당 커서보다 오래된 메시지를 조회합니다.\n응답에 my_last_mid / partner_last_mid (Redis DM:READ, TTL 3일) 를 포함합니다. 조회만 하며 mid를 갱신하지 않습니다.\n\n[요청 예시]\nGET /dm/v01/history/10?limit=20 HTTP/1.1\nGET /dm/v01/history/10?limit=20\u0026cursor=086572 HTTP/1.1\nAuthorization: Bearer {access_token}\n\n[응답 예시]\n{\n\"result\": 0,\n\"resultString\": \"Success\",\n\"data\": {\n\"messages\": [...],\n\"total_count\": 109,\n\"next_cursor\": \"086572\",\n\"has_more\": true,\n\"my_last_mid\": \"mid-aaa\",\n\"partner_last_mid\": \"mid-bbb\"\n}\n}",
+        "/block/v01/set/{tid}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "사용자 차단 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path tid, body reason(필수 문자열).\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -917,10 +760,90 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "Account"
                 ],
-                "summary": "채팅 기록 조회 (커서 페이지네이션)",
+                "summary": "사용자 차단 (현재 인증 컨텍스트 제한)",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "필수 문자열 필드: reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "reason": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "reason": "욕설"
+                }
+            }
+        },
+        "/dm/v01/history/{room_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 메시지 이력 조회 API입니다.\n\n**요청**: path room_id, query cursor(선택), limit(기본 2). pgSize는 사용하지 않습니다.\n\n**처리**: 활성 참여자 여부와 방 이력 시작 위치를 적용합니다. 잘못된 cursor는 400입니다. limit ≤ 0이면 빈 목록이며 현재 명시적인 최대 limit 제한은 없습니다.\n\n**응답 data**: total_count, messages, next_cursor, has_more, my_last_mid, partner_last_mid.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DM"
+                ],
+                "summary": "DM 메시지 이력 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "채팅방 ID",
@@ -929,66 +852,48 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "가져올 메시지 개수 (기본값: 20, 최대 pgSize 제한)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
                         "type": "string",
-                        "description": "이전 응답의 next_cursor 값",
+                        "description": "이전 응답의 next_cursor",
                         "name": "cursor",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "limit의 최대값 상한 (기본 50)",
-                        "name": "pgSize",
+                        "default": 2,
+                        "description": "요청 메시지 수 (0 이하: 빈 목록)",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "messages, total_count, next_cursor, has_more, my_last_mid, partner_last_mid",
+                        "description": "data: total_count, messages, next_cursor, has_more, my_last_mid, partner_last_mid.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "잘못된 요청(잘못된 cursor 등)",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "403": {
-                        "description": "방 참여자 아님",
+                        "description": "권한 없음 또는 차단 관계",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 내부 에러",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
                 }
@@ -996,7 +901,12 @@ const docTemplate = `{
         },
         "/dm/v01/list/{page}": {
             "get": {
-                "description": "Retrieves the list of direct message chat rooms that the currently authenticated user is participating in. Note: 'userId' query parameter is no longer required or used. Room list is based on the authenticated session.\nrequest : GET /dm/v01/list/1 HTTP/1.1\nresponse : {\"result\":0,\"resultString\":\"Success\",\"data\":{\"rooms\":[{\"rid\":10,\"partner\":{\"pid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"thumb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"gender\":\"1\",\"age\":\"34\",\"area\":\"서울\"},\"total\":0,\"unread\":133,\"at_crtchat\":\"2026-04-28T11:43:25Z\",\"at_update\":\"2026-04-28T11:43:25Z\"},{\"rid\":9,\"partner\":{\"pid\":5709326013809104361,\"nick\":\"평화로운 아기 바나나\",\"thumb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"gender\":\"1\",\"age\":\"34\",\"area\":\"서울\"},\"total\":0,\"unread\":0,\"at_crtchat\":\"2026-04-20T13:27:53Z\",\"at_update\":\"2026-04-20T13:27:53Z\"}],\"total_count\":2}}\n목록 정렬: 1) unread\u003e0 방 우선 2) unread 방은 IncrUnread :ts(최근 수신) 3) 그 외 at_update 최신순. page당 10건.",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 채팅방 목록 조회 API입니다.\n\n**요청**: path page는 사용하지 않습니다. query page(기본 1)를 전달합니다.\n\n**처리**: 방 목록을 미읽음 등 기준으로 정렬하고 페이지당 10개를 반환합니다.\n\n**응답 data**: total_count, rooms.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1004,52 +914,70 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "Get User DM Chat Rooms",
+                "summary": "DM 채팅방 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "경로 호환용이며 무시합니다. query 값을 사용하세요.",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "실제 조회 페이지",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "data: total_count, rooms.",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/protocol.DMRoomResp"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "rooms": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
         "/dm/v01/mkroom/{pid}": {
             "post": {
-                "description": "1:1 채팅방(DM)을 생성. 생성된 방의 정보(방 아이디, 파트너 정보, 미확인 메시지 수, 생성/갱신 시각)를 반환",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 채팅방 생성 또는 조회 API입니다.\n\n**요청**: path pid: 상대 UID. body 없음.\n\n**처리**: JWT 본인과 상대 계정으로 기존 방을 확인하거나 생성합니다.\n\n**응답 data**: DMRoomResp.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1057,49 +985,46 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "DM create chat room",
+                "summary": "DM 채팅방 생성 또는 조회",
                 "parameters": [
                     {
-                        "description": "pid  partner UID",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "tid": {
-                                    "type": "integer"
-                                },
-                                "uid": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "상대 UID",
+                        "name": "pid",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "채팅방 생성 성공 및 방 정보",
+                        "description": "data: DMRoomResp.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.DMRoomResp"
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "잘못된 요청",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 내부 오류",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1109,7 +1034,12 @@ const docTemplate = `{
         },
         "/dm/v01/rinfo/{room_id}": {
             "get": {
-                "description": "인증된 사용자가 참여 중인 DM 채팅방(room_id = chat_his.idx)의 상세 정보를 조회합니다.\n상대방 프로필, 최근 메시지, 전체/미읽음 메시지 수, 생성·수정 시각을 반환합니다.\n요청자가 방 생성자(uid)이면 tid 사용자 정보를, 초대받은 사용자(tid)이면 uid 사용자 정보를 상대방으로 반환합니다.\n\n[요청 예시]\nGET /dm/v01/rinfo/10 HTTP/1.1\nAuthorization: Bearer {access_token}\n\n[응답 예시]\nlast_msg: txt, img일 경우 'img'로 반환\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"my_last_mid\":\"m-1783587208891\",\"partner_last_mid\":\"\",\"room\":{\"rid\":10,\"partner\":{\"pid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"thumb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"gender\":\"1\",\"age\":\"34\",\"area\":\"seoul\"},\"last_msg\":\"dfd\",\"partner_left\":false,\"total\":45,\"unread\":0,\"at_crtchat\":\"2026-04-28T11:43:25Z\",\"at_update\":\"2026-07-09T08:53:28Z\"},\"room_id\":\"10\"}}",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 채팅방 상세 조회 및 읽음 갱신 API입니다.\n\n**요청**: path room_id, query mid(선택).\n\n**처리**: 활성 참여자만 조회할 수 있습니다. mid 또는 최신 메시지로 읽음 위치와 미읽음 수를 갱신합니다.\n\n**응답 data**: room_id, room, my_last_mid, partner_last_mid.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1117,57 +1047,60 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "DM 채팅방 단건 조회",
+                "summary": "DM 채팅방 상세 조회 및 읽음 갱신",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "채팅방 ID (chat_his.idx)",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "채팅방 ID",
                         "name": "room_id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "방 입장 시 마지막으로 읽은 메시지 mid (없으면 최신 메시지로 갱신)",
+                        "description": "마지막으로 읽은 메시지 ID (생략 시 최신)",
                         "name": "mid",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "room_id, room, my_last_mid, partner_last_mid",
+                        "description": "data: room_id, room, my_last_mid, partner_last_mid.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "room_id 누락",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 내부 에러",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
                 }
@@ -1175,7 +1108,12 @@ const docTemplate = `{
         },
         "/dm/v01/rmroom/{room_id}": {
             "post": {
-                "description": "인증된 사용자가 DM 채팅방에서 나갑니다. 나간 사용자는 목록에서 숨겨지고, 남은 사용자에게 partner-left 이벤트 및 시스템 메시지가 전달됩니다.\nst_chat: 0=양쪽 나감, 1=양쪽 참여, 2=uid 나감, 3=tid 나감",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 채팅방 나가기 API입니다.\n\n**요청**: path room_id: 방 인덱스.\n\n**처리**: JWT 사용자가 참여 중인 방에서 나갑니다. 없는 방은 404, 비참여자는 403입니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1183,13 +1121,20 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
                 "summary": "DM 채팅방 나가기",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "Room ID",
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "채팅방 ID",
                         "name": "room_id",
                         "in": "path",
                         "required": true
@@ -1197,39 +1142,45 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Chat room deleted successfully",
+                        "description": "최상위 msg.",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "대상 없음 또는 조회 가능한 대상 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
@@ -1240,54 +1191,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "인증된 사용자가 특정 대상(tid)과의 DM 채팅방이 존재하는지 조회합니다.",
-                "tags": [
-                    "chat"
-                ],
-                "summary": "DM 채팅방 존재 여부 확인",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "상대 사용자 UID",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "exist: true(존재함) / false(존재하지 않음)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/dm/v01/total/unread": {
-            "get": {
-                "description": "Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts. (변경사항 반영됨: userId 파라미터는 더 이상 필요하지 않음, 인증된 사용자 기준)\nrequest : GET /dm/v01/total/unread HTTP/1.1\nresponse : {\"result\":0,\"resultString\":\"Success\",\"data\":{\"rooms\":{\"10\":133},\"total_count\":133}}",
+                "description": "DM 채팅방 존재 확인 API입니다.\n\n**요청**: path tid: 상대 UID.\n\n**처리**: JWT 사용자와 상대방의 방 존재 여부를 조회합니다.\n\n**응답**: 최상위 exist.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1295,35 +1199,115 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "Get total unread message count for user",
+                "summary": "DM 채팅방 존재 확인",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "total: 전체 unread 개수, rooms: 각 방별 unread 개수",
+                        "description": "최상위 exist.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "exist": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "exist": true
+                }
+            }
+        },
+        "/dm/v01/total/unread": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM 미읽음 수 조회 API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: JWT 사용자의 전체 및 방별 미읽음 수를 조회합니다.\n\n**응답 data**: total_count, rooms(방 ID별 카운트).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DM"
+                ],
+                "summary": "DM 미읽음 수 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: total_count, rooms(방 ID별 카운트).",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "rooms": {},
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -1334,7 +1318,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대 5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).\n요청 예시(curl):\ncurl -X POST \"http://localhost:8080/dm/v01/upload/img\" -H \"Authorization: Bearer {jwt-access-token}\" -F \"file=@/home/tmp/chat1.jpg\" -F \"file=@/home/tmp/chat2.jpg\"\n성공 응답 예시:\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"success\",\"data\":{\"chat1.jpg\":\"https://imagedelivery.net/.../public\",\"chat2.jpg\":\"https://imagedelivery.net/.../public\"}}}\n실패 응답 예시(400): {\"error\":\"file required\"}\n실패 응답 예시(401): {\"error\":\"User not authenticated\"}\n실패 응답 예시(500): {\"error\":\"Failed to upload image\"}",
+                "description": "DM 이미지 업로드 API입니다.\n\n**요청**: multipart files: 최대 5개, 각 5MiB 이하.\n\n**처리**: JWT 인증과 simpleImgUploadCF 검증·업로드 후 파일명별 URL을 반환합니다.\n\n**응답 data**: msg, data(파일명 → URL 맵).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.\n업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.\n**업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1342,70 +1326,99 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "채팅 이미지 업로드",
+                "summary": "DM 이미지 업로드",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "type": "file",
-                        "description": "업로드할 채팅 이미지 파일 (여러 개 가능, 최대 5개 첨부)",
-                        "name": "file",
+                        "description": "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)",
+                        "name": "files",
                         "in": "formData",
                         "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "성공 응답 예시",
+                        "description": "data: msg, data(파일명 → URL 맵).",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "413": {
+                        "description": "업로드 요청 크기 제한 초과",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
-                    "400": {
-                        "description": "요청 형식 오류 예시",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "인증 오류 예시",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
                     "500": {
-                        "description": "서버 에러 예시",
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "additionalProperties": true
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "data": {
+                            "photo.jpg": "https://imagedelivery.net/example/public"
+                        },
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
         "/dm/v01/ws": {
             "get": {
-                "description": "Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.\nRequest example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.\nResponse example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).\nThis endpoint is for authenticated sessions, and user identity is derived from JWT context.\nLegacy note: some clients may still include userId query for compatibility, but auth source is the access token.\nWebSocket message request examples:\n1) text-message: {\"type\":\"text-message\",\"to\":\"456\",\"content\":\"Hello, how are you?\",\"callMode\":\"txt|img|...\",\"msgId\":\"1234567890\"}\n1-1) text-message-ack: {\"type\":\"msg-ack\",\"from\":\"123\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"1234567890\",\"unread\":1,\"timestamp\":1718851200}\n2) typing(optional): {\"type\":\"typing\",\"to\":\"456\",\"roomId\":\"1234567890\"}\n3) read-receipt: {\"type\":\"read-receipt\",\"to\":\"456\",\"roomId\":\"1234567890\",\"msgId\":\"last-read-mid\"}\nDM Client Work flow:\n1) connection : 로그인시 ws 연결\n1-1) {domain}/dm/v01/ws GET 로그인후\n2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작\n3) chatlist : 기존 채팅방 리스트 요청\n3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청\n4) totalunread : 총 미읽음 메시지 수 조회\n4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회\n5) read-receipt : 방 입장/읽음 시 미읽음 초기화 + DM:READ mid 갱신(3일 TTL)\n5-1) Type : \"read-receipt\", To : 수신자 UID, RoomID : 채팅방 ID, MsgID : 마지막으로 읽은 메시지 mid\n6) text-message : 텍스트 메시지 전송\n6-1) Type : \"text-message\", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값\n6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송\n7-1) Type : \"partner-left\", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : \"상대방이 대화를 종료하였습니다.\"(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자\n8) 선물 전송 : 선물 전송시 선물 메시지 전송\n8-1) Type : \"send-gift\", To : 수신자 UID, From : 선물 보낸 사람 UID, RoomID : 채팅방 ID, Content : 화살갯수(ex: 3), MsgID : uniq 값\n8-2) 수신메세지 : 선물 [{nickname}님이(가) 화살 {화살갯수}개를 선물했습니다.]\n8-3) msg-ack : 선물 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.\n9) 로그아웃 : 로그아웃시 ws disconnect\n9-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "DM WebSocket 연결 API입니다.\n\n**요청**: Authorization: Bearer access token. HTTP Upgrade 요청.\n\n**처리**: JWT UID로 연결하며 같은 UID의 기존 연결을 교체합니다. 프로세스 연결 상한 초과 시 503입니다. 수신 프레임 최대 64KiB, 송신 큐 최대 256개/512KiB입니다.\n\n**응답**: 101 Switching Protocols 이후 WebSocket 메시지로 통신합니다. REST JSON 성공 응답은 없습니다.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "DM"
                 ],
-                "summary": "Connect DM WebSocket",
+                "summary": "DM WebSocket 연결",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer access token. Example: Bearer {access_token}",
+                        "description": "Bearer access token",
                         "name": "Authorization",
                         "in": "header",
                         "required": true
@@ -1413,21 +1426,83 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "101": {
-                        "description": "Switching Protocols (WebSocket handshake success)",
+                        "description": "Switching Protocols (WebSocket)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/fav/v01/cancel/{tid}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "즐겨찾기 해제 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path tid, body 없음.\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "즐겨찾기 해제 (현재 인증 컨텍스트 제한)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "string"
                         }
                     }
                 }
@@ -1435,95 +1510,181 @@ const docTemplate = `{
         },
         "/fav/v01/count": {
             "get": {
-                "description": "해당 사용자를 즐겨찾기 한 사용자의 총 개수를 반환합니다.\n요청 예시: GET /fav/v01/count (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":5}",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "즐겨찾기 수 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Favorite"
+                    "Account"
                 ],
-                "summary": "즐겨찾기 한 사용자 수 조회",
+                "summary": "즐겨찾기 수 (현재 인증 컨텍스트 제한)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
-                    "200": {
-                        "description": "성공 예시: {\\\"result\\\":0, \\\"msg\\\":\\\"Success\\\", \\\"count\\\":5}",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
                     "400": {
-                        "description": "잘못된 요청(파라미터 에러) 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object"
+                            "type": "string"
                         }
                     }
                 }
             }
         },
-        "/fav/v01/list": {
+        "/fav/v01/list/{page}/{limit}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "내가 즐겨찾기한 사용자 목록을 페이지 단위로 조회합니다. (페이지네이션 지원)\n요청 예시: GET /fav/v01/list?page=1\u0026limit=10 (Authorization: Bearer)\n응답 예시: {\\\"result\\\":0,\\\"msg\\\":\\\"Success\\\",\\\"count\\\":35,\\\"list\\\":[...]}",
+                "description": "즐겨찾기 목록 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path page/limit은 사용하지 않으며 query page/limit을 사용합니다(기본 1/4).\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다.\n\n**응답 data**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Favorite"
+                    "Account"
                 ],
-                "summary": "즐겨찾기한 사용자 목록 조회",
+                "summary": "즐겨찾기 목록 (현재 인증 컨텍스트 제한)",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "type": "integer",
-                        "description": "페이지 번호 (기본값 1)",
+                        "description": "경로 호환용이며 무시합니다. query 값을 사용하세요.",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "경로 호환용이며 무시합니다. query 값을 사용하세요.",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "실제 조회 페이지",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "페이지당 항목 수 (기본값 10)",
+                        "default": 4,
+                        "description": "실제 페이지 크기",
                         "name": "limit",
                         "in": "query"
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "result, msg, count, list",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
                     "400": {
-                        "description": "잘못된 요청(파라미터 에러) 또는 사용자 정보 없음 예시: {\\\"result\\\":400, \\\"msg\\\":\\\"bad request\\\"}",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "인증 실패 예시: {\\\"result\\\":401, \\\"msg\\\":\\\"unauthorized\\\"}",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "서버 오류 예시: {\\\"result\\\":500, \\\"msg\\\":\\\"internal server error\\\"}",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object"
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/fav/v01/set/{tid}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "즐겨찾기 등록 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: path tid, body 없음.\n\n**처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "즐겨찾기 등록 (현재 인증 컨텍스트 제한)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -1533,10 +1694,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "JwtAuth": []
+                        "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves main information to be displayed on the home screen (new notifications, message count, check-in status, video/voice chat lists, story list, terms links)",
+                "description": "남성 홈 데이터 조회 (현재 인증 컨텍스트 제한) API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: 현재 user를 int로 단언하지만 JWT 미들웨어는 *UserInfoResp를 제공합니다. 정상 JWT 요청도 panic/Recovery 500이 발생하여 홈 데이터 응답이 완료되지 않습니다.\n\n**응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1546,30 +1707,33 @@ const docTemplate = `{
                 "tags": [
                     "Home"
                 ],
-                "summary": "Retrieves main information to be displayed on the home screen",
+                "summary": "남성 홈 데이터 조회 (현재 인증 컨텍스트 제한)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
-                    "200": {
-                        "description": "Home screen information",
-                        "schema": {
-                            "$ref": "#/definitions/controller.HomeData"
-                        }
-                    },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Authentication failed",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Server error",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
+                            "type": "string"
                         }
                     }
                 }
@@ -1577,7 +1741,12 @@ const docTemplate = `{
         },
         "/inserv/v01/delete/{id}": {
             "post": {
-                "description": "Delete user, but just update user status to 4",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "회원 삭제 API입니다.\n\n**요청**: 일반 JSON body: id (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: 실제 삭제 대상은 body id입니다. path id는 사용하지 않습니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1585,57 +1754,76 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Delete user",
+                "summary": "회원 삭제",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 GCM mode {id : xxx}",
-                        "name": "data",
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "경로 호환용이며 무시합니다. body id가 삭제 대상입니다.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "필수 문자열 필드: id",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "115": {
-                        "description": "Failed to delete user",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "msg: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "error: error message",
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "id": "example"
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/inserv/v01/info/{id}": {
             "get": {
-                "description": "Get user from sid information",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "아이디로 회원 조회 (현재 응답 제한) API입니다.\n\n**요청**: path id: 계정 아이디.\n\n**처리**: 조회 결과 객체를 문자열 전용 SendResponse에 전달하므로 조회 성공 후에도 500을 반환합니다.\n\n**응답**: 현재 정상 회원 응답 없음. 오류 헤더.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1643,33 +1831,40 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Get user information",
+                "summary": "아이디로 회원 조회 (현재 응답 제한)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "User ID",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "계정 아이디",
                         "name": "id",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "114": {
-                        "description": "Failed to get user info",
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "200": {
-                        "description": "User information",
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "$ref": "#/definitions/protocol.UserInfoResp"
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "400": {
-                        "description": "Invalid request",
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1679,65 +1874,12 @@ const docTemplate = `{
         },
         "/inserv/v01/leave": {
             "post": {
-                "description": "Performs user leave. Returns \"success\" message on success.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Leave a user",
-                "parameters": [
+                "security": [
                     {
-                        "description": "Encrypted data by aes256 GCM mode {id : xxx}",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
+                        "BearerAuth": []
                     }
                 ],
-                "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "113": {
-                        "description": "Failed to leave user",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "200": {
-                        "description": "msg: success",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    }
-                }
-            }
-        },
-        "/inserv/v01/logout": {
-            "post": {
-                "description": "Logout user",
+                "description": "회원 탈퇴 API입니다.\n\n**요청**: 일반 JSON body: id (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: body id로 탈퇴를 처리합니다. 토큰 삭제는 현재 구현되어 있지 않습니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1745,48 +1887,128 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Logout user",
+                "summary": "회원 탈퇴",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer access_token",
+                        "description": "Bearer access token",
                         "name": "Authorization",
-                        "in": "header"
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "필수 문자열 필드: id",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Bad request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "id": "example"
+                },
+                "x-response-example": {
+                    "msg": "ok"
+                }
+            }
+        },
+        "/inserv/v01/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "로그아웃 API입니다.\n\n**요청**: JWT Authorization 헤더, body 없음.\n\n**처리**: JWT 저장값과 대기실 정보를 삭제하고 로그아웃 상태를 갱신합니다.\n\n**응답**: 최상위 msg.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "로그아웃",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "최상위 msg.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/inserv/v01/modify": {
             "post": {
-                "description": "Modify user information. The 'cate' field should be one of \"pw, area, nick, email\" indicating the target to be changed, and the 'value' field should contain the new value for the target.",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "회원 정보 변경 API입니다.\n\n**요청**: 일반 JSON body: id, uid, email, cate, value (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.\n\n**처리**: JWT 인증 후 body의 uid와 수정 필드를 전달합니다. 이 핸들러는 uid를 JWT 값으로 덮어쓰지 않습니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1794,57 +2016,85 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Modify user information",
+                "summary": "회원 정보 변경",
                 "parameters": [
                     {
-                        "description": "Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email : xxx, cate : xxx, value : xxx}",
-                        "name": "data",
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "필수 문자열 필드: id, uid, email, cate, value",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "cate": {
+                                    "type": "string"
+                                },
+                                "email": {
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "type": "string"
+                                },
+                                "uid": {
+                                    "type": "string"
+                                },
+                                "value": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 ],
                 "responses": {
-                    "102": {
-                        "description": "Parameter is missing",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "104": {
-                        "description": "Failed to change pw",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "106": {
-                        "description": "Failed to parse JSON",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "200": {
-                        "description": "msg: success",
+                        "description": "최상위 msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "error: error message",
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "cate": "nick",
+                    "email": "user@example.com",
+                    "id": "example",
+                    "uid": "4033287471439576593",
+                    "value": "새 닉네임"
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/inserv/v01/uinfo/{tid}": {
             "get": {
-                "description": "주어진 UID로 사용자의 정보를 조회합니다.",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "UID로 회원 정보 조회 API입니다.\n\n**요청**: path tid: 대상 UID.\n\n**처리**: 대상 회원 정보를 조회합니다.\n\n**응답 data**: UserInfoResp.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1852,33 +2102,52 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Get user information by UID",
+                "summary": "UID로 회원 정보 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Target User UID",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "114": {
-                        "description": "Failed to get user info",
+                    "200": {
+                        "description": "data: UserInfoResp.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/protocol.UserInfoResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
-                    "200": {
-                        "description": "User information",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.UserInfoResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request",
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1893,7 +2162,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload and modify user's main profile picture to Cloudflare Images",
+                "description": "계정 대표 사진 업로드 (현재 연결 제한) API입니다.\n\n**요청**: multipart files: 1개·5MiB 이하.\n\n**처리**: 현재 미들웨어는 upFiles를 설정하지만 핸들러는 uploadedFiles와 sinfo를 기대합니다. 일반 요청은 No files uploaded(400)로 실패하며 정상 업로드 경로가 연결되지 않았습니다.\n\n**응답**: 현재 정상 업로드 응답 없음. 오류 헤더.\n업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.\n**업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1901,42 +2170,56 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "Account"
                 ],
-                "summary": "Modify main picture",
+                "summary": "계정 대표 사진 업로드 (현재 연결 제한)",
                 "parameters": [
                     {
-                        "type": "file",
-                        "description": "Profile image file (max 5MB)",
-                        "name": "files",
-                        "in": "formData",
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Encrypted user data {uid: xxx}",
-                        "name": "data",
+                        "type": "file",
+                        "description": "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)",
+                        "name": "files",
                         "in": "formData",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "msg: success",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.OkResp"
-                        }
-                    },
                     "400": {
-                        "description": "error: error message - No files uploaded, No sinfo uploaded, Failed to decrypt sinfo, Failed to parse sinfo data, UID is required in sinfo",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "413": {
+                        "description": "업로드 요청 크기 제한 초과",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "error: error message - Failed to upload main picture, Failed to modify main picture on db",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1944,7 +2227,12 @@ const docTemplate = `{
         },
         "/noti/v01/anc/detail/{idx}": {
             "get": {
-                "description": "공지사항 상세 정보를 조회합니다",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "공지 상세 조회 API입니다.\n\n**요청**: path idx: 공지 인덱스.\n\n**처리**: 공지 상세를 조회합니다. 현재 sql.ErrNoRows도 일반 오류 분기에 포함되어 500을 반환합니다.\n\n**응답 data**: 공지 상세.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1952,13 +2240,20 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Noti"
+                    "Notification"
                 ],
-                "summary": "공지사항 상세 조회",
+                "summary": "공지 상세 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Announcement index",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -1966,25 +2261,31 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "data: 공지 상세.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.Announcement"
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "idx is required",
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "404": {
-                        "description": "Announcement not found",
+                        "description": "공지사항 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Failed to get announcement detail",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -1994,7 +2295,12 @@ const docTemplate = `{
         },
         "/noti/v01/anc/list": {
             "get": {
-                "description": "공지사항 목록을 조회합니다 (일주일 이내 공지는 new 표시)",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "공지 목록 조회 API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: 공지 목록을 조회합니다.\n\n**응답 data**: 공지 목록.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2002,21 +2308,33 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Noti"
+                    "Notification"
                 ],
-                "summary": "공지사항 목록 조회",
+                "summary": "공지 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "data: 공지 목록.",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/protocol.Announcement"
-                            }
+                            "$ref": "#/definitions/protocol.RespDataHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Failed to get announcement list",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -2026,7 +2344,12 @@ const docTemplate = `{
         },
         "/noti/v01/detail/{idx}": {
             "get": {
-                "description": "알림 상세 정보를 조회하고 읽음 처리합니다",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "알림 상세 조회 API입니다.\n\n**요청**: path idx: 알림 인덱스.\n\n**처리**: 알림을 조회한 뒤 읽음 표시를 갱신합니다. 읽음 표시 실패는 기록하고 조회 결과를 반환합니다.\n\n**응답 data**: 알림 상세.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2034,13 +2357,20 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Noti"
+                    "Notification"
                 ],
                 "summary": "알림 상세 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Noti index",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -2048,19 +2378,25 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "data: 알림 상세.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.Noti"
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "idx is required",
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Failed to get noti detail",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -2075,7 +2411,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "사용자의 알림 목록을 조회합니다 (JWT 인증 기반)",
+                "description": "알림 목록 조회 (미완성) API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: 등록된 /list 경로에는 id가 없지만 핸들러가 path id를 요구하므로 항상 400입니다. 목록 조회는 구현되지 않았습니다.\n\n**응답**: 오류 헤더.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2083,24 +2419,27 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Noti"
+                    "Notification"
                 ],
-                "summary": "알림 목록 조회",
+                "summary": "알림 목록 조회 (미완성)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
                     "400": {
-                        "description": "Bad request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -2110,17 +2449,20 @@ const docTemplate = `{
         },
         "/serv/v01/version": {
             "get": {
-                "description": "get version",
+                "description": "서버 버전 조회 API입니다.\n\n**요청**: 별도 입력 없음.\n\n**처리**: 빌드 및 실행 중인 Go 버전 정보를 조회합니다.\n\n**응답**: 최상위 version, go_version, revision, modified 및 선택적 빌드 정보.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Server"
                 ],
-                "summary": "get version",
+                "summary": "서버 버전 조회",
                 "responses": {
                     "200": {
-                        "description": "version info",
+                        "description": "최상위 version, go_version, revision, modified 및 선택적 빌드 정보.",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2131,7 +2473,7 @@ const docTemplate = `{
         },
         "/serv/v01/wsconf": {
             "get": {
-                "description": "Get WebRTC configuration for the authenticated user",
+                "description": "WebRTC 설정 조회 (현재 라우트 제한) API입니다.\n\n**요청**: 별도 입력 없음. /serv/v01/wsconf와 /webrtc/v01/config는 같은 핸들러입니다.\n\n**처리**: 현재 두 라우트 모두 JWT 미들웨어가 없어 user 컨텍스트가 설정되지 않으며 401을 반환합니다. 핸들러의 SendResponse도 객체를 허용하지 않아 설정 객체 정상 응답은 구현과 일치하지 않습니다.\n\n**응답**: 현재 정상 설정 응답 없음. 오류 헤더(result, resultString, desc).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2141,22 +2483,22 @@ const docTemplate = `{
                 "tags": [
                     "WebRTC"
                 ],
-                "summary": "Get WebRTC configuration",
+                "summary": "WebRTC 설정 조회 (현재 라우트 제한)",
                 "responses": {
-                    "200": {
-                        "description": "WebRTC configuration",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.WebRTCConfig"
-                        }
-                    },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
@@ -2171,7 +2513,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인이 지정한 스토리(` + "`" + `idx` + "`" + `)를 구매 기록합니다.\n\n**처리**\n- ` + "`" + `story.idx` + "`" + `로 판매자 UID(` + "`" + `tid` + "`" + `) 조회\n- ` + "`" + `str_pcs` + "`" + `에 INSERT: ` + "`" + `str_idx` + "`" + `, ` + "`" + `tid` + "`" + `(판매자), ` + "`" + `pcs_uid` + "`" + `(JWT 구매자), ` + "`" + `qt_payed=0` + "`" + `\n- 결제 프로세스(잔액 차감 등)는 아직 미구현(TODO)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\"}` + "`" + `",
+                "description": "**요청**: path idx는 양의 스토리 인덱스입니다. body는 사용하지 않습니다.\n\n**처리**: 구매자는 JWT UID입니다. 타인의 유료 공개(stat=2) 글만 요청할 수 있으며 양방향 차단을 검사합니다.\n현재 결제 없는 완료 정책으로 psc_stat=1, qt_payed=0을 저장하여 열람 권한을 부여합니다. 결제 및 포인트 차감은 수행하지 않습니다.\n기존 대기(0) 요청은 재요청 시 완료(1)로 변경합니다. 완료 요청은 중복 저장하지 않으며 취소·회수 상태는 409로 거절합니다.\n\n**응답 data**: msg=ok, psc_stat=1. HTTP 200으로 반환합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2181,7 +2523,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 구매",
+                "summary": "스토리 구매 완료",
                 "parameters": [
                     {
                         "type": "string",
@@ -2192,7 +2534,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "구매할 스토리 인덱스",
+                        "description": "구매 요청할 스토리 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -2200,33 +2542,230 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg",
+                        "description": "구매 완료",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                },
+                                                "psc_stat": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "idx 잘못된 값",
+                        "description": "잘못된 idx 또는 구매 요청 불가 대상",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
                         "description": "JWT 인증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "409": {
+                        "description": "취소·회수된 구매",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "스토리 없음 또는 str_pcs 저장 실패",
+                        "description": "조회 또는 저장 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok",
+                        "psc_stat": 1
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/cndt/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "조건별 스토리 목록 조회 API입니다.\n\n**요청**: path area/stat/type/order/gen/page/limit. stat: all 또는 pub=0/flw=1/pay=2/prv=3/del=4/rsv=5. type: all 또는 img=0/vdo=1/txt=2/mix=3/rsv=4.\n\n**처리**: all은 필터 생략이며 저장 enum이 아닙니다. 잘못된 stat/type은 400입니다. txt=2는 미디어 없는 텍스트 글, mix=3은 이미지·동영상 혼합입니다. JWT viewer의 가시성·본문 권한과 활성 cutout 제외를 적용합니다. order: old=오래된순, god=qt_like, cmt=공개 댓글 수, view=qt_view, 나머지=최신순이며 모든 정렬에 idx 보조키를 적용합니다. 조건 피드는 PUB=0, FLW=1, PAY=2와 본인 PRV=3을 조회합니다. 6=all은 상태 필터를 생략하며 삭제·예약 및 타인의 비공개 글은 제외합니다. FLW/PAY는 권한이 없으면 원문을 숨깁니다. gen 파싱 실패 시 1입니다.\n\n**응답 data**: page, limit, total_count, story(StoryDetailResp 배열).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "조건별 스토리 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "지역 코드 또는 all",
+                        "name": "area",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "0",
+                            "1",
+                            "2",
+                            "3",
+                            "6",
+                            "pub",
+                            "flw",
+                            "pay",
+                            "prv",
+                            "all"
+                        ],
+                        "type": "string",
+                        "description": "상태: 0=pub, 1=flw, 2=pay, 3=prv, 6=all (문자열 이름도 허용)",
+                        "name": "stat",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "미디어: all/img/vdo/txt/mix/rsv",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "정렬: new/old/cmt/god/view/rsv",
+                        "name": "order",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "성별: 0=여성, 1=남성",
+                        "name": "gen",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: total_count, story(StoryDetailResp 배열).",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "story": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.StoryDetailResp"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "limit": 10,
+                        "page": 1,
+                        "story": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2237,7 +2776,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 스토리 댓글을 생성합니다. 작성자 메타(` + "`" + `thumb_url` + "`" + `, ` + "`" + `wgender` + "`" + `, ` + "`" + `wage` + "`" + `, ` + "`" + `warea` + "`" + `)는 ` + "`" + `wuid` + "`" + `로 계정에서 조회해 저장합니다.\n\n**요청 body** (` + "`" + `StrCmtCreateReq` + "`" + `) — 모두 필수(빈 문자열 불가)\n- ` + "`" + `str_idx` + "`" + `: 스토리 idx (숫자 문자열)\n- ` + "`" + `wuid` + "`" + `: 작성자 UID (숫자 문자열)\n- ` + "`" + `nick` + "`" + `: 닉네임\n- ` + "`" + `stat` + "`" + `: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted\n- ` + "`" + `body` + "`" + `: 댓글 본문 (max 256)\n\n**응답** (` + "`" + `SimpleRespOK` + "`" + ` — result envelope 없음)\n- ` + "`" + `msg` + "`" + `, ` + "`" + `lastID` + "`" + ` (str_cmt INSERT LastInsertId)\n\n**Request example**\n- POST /story/v01/comment/create\n- Header: Authorization: Bearer {access_token}\n- Body: {\"str_idx\":\"3\",\"wuid\":\"77645423236541\",\"nick\":\"test\",\"stat\":\"1\",\"body\":\"111111 test comment body\"}\n\n**Response example**\n{\"msg\":\"ok\",\"lastID\":1}",
+                "description": "스토리 댓글 생성 API입니다.\n\n**요청**: body StrCmtCreateReq: str_idx, stat, body 문자열이 필요합니다. wuid/nick는 호환용으로 허용하되 무시합니다.\n\n**처리**: 작성자는 JWT UID, 닉네임은 서버 계정 정보로 강제합니다. 부모 글의 실제 열람 권한과 작성자와의 양방향 차단을 검사합니다.\n\n**응답**: 최상위 msg, lastID.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2245,9 +2784,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Comment"
+                    "Story"
                 ],
-                "summary": "스토리 댓글 작성",
+                "summary": "스토리 댓글 생성",
                 "parameters": [
                     {
                         "type": "string",
@@ -2257,7 +2796,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "댓글 생성 데이터",
+                        "description": "body StrCmtCreateReq: str_idx, stat, body 문자열이 필요합니다. wuid/nick는 호환용으로 허용하되 무시합니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -2268,32 +2807,60 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, lastID",
+                        "description": "최상위 msg, lastID.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.StrCmtCreateResp"
+                            "type": "object",
+                            "properties": {
+                                "lastID": {
+                                    "type": "integer"
+                                },
+                                "msg": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/필수값/숫자 파싱 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리 또는 본인 댓글 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "계정 조회/댓글 저장 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "body": "댓글",
+                    "nick": "닉네임",
+                    "stat": "0",
+                    "str_idx": "15",
+                    "wuid": "4033287471439576593"
+                },
+                "x-response-example": {
+                    "lastID": 1,
+                    "msg": "ok"
                 }
             }
         },
@@ -2304,7 +2871,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 ` + "`" + `str_cmt.body` + "`" + `를 수정합니다.\n\n**요청 body** (` + "`" + `StrCmtUpdBodyReq` + "`" + `) — 모두 필수\n- ` + "`" + `idx` + "`" + `: 댓글 idx (숫자 문자열)\n- ` + "`" + `body` + "`" + `: 수정할 본문 (빈 문자열 불가)\n\n**응답** (` + "`" + `SimpleRespOK` + "`" + ` — result envelope 없음)\n- ` + "`" + `msg` + "`" + `, ` + "`" + `affected` + "`" + ` (RowsAffected)\n\n**Request example**\n- POST /story/v01/comment/updbody\n- Header: Authorization: Bearer {access_token}\n- Body: {\"idx\":\"3\",\"body\":\"updated comment body content\"}\n\n**Response example**\n{\"msg\":\"ok\",\"affected\":1}",
+                "description": "댓글 본문 변경 API입니다.\n\n**요청**: body: idx, body 문자열이 필요합니다.\n\n**처리**: JWT 댓글 작성자 또는 서버 CommentAdminUIDs의 관리자만 수정할 수 있습니다. 부모 글 열람 권한·차단 관계를 확인하고 SQL에 댓글 idx와 작성자 또는 서버 승인 관리자 조건을 적용합니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2312,9 +2879,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Comment"
+                    "Story"
                 ],
-                "summary": "스토리 댓글 본문 수정",
+                "summary": "댓글 본문 변경",
                 "parameters": [
                     {
                         "type": "string",
@@ -2324,7 +2891,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "댓글 본문 수정",
+                        "description": "body: idx, body 문자열이 필요합니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -2335,32 +2902,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.StrCmtUpdBodyResp"
+                            "type": "object",
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/idx/body 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "부모 글 잠금 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리 또는 본인 댓글 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "DB 업데이트 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "body": "수정한 댓글",
+                    "idx": "3"
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
@@ -2371,7 +2963,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 ` + "`" + `str_cmt.stat` + "`" + `을 변경합니다.\n\n**요청 body** (` + "`" + `StrCmtUpdStatReq` + "`" + `) — 모두 필수\n- ` + "`" + `idx` + "`" + `: 댓글 idx (숫자 문자열)\n- ` + "`" + `stat` + "`" + `: 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted\n\n**응답** (` + "`" + `SimpleRespOK` + "`" + ` — result envelope 없음)\n- ` + "`" + `msg` + "`" + `, ` + "`" + `affected` + "`" + ` (RowsAffected)\n\n**Request example**\n- POST /story/v01/comment/updstat\n- Header: Authorization: Bearer {access_token}\n- Body: {\"idx\":\"3\",\"stat\":\"2\"}\n\n**Response example**\n{\"msg\":\"ok\",\"affected\":1}",
+                "description": "댓글 상태 변경 API입니다.\n\n**요청**: body: idx, stat 문자열이 필요합니다.\n\n**처리**: JWT 댓글 작성자 또는 서버 CommentAdminUIDs의 관리자만 수정할 수 있습니다. 부모 글 열람 권한·차단 관계를 확인하고 SQL에 댓글 idx와 작성자 또는 서버 승인 관리자 조건을 적용합니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2379,9 +2971,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Comment"
+                    "Story"
                 ],
-                "summary": "스토리 댓글 상태 변경",
+                "summary": "댓글 상태 변경",
                 "parameters": [
                     {
                         "type": "string",
@@ -2391,7 +2983,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "댓글 상태 변경",
+                        "description": "body: idx, stat 문자열이 필요합니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -2402,32 +2994,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.StrCmtUpdStatResp"
+                            "type": "object",
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/idx/stat 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "부모 글 잠금 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리 또는 본인 댓글 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "DB 업데이트 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "idx": "3",
+                    "stat": "4"
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
@@ -2438,7 +3055,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 특정 스토리의 댓글을 페이징 조회합니다.\n\n**path**\n- ` + "`" + `idx` + "`" + `: 스토리 idx (` + "`" + `str_cmt.str_idx` + "`" + `)\n- ` + "`" + `page` + "`" + `: 페이지 번호 (1부터, ` + "`" + `getPageAndLimit` + "`" + `)\n- ` + "`" + `limit` + "`" + `: 페이지 크기 (1~100, 0이면 DB 기본 20)\n\n**응답 data** (` + "`" + `StrCmtDetailData` + "`" + `)\n- ` + "`" + `comment` + "`" + `: ` + "`" + `[]StrComment` + "`" + ` (idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update)\n- ` + "`" + `total_count` + "`" + `: 전체 댓글 수\n\n**Request example**\n- GET /story/v01/comment/3/1/20\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"comment\":[{\"idx\":2,\"str_idx\":3,\"wuid\":77645423236541,\"nick\":\"test\",\"thumb_url\":\"https://imagedelivery.net/.../public\",\"wgender\":\"1\",\"wage\":\"30\",\"warea\":\"1\",\"body\":\"111111 test comment body\",\"stat\":1,\"at_create\":\"2026-02-02T13:50:06Z\",\"at_update\":\"2026-02-02T13:50:06Z\"}],\"total_count\":52}}",
+                "description": "스토리 댓글 목록 조회 API입니다.\n\n**요청**: path idx: 스토리 인덱스, page ≥ 1, limit 1~100.\n\n**처리**: 부모 스토리의 실제 열람 권한을 확인한 뒤 댓글을 조회합니다. 잠긴 글은 403, 비공개 타인 글·삭제 글·없는 글은 404입니다.\n\n**응답 data**: comment, total_cnt, page, limit.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2446,7 +3063,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Comment"
+                    "Story"
                 ],
                 "summary": "스토리 댓글 목록 조회",
                 "parameters": [
@@ -2459,7 +3076,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "스토리 idx",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -2481,178 +3098,51 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "data.comment, data.total_count",
+                        "description": "data: comment, total_cnt, page, limit.",
                         "schema": {
                             "$ref": "#/definitions/protocol.StrCmtDetailResp"
                         }
                     },
                     "400": {
-                        "description": "idx/page/limit 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "부모 글 잠금 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리 또는 본인 댓글 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "댓글 목록 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
-                }
-            }
-        },
-        "/story/v01/condition/list/{area}/{stat}/{type}/{order}/{gen}/{page}/{limit}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "path 파라미터(area/stat/type/order/gen/page/limit)로 스토리 피드를 조회합니다.\n\n**필터**\n- ` + "`" + `area` + "`" + `: all이면 지역 조건 생략, 그 외 ` + "`" + `story.area` + "`" + ` 매칭\n- ` + "`" + `stat` + "`" + `: pub/flw/pay/prv/del/rsv → story.stat (0~5)\n- ` + "`" + `type` + "`" + `: img/vdo/all/rsv — all이면 type 조건 생략\n- ` + "`" + `order` + "`" + `: new/old/cmt/god/view/rsv\n- ` + "`" + `gen` + "`" + `: 0=여성, 1=남성 (기본 1)\n\n**cutout**: JWT가 있으면 해당 사용자의 활성 cutout UID를 피드에서 제외\n\n**응답 data**: ` + "`" + `StoryListResp` + "`" + ` 배열\n(` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `cnt_count` + "`" + `, ` + "`" + `cnt_url` + "`" + `, ` + "`" + `cnt_type` + "`" + `, ` + "`" + `cnt_thumb` + "`" + `, ` + "`" + `at_create` + "`" + `)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "스토리 조건부 리스트 조회",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token (있으면 cutout 제외 적용)",
-                        "name": "Authorization",
-                        "in": "header"
+                },
+                "x-response-example": {
+                    "data": {
+                        "comment": [],
+                        "limit": 10,
+                        "page": 1,
+                        "total_cnt": 0
                     },
-                    {
-                        "enum": [
-                            "all",
-                            "seoul",
-                            "gyeonggi",
-                            "incheon",
-                            "busan",
-                            "daejeon",
-                            "chungbuk",
-                            "daegu",
-                            "gyeongnam",
-                            "gwangju",
-                            "jeonbuk",
-                            "gangwon",
-                            "jeju"
-                        ],
-                        "type": "string",
-                        "default": "all",
-                        "description": "지역",
-                        "name": "area",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "pub",
-                            "flw",
-                            "pay",
-                            "prv",
-                            "del",
-                            "rsv"
-                        ],
-                        "type": "string",
-                        "default": "pub",
-                        "description": "상태",
-                        "name": "stat",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "img",
-                            "vdo",
-                            "all",
-                            "rsv"
-                        ],
-                        "type": "string",
-                        "default": "img",
-                        "description": "미디어 타입",
-                        "name": "type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "new",
-                            "old",
-                            "cmt",
-                            "god",
-                            "view",
-                            "rsv"
-                        ],
-                        "type": "string",
-                        "default": "new",
-                        "description": "정렬",
-                        "name": "order",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "0",
-                            "1"
-                        ],
-                        "type": "string",
-                        "default": "1",
-                        "description": "성별 0=여성 1=남성",
-                        "name": "gen",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 번호(1부터)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data: StoryListResp 배열",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "page/limit 잘못된 값",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "cutout 조회 실패 또는 리스트 조회 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2663,7 +3153,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 사용자의 스토리를 DB에 저장합니다. 파일 업로드는 하지 않으며, upload API의 ` + "`" + `data.media` + "`" + `를 body로 받습니다.\n\n**권장 플로우**\n1. ` + "`" + `POST /story/v01/upload` + "`" + ` — Cloudflare 업로드 → ` + "`" + `data.media` + "`" + ` 수신\n2. ` + "`" + `POST /story/v01/create` + "`" + ` — JSON body에 ` + "`" + `media` + "`" + ` 전달 → ` + "`" + `SaveStory` + "`" + ` INSERT\n\n**요청 body** (` + "`" + `CreateStoryReq` + "`" + `)\n- ` + "`" + `stat` + "`" + `: 0=pub, 1=private(팔로우공개), 2=limit(유료공개), 3=resv, 4=del\n- ` + "`" + `sbody` + "`" + `: 본문 (최대 512자)\n- ` + "`" + `media` + "`" + `: ` + "`" + `StoryStrImg` + "`" + ` 슬롯 맵 (1~5개, upload 응답과 동일)\n` + "`" + `{\"1\":{\"type\":\"img\",\"url\":\"...\"},\"2\":{\"type\":\"vdo\",\"url\":\"...\",\"thumb\":\"...\"}}` + "`" + `\n\n**서버에서 JWT로 채우는 필드**: uid, nick, birth, gender, area\n**검증**: ` + "`" + `ValidateStoryMedia` + "`" + ` (슬롯·type·url·vdo thumb)\n**저장**: ` + "`" + `BuildStrImgForDB` + "`" + `로 ` + "`" + `str_img` + "`" + `/` + "`" + `type` + "`" + ` 정규화 후 INSERT\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"idx\":\u003cstory.idx\u003e}` + "`" + `",
+                "description": "스토리 생성 API입니다.\n\n**요청**: body CreateStoryReq: stat(int, 0=pub/1=flw/2=pay/3=prv/4=del/5=rsv), sbody, price(int), media(0~5 슬롯, 없으면 sbody 필수). 동영상 항목은 thumb1이 필요합니다. stat 생략 시 0(PUB)입니다. 6(ALL)은 조회 전용입니다.\n\n**처리**: JWT에서 uid/nick/birth/gender/area를 채웁니다. 상태 범위, 프로필 필수 값, 미디어 슬롯·type·url·thumb1을 검증하고 str_img/type을 정규화하여 INSERT합니다. 파일 업로드는 별도 /story/v01/upload입니다. sbody 512자 제한은 이 핸들러에서 직접 검증하지 않습니다.\n\n**응답**: 최상위 msg, idx. data 래퍼가 없습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2683,7 +3173,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "stat, sbody, media",
+                        "description": "body CreateStoryReq: stat(int, 0=pub/1=flw/2=pay/3=prv/4=del/5=rsv), sbody, price(int), media(0~5 슬롯, 없으면 sbody 필수). 동영상 항목은 thumb1이 필요합니다. stat 생략 시 0(PUB)입니다. 6(ALL)은 조회 전용입니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -2694,33 +3184,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, idx",
+                        "description": "최상위 msg, idx. data 래퍼가 없습니다.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "idx": {
+                                    "type": "integer"
+                                },
+                                "msg": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/media 검증 실패, nick·birth·gender 부족",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "DB 저장 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "media": {
+                        "1": {
+                            "type": "img",
+                            "url": "https://imagedelivery.net/example/public"
+                        },
+                        "2": {
+                            "thumb1": "https://imagedelivery.net/example-thumb/public",
+                            "type": "vdo",
+                            "url": "https://example.com/video.m3u8"
+                        }
+                    },
+                    "price": 0,
+                    "sbody": "오늘의 스토리",
+                    "stat": 1
+                },
+                "x-response-example": {
+                    "idx": 5,
+                    "msg": "ok"
                 }
             }
         },
@@ -2731,7 +3245,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인이 대상(` + "`" + `tid` + "`" + `)에 대한 스토리 피드 숨김을 해제합니다 (` + "`" + `str_cutout.stat=0` + "`" + `).\n\n**규칙**\n- JWT uid = cutout 주체, path ` + "`" + `tid` + "`" + ` = 해제 대상\n\n**처리** (` + "`" + `UnsetCutoutUser` + "`" + `)\n\n**Request example**\n- POST /story/v01/cutout/cancel/4033287471439576593\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"affected\":1}}",
+                "description": "피드 제외 사용자 해제 API입니다.\n\n**요청**: path tid: 양의 대상 UID.\n\n**처리**: JWT UID 기준으로 cutout 관계를 해제합니다.\n\n**응답 data**: msg, res.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2739,9 +3253,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Cutout"
+                    "Story"
                 ],
-                "summary": "스토리 cutout 해제",
+                "summary": "피드 제외 사용자 해제",
                 "parameters": [
                     {
                         "type": "string",
@@ -2752,7 +3266,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "cutout 해제 대상 사용자 UID",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
@@ -2760,32 +3274,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "data: msg, res.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.CutoutActionResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                },
+                                                "res": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "tid invalid",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "str_cutout 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok",
+                        "res": 1
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2796,7 +3335,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인의 활성 cutout(` + "`" + `str_cutout.stat=1` + "`" + `) 개수를 반환합니다.\n\n**Request example**\n- POST /story/v01/cutout/count\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"count\":3}}",
+                "description": "피드 제외 사용자 수 조회 API입니다.\n\n**요청**: POST 요청이며 body는 없습니다.\n\n**처리**: JWT 사용자의 활성 cutout 수를 조회합니다.\n\n**응답 data**: msg, count.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2804,9 +3343,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Cutout"
+                    "Story"
                 ],
-                "summary": "스토리 cutout 개수 조회",
+                "summary": "피드 제외 사용자 수 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -2818,25 +3357,51 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, count",
+                        "description": "data: msg, count.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.CutoutCountResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer"
+                                                },
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "개수 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "count": 0,
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2847,7 +3412,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인의 활성 cutout(` + "`" + `str_cutout.stat=1` + "`" + `) 목록을 페이징 조회합니다.\n\n**조회 규칙**\n- JWT uid 기준, ` + "`" + `at_upd DESC` + "`" + ` 정렬\n- ` + "`" + `page` + "`" + `/` + "`" + `limit` + "`" + `은 path에서 ` + "`" + `getPageAndLimit` + "`" + ` 파싱 (빈 값이면 page=1, limit=20)\n\n**응답 data**\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `total_count` + "`" + `: 전체 활성 cutout 수\n- ` + "`" + `list` + "`" + `: ` + "`" + `CutoutUserItem` + "`" + ` 배열\n(` + "`" + `idx` + "`" + `, ` + "`" + `tid` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `tnick` + "`" + `, ` + "`" + `tgen` + "`" + `, ` + "`" + `tbirth` + "`" + `, ` + "`" + `age` + "`" + `, ` + "`" + `tsp_intro` + "`" + `, ` + "`" + `tarea` + "`" + `, ` + "`" + `tthmb_pic` + "`" + `, ` + "`" + `at_crt` + "`" + `, ` + "`" + `at_upd` + "`" + `)\n\n**Request example**\n- GET /story/v01/cutout/list/1/10\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"total_count\":1,\"list\":[{\"idx\":1,\"tid\":4033287471439576593,\"stat\":1,\"tnick\":\"푸른 아름다운 양\",\"tgen\":1,\"tbirth\":\"1991-12-18\",\"age\":34,\"tsp_intro\":\"반가워요 큐피톡에서 만나요!\",\"tarea\":1,\"tthmb_pic\":\"https://i.ibb.co/99MhfMXt/icon-male-03.webp\",\"at_crt\":\"2026-06-23T14:30:15Z\",\"at_upd\":\"2026-06-23T14:30:15Z\"}]}}",
+                "description": "피드 제외 사용자 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: JWT 사용자의 활성 cutout 목록을 조회합니다.\n\n**응답 data**: msg, total_count, list.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2855,9 +3420,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Cutout"
+                    "Story"
                 ],
-                "summary": "스토리 cutout 목록 조회",
+                "summary": "피드 제외 사용자 목록 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -2868,14 +3433,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 번호(1부터, 기본 1)",
+                        "description": "페이지 번호(1부터)",
                         "name": "page",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 크기(기본 20)",
+                        "description": "페이지 크기(1~100)",
                         "name": "limit",
                         "in": "path",
                         "required": true
@@ -2883,32 +3448,64 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, total_count, list(CutoutUserItem[])",
+                        "description": "data: msg, total_count, list.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.CutoutListResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "list": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.CutoutUserItem"
+                                                    }
+                                                },
+                                                "msg": {
+                                                    "type": "string"
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "page/limit 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "목록 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "list": [],
+                        "msg": "ok",
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2919,7 +3516,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인이 대상(` + "`" + `tid` + "`" + `)을 스토리 피드에서 숨깁니다. 서비스 전체 차단(` + "`" + `user_block` + "`" + `)과 별개입니다.\n\n**규칙**\n- JWT uid = cutout 주체, path ` + "`" + `tid` + "`" + ` = 숨길 대상\n- 자기 자신 cutout 불가 (` + "`" + `self cutout is not allowed` + "`" + `)\n- 대상 미존재/성별 파싱 실패 시 400\n\n**처리**\n- ` + "`" + `GetUserInfoByUID(tid)` + "`" + `로 프로필 스냅샷 조회\n\n**Request example**\n- POST /story/v01/cutout/set/4033287471439576593\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"affected\":1}}",
+                "description": "피드 제외 사용자 등록 API입니다.\n\n**요청**: path tid: 양의 대상 UID.\n\n**처리**: JWT UID 기준으로 cutout 관계를 등록합니다. 본인은 제외할 수 없으며 대상 계정과 성별을 검증합니다.\n\n**응답 data**: msg, res.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2927,9 +3524,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Story_Cutout"
+                    "Story"
                 ],
-                "summary": "스토리 cutout 설정",
+                "summary": "피드 제외 사용자 등록",
                 "parameters": [
                     {
                         "type": "string",
@@ -2940,7 +3537,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "cutout 대상 사용자 UID",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
@@ -2948,32 +3545,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "data: msg, res.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.CutoutActionResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                },
+                                                "res": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "tid invalid / self cutout / target user not found / gender invalid",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "str_cutout 저장 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok",
+                        "res": 1
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -2984,7 +3606,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "스토리 ` + "`" + `str_img` + "`" + `에서 지정 슬롯을 제거하고 ` + "`" + `str_imgbak` + "`" + `으로 이동한 뒤, 남은 슬롯을 ` + "`" + `1..N` + "`" + `으로 재번호합니다.\n\n**요청 body** (` + "`" + `DeleteStrPicReq` + "`" + `)\n- ` + "`" + `idx` + "`" + `: 스토리 인덱스 (문자열 숫자)\n- ` + "`" + `pic_idx` + "`" + `: 삭제할 미디어 슬롯 키 (` + "`" + `\"1\"` + "`" + `~` + "`" + `\"5\"` + "`" + `)\n\n**처리**\n1. ` + "`" + `GetStrPicList` + "`" + `로 ` + "`" + `str_img` + "`" + ` / ` + "`" + `str_imgbak` + "`" + ` 조회\n2. ` + "`" + `pic_idx` + "`" + ` 슬롯을 bak으로 복사\n3. ` + "`" + `ReIdxAfterDel` + "`" + `로 남은 슬롯 재인덱싱\n4. ` + "`" + `DeleteStrPic` + "`" + `으로 DB 갱신\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"affected\":N}` + "`" + `",
+                "description": "본인 스토리 미디어 삭제 API입니다.\n\n**요청**: body DeleteStrPicReq: idx와 pic_idx는 문자열. pic_idx는 삭제할 슬롯입니다.\n\n**처리**: JWT 소유자 조건으로 스토리를 조회합니다. 없는 글·타인 글은 404, 유효하지 않은 슬롯은 400입니다. 삭제 후 슬롯을 재정렬하고 콘텐츠 revision을 갱신합니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2994,7 +3616,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 미디어 슬롯 삭제",
+                "summary": "본인 스토리 미디어 삭제",
                 "parameters": [
                     {
                         "type": "string",
@@ -3004,7 +3626,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "idx, pic_idx",
+                        "description": "body DeleteStrPicReq: idx와 pic_idx는 문자열. pic_idx는 삭제할 슬롯입니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -3015,44 +3637,62 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/idx/pic_idx 오류, 빈 목록, 슬롯 없음, str_img 포맷 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "대상 없음 또는 조회 가능한 대상 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "조회/직렬화/DB 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "idx": "15",
+                    "pic_idx": "1"
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
-        "/story/v01/detail/{idx}/{page}/{limit}": {
+        "/story/v01/detail/{idx}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "특정 스토리 idx를 기준으로 해당 작성자(tid)의 스토리를 페이징 조회합니다.\n\n**조회 대상**\n- ` + "`" + `tid` + "`" + ` 없음: JWT 본인 UID (` + "`" + `/detail/{idx}/{page}/{limit}` + "`" + `)\n- ` + "`" + `tid` + "`" + ` 있음: 해당 사용자 UID (` + "`" + `/detail/{idx}/{page}/{limit}/{tid}` + "`" + `)\n\n**조회 규칙**\n- ` + "`" + `uid = tid` + "`" + ` 이고 ` + "`" + `story.idx \u003c= idx` + "`" + ` 인 행을 ` + "`" + `idx DESC` + "`" + `로 페이징\n- 각 항목에 최신 댓글 최대 2개(` + "`" + `comment_list` + "`" + `)와 ` + "`" + `cmt_count` + "`" + ` 포함\n- 조회 성공 시 요청 idx 스토리의 ` + "`" + `qt_view` + "`" + `를 +1 (` + "`" + `UpdateStoryView` + "`" + `)\n\n**응답 data**\n- ` + "`" + `total_count` + "`" + `: 해당 tid의 전체 스토리 수\n- ` + "`" + `story` + "`" + `: ` + "`" + `StoryDetailResp` + "`" + ` 배열\n(` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `body` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `qt_good` + "`" + `, ` + "`" + `qt_view` + "`" + `, ` + "`" + `content_total` + "`" + `,\n` + "`" + `str_img` + "`" + ` 슬롯 맵, ` + "`" + `at_create` + "`" + `, ` + "`" + `cmt_count` + "`" + `, ` + "`" + `comment_list` + "`" + `)\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"total_count\":14,\"story\":[{\"idx\":15,\"uid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"body\":\"E 둘다\",\"stat\":3,\"qt_good\":16,\"qt_view\":7,\"content_total\":3,\"str_img\":{\"1\":{\"type\":\"img\",\"url\":\"https://imagedelivery.net/.../public\"},\"2\":{\"type\":\"img\",\"url\":\"https://imagedelivery.net/.../public\"},\"3\":{\"type\":\"vdo\",\"url\":\"https://.../video.mp4\",\"thumb\":\"https://imagedelivery.net/.../public\"}},\"at_create\":\"2026-09-02T13:35:24Z\",\"cmt_count\":1,\"comment_list\":[{\"idx\":3,\"str_idx\":15,\"wuid\":77645423236541,\"nick\":\"test1\",\"thumb_url\":\"https://icon.prof.com\",\"body\":\"comment\",\"stat\":1,\"at_create\":\"2026-02-02T13:50:06Z\"}]}]}}",
+                "description": "스토리 단건 상세 조회 API입니다.\n\n**요청**: path idx: 스토리 인덱스.\n\n**처리**: JWT viewer의 가시성·활성 팔로우·완료 구매 권한을 적용합니다. 접근 가능한 행이 없으면 404입니다. GET은 조회수를 변경하지 않습니다.\n\n**응답 data**: StoryDetailResp. 실제 JSON 필드는 ctnt_total, qt_like, is_locked(0/1), good_byme(0/1), cmt_list, is_flwd, is_paid입니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3062,7 +3702,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 상세 목록 조회 (본인/타인)",
+                "summary": "스토리 단건 상세 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -3073,9 +3713,82 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "기준 스토리 인덱스 (이 idx 이하부터 조회)",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: StoryDetailResp. 실제 JSON 필드는 ctnt_total, qt_like, is_locked(0/1), good_byme(0/1), cmt_list, is_flwd, is_paid입니다.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/protocol.StoryDetailResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "대상 없음 또는 조회 가능한 대상 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/flwlist/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "팔로우 작성자의 스토리 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: JWT 사용자의 활성 팔로우 관계로 조회하며 스토리 가시성과 구매 권한을 적용합니다.\n\n**응답 data**: page, limit, total_count, story(StoryDetailResp 배열).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "팔로우 작성자의 스토리 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
                         "required": true
                     },
                     {
@@ -3087,7 +3800,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
+                        "description": "페이지 크기(1~100)",
                         "name": "limit",
                         "in": "path",
                         "required": true
@@ -3095,119 +3808,68 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "total_count, story(StoryDetailResp[])",
+                        "description": "data: total_count, story(StoryDetailResp 배열).",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "story": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.StoryDetailResp"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "idx/page/limit/tid 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "tid 없을 때 JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "상세 조회 또는 조회수 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
-                }
-            }
-        },
-        "/story/v01/detail/{idx}/{page}/{limit}/{tid}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "특정 스토리 idx를 기준으로 해당 작성자(tid)의 스토리를 페이징 조회합니다.\n\n**조회 대상**\n- ` + "`" + `tid` + "`" + ` 없음: JWT 본인 UID (` + "`" + `/detail/{idx}/{page}/{limit}` + "`" + `)\n- ` + "`" + `tid` + "`" + ` 있음: 해당 사용자 UID (` + "`" + `/detail/{idx}/{page}/{limit}/{tid}` + "`" + `)\n\n**조회 규칙**\n- ` + "`" + `uid = tid` + "`" + ` 이고 ` + "`" + `story.idx \u003c= idx` + "`" + ` 인 행을 ` + "`" + `idx DESC` + "`" + `로 페이징\n- 각 항목에 최신 댓글 최대 2개(` + "`" + `comment_list` + "`" + `)와 ` + "`" + `cmt_count` + "`" + ` 포함\n- 조회 성공 시 요청 idx 스토리의 ` + "`" + `qt_view` + "`" + `를 +1 (` + "`" + `UpdateStoryView` + "`" + `)\n\n**응답 data**\n- ` + "`" + `total_count` + "`" + `: 해당 tid의 전체 스토리 수\n- ` + "`" + `story` + "`" + `: ` + "`" + `StoryDetailResp` + "`" + ` 배열\n(` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `body` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `qt_good` + "`" + `, ` + "`" + `qt_view` + "`" + `, ` + "`" + `content_total` + "`" + `,\n` + "`" + `str_img` + "`" + ` 슬롯 맵, ` + "`" + `at_create` + "`" + `, ` + "`" + `cmt_count` + "`" + `, ` + "`" + `comment_list` + "`" + `)\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"total_count\":14,\"story\":[{\"idx\":15,\"uid\":4033287471439576593,\"nick\":\"푸른 아름다운 양\",\"body\":\"E 둘다\",\"stat\":3,\"qt_good\":16,\"qt_view\":7,\"content_total\":3,\"str_img\":{\"1\":{\"type\":\"img\",\"url\":\"https://imagedelivery.net/.../public\"},\"2\":{\"type\":\"img\",\"url\":\"https://imagedelivery.net/.../public\"},\"3\":{\"type\":\"vdo\",\"url\":\"https://.../video.mp4\",\"thumb\":\"https://imagedelivery.net/.../public\"}},\"at_create\":\"2026-09-02T13:35:24Z\",\"cmt_count\":1,\"comment_list\":[{\"idx\":3,\"str_idx\":15,\"wuid\":77645423236541,\"nick\":\"test1\",\"thumb_url\":\"https://icon.prof.com\",\"body\":\"comment\",\"stat\":1,\"at_create\":\"2026-02-02T13:50:06Z\"}]}]}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "스토리 상세 목록 조회 (본인/타인)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                },
+                "x-response-example": {
+                    "data": {
+                        "limit": 10,
+                        "page": 1,
+                        "story": [],
+                        "total_count": 0
                     },
-                    {
-                        "type": "integer",
-                        "description": "기준 스토리 인덱스 (이 idx 이하부터 조회)",
-                        "name": "idx",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 번호(1부터)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "스토리 작성자 UID (없으면 JWT 본인)",
-                        "name": "tid",
-                        "in": "path"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "total_count, story(StoryDetailResp[])",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "idx/page/limit/tid 잘못된 값",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "tid 없을 때 JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "상세 조회 또는 조회수 갱신 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -3218,7 +3880,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인(` + "`" + `follower` + "`" + `)이 대상(` + "`" + `tid` + "`" + `=` + "`" + `followee` + "`" + `)에 대한 팔로우를 비활성화합니다 (` + "`" + `stat=0` + "`" + `).\n\n**규칙**\n- ` + "`" + `follower` + "`" + ` = JWT uid, ` + "`" + `followee` + "`" + ` = path ` + "`" + `tid` + "`" + `\n- 자기 자신 언팔로우 불가 (` + "`" + `self unfollow is not allowed` + "`" + `)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"affected\":N}` + "`" + `",
+                "description": "팔로우 해제 API입니다.\n\n**요청**: path tid: 대상 UID. 본인 UID는 허용하지 않습니다. 요청 body는 없습니다.\n\n**처리**: 행위자는 JWT UID입니다. 팔로우 관계를 비활성 상태(stat=0)로 변경합니다. 현재 이 핸들러에서는 양방향 차단을 검사하지 않습니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3228,7 +3890,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "언팔로우 처리",
+                "summary": "팔로우 해제",
                 "parameters": [
                     {
                         "type": "string",
@@ -3239,7 +3901,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "언팔로우 대상 UID (followee)",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
@@ -3247,33 +3909,41 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "tid 잘못된 값 또는 자기 자신 언팔로우",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "언팔로우 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
@@ -3284,7 +3954,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인(` + "`" + `follower` + "`" + `)이 대상(` + "`" + `tid` + "`" + `=` + "`" + `followee` + "`" + `)을 팔로우합니다. 신규 생성 또는 기존 행 재활성화(` + "`" + `stat=1` + "`" + `).\n\n**규칙**\n- ` + "`" + `follower` + "`" + ` = JWT uid, ` + "`" + `followee` + "`" + ` = path ` + "`" + `tid` + "`" + `\n- 자기 자신 팔로우 불가 (` + "`" + `self follow is not allowed` + "`" + `)\n- 차단(block) 검사는 현재 비활성(주석 처리)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"affected\":N}` + "`" + `",
+                "description": "팔로우 등록 API입니다.\n\n**요청**: path tid: 대상 UID. 본인 UID는 허용하지 않습니다. 요청 body는 없습니다.\n\n**처리**: 행위자는 JWT UID입니다. 팔로우 관계를 활성 상태(stat=1)로 등록합니다. 현재 이 핸들러에서는 양방향 차단을 검사하지 않습니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3294,7 +3964,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "팔로우 설정",
+                "summary": "팔로우 등록",
                 "parameters": [
                     {
                         "type": "string",
@@ -3305,7 +3975,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "팔로우 대상 UID (followee)",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
@@ -3313,33 +3983,41 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "tid 잘못된 값 또는 자기 자신 팔로우",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "팔로우 저장 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
@@ -3350,7 +4028,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인을 followee로 하는 활성 팔로워(` + "`" + `user_follow.stat=1` + "`" + `) 목록을 페이징 조회합니다.\n\n**조회 규칙**\n- JWT uid = ` + "`" + `followee_uid` + "`" + ` (나를 팔로우한 사람들)\n- ` + "`" + `at_update DESC` + "`" + ` 정렬\n- ` + "`" + `page` + "`" + `/` + "`" + `limit` + "`" + `은 path에서 읽고 빈 값이면 page=1, limit=20\n\n**응답 data**\n- ` + "`" + `total_count` + "`" + `: 전체 팔로워 수\n- ` + "`" + `list` + "`" + `: ` + "`" + `FollowUserItem` + "`" + ` 배열 (` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `thumb_pic` + "`" + `, ` + "`" + `at_update` + "`" + `)",
+                "description": "내 팔로워 목록 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: JWT 사용자의 활성 관계만 조회합니다.\n\n**응답 data**: total_count, list.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3360,7 +4038,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "팔로워 목록 조회",
+                "summary": "내 팔로워 목록",
                 "parameters": [
                     {
                         "type": "string",
@@ -3371,14 +4049,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 번호(1부터, 기본 1)",
+                        "description": "페이지 번호(1부터)",
                         "name": "page",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 크기(기본 20)",
+                        "description": "페이지 크기(1~100)",
                         "name": "limit",
                         "in": "path",
                         "required": true
@@ -3386,33 +4064,60 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "total_count, list(FollowUserItem[])",
+                        "description": "data: total_count, list.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "list": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.FollowUserItem"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "page/limit 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "팔로워 목록 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "list": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -3423,7 +4128,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 본인을 follower로 하는 활성 팔로잉(` + "`" + `user_follow.stat=1` + "`" + `) 목록을 페이징 조회합니다.\n\n**조회 규칙**\n- JWT uid = ` + "`" + `follower_uid` + "`" + ` (내가 팔로우한 사람들)\n- ` + "`" + `at_update DESC` + "`" + ` 정렬\n\n**응답 data**\n- ` + "`" + `total_count` + "`" + `: 전체 팔로잉 수\n- ` + "`" + `list` + "`" + `: ` + "`" + `FollowUserItem` + "`" + ` 배열 (` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `thumb_pic` + "`" + `, ` + "`" + `at_update` + "`" + `)",
+                "description": "내 팔로잉 목록 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: JWT 사용자의 활성 관계만 조회합니다.\n\n**응답 data**: total_count, list.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3433,7 +4138,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "팔로잉 목록 조회",
+                "summary": "내 팔로잉 목록",
                 "parameters": [
                     {
                         "type": "string",
@@ -3444,14 +4149,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 번호(1부터, 기본 1)",
+                        "description": "페이지 번호(1부터)",
                         "name": "page",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 크기(기본 20)",
+                        "description": "페이지 크기(1~100)",
                         "name": "limit",
                         "in": "path",
                         "required": true
@@ -3459,26 +4164,60 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "total_count, list(FollowUserItem[])",
+                        "description": "data: total_count, list.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "list": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.FollowUserItem"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "팔로잉 목록 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "list": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -3489,7 +4228,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "지정한 스토리(` + "`" + `idx` + "`" + `)의 현재 좋아요 수(` + "`" + `story.qt_good` + "`" + `)를 반환합니다.\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"count\":\u003cqt_good\u003e}` + "`" + `",
+                "description": "스토리 좋아요 수 조회 API입니다.\n\n**요청**: path idx: 스토리 인덱스.\n\n**처리**: 해당 스토리의 카운트를 조회합니다.\n\n**응답 data**: msg, count.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3510,7 +4249,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "조회할 스토리 인덱스",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -3518,33 +4257,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, count",
+                        "description": "data: msg, count.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer"
+                                                },
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "idx 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "스토리 없음 또는 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "count": 17,
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -3555,7 +4318,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "스토리 좋아요/취소를 토글하고 최신 좋아요 수를 반환합니다.\n\n**요청 body** (` + "`" + `StoryLikeToggleReq` + "`" + `)\n- ` + "`" + `story_idx` + "`" + `: 스토리 인덱스 (문자열 숫자)\n- ` + "`" + `uid` + "`" + `: 좋아요를 누른 사용자 UID (문자열 숫자)\n\n**처리** (` + "`" + `ToggleStoryLikeTx` + "`" + `)\n- 차단(block) 검사는 현재 코드에서 비활성(주석 처리)\n\n**응답 data**: ` + "`" + `{\"msg\":\"...\",\"liked\":true|false,\"like_count\":N}` + "`" + `\n- ` + "`" + `liked` + "`" + `: 토글 후 좋아요 여부\n- ` + "`" + `like_count` + "`" + `: 갱신된 ` + "`" + `story.qt_good` + "`" + `",
+                "description": "스토리 좋아요 토글 API입니다.\n\n**요청**: body StoryLikeToggleReq: story_idx는 양의 정수 문자열. uid는 호환용으로 허용하지만 무시합니다.\n\n**처리**: JWT UID를 행위자로 사용합니다. 작성자 조회 후 양방향 차단을 검사하고 ToggleStoryLikeTx로 좋아요와 카운트를 갱신합니다. 없는 글은 404, 차단 관계는 403입니다.\n\n**응답**: 최상위 msg, like_cnt. data 래퍼가 없습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3575,7 +4338,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "story_idx, uid",
+                        "description": "body StoryLikeToggleReq: story_idx는 양의 정수 문자열. uid는 호환용으로 허용하지만 무시합니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -3586,33 +4349,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, liked, like_count",
+                        "description": "최상위 msg, like_cnt. data 래퍼가 없습니다.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "like_cnt": {
+                                    "type": "integer"
+                                },
+                                "msg": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/story_idx/uid 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "대상 없음 또는 조회 가능한 대상 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "토글/카운트 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "story_idx": "15",
+                    "uid": "4033287471439576593"
+                },
+                "x-response-example": {
+                    "like_cnt": 17,
+                    "msg": "ok"
                 }
             }
         },
@@ -3623,7 +4410,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "페이지네이션으로 스토리 리스트를 최신순으로 조회합니다.\n\n**조회 대상**\n- ` + "`" + `tid` + "`" + ` 없음: JWT 본인 UID로 조회 (` + "`" + `/list/{page}/{limit}` + "`" + `)\n- ` + "`" + `tid` + "`" + ` 있음: 해당 사용자 UID로 조회 (` + "`" + `/list/{page}/{limit}/{tid}` + "`" + `)\n\n**응답 data**: ` + "`" + `StoryListResp` + "`" + ` 배열\n- ` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `cnt_count` + "`" + `, ` + "`" + `cnt_url` + "`" + `, ` + "`" + `cnt_type` + "`" + `, ` + "`" + `cnt_thumb` + "`" + `, ` + "`" + `at_create` + "`" + `\n- 대표 미디어: ` + "`" + `cnt_url` + "`" + `/` + "`" + `cnt_type` + "`" + `/` + "`" + `cnt_thumb` + "`" + ` (전체 ` + "`" + `str_img` + "`" + ` 슬롯 맵은 포함하지 않음)\n\n**stat**: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":[{\"idx\":15,\"uid\":403,\"nick\":\"푸양\",\"stat\":1,\"cnt_count\":2,\"cnt_url\":\"https://imag.net/.../public\",\"cnt_type\":\"img\",\"cnt_thumb\":\"\",\"at_create\":\"2026-09-02T13:35:24Z\"}]}",
+                "description": "작성자별 스토리 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100. tid가 있는 경로는 해당 작성자, 없는 경로는 JWT 본인을 조회합니다.\n\n**처리**: viewer는 항상 JWT UID입니다. 목록과 COUNT에 owner UID를 적용합니다. 삭제 글과 타인의 비공개·예약 글은 제외합니다. FLW 글은 팔로우 권한, PAY 글은 구매 권한이 없으면 본문·댓글을 숨기며 미디어 URL·썸네일은 유지하고 is_locked로 클라이언트에서 표시를 제어합니다. GET은 조회수를 변경하지 않습니다.\n\n목록의 댓글·댓글 수·팔로워 수는 캐시 적중 시에도 DB에서 최신 값으로 갱신합니다.\n**응답 data**: page, limit, total_count, story(StoryDetailResp 배열). 관계 필드 is_locked는 최종 잠금 여부(1=잠김, 0=열림), good_byme는 JWT 사용자의 좋아요 여부(1=좋아요, 0=아님)입니다. is_flwd/is_paid는 글 공개 상태와 별도로 계산합니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3633,609 +4420,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 기본 목록 조회 (본인/타인)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 번호(1부터)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data: StoryListResp 배열",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "page/limit/tid 잘못된 값",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "tid 없을 때 JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "서버 에러",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/list/{page}/{limit}/{tid}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "페이지네이션으로 스토리 리스트를 최신순으로 조회합니다.\n\n**조회 대상**\n- ` + "`" + `tid` + "`" + ` 없음: JWT 본인 UID로 조회 (` + "`" + `/list/{page}/{limit}` + "`" + `)\n- ` + "`" + `tid` + "`" + ` 있음: 해당 사용자 UID로 조회 (` + "`" + `/list/{page}/{limit}/{tid}` + "`" + `)\n\n**응답 data**: ` + "`" + `StoryListResp` + "`" + ` 배열\n- ` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `cnt_count` + "`" + `, ` + "`" + `cnt_url` + "`" + `, ` + "`" + `cnt_type` + "`" + `, ` + "`" + `cnt_thumb` + "`" + `, ` + "`" + `at_create` + "`" + `\n- 대표 미디어: ` + "`" + `cnt_url` + "`" + `/` + "`" + `cnt_type` + "`" + `/` + "`" + `cnt_thumb` + "`" + ` (전체 ` + "`" + `str_img` + "`" + ` 슬롯 맵은 포함하지 않음)\n\n**stat**: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":[{\"idx\":15,\"uid\":403,\"nick\":\"푸양\",\"stat\":1,\"cnt_count\":2,\"cnt_url\":\"https://imag.net/.../public\",\"cnt_type\":\"img\",\"cnt_thumb\":\"\",\"at_create\":\"2026-09-02T13:35:24Z\"}]}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "스토리 기본 목록 조회 (본인/타인)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 번호(1부터)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "조회 대상 UID (없으면 JWT 본인)",
-                        "name": "tid",
-                        "in": "path"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data: StoryListResp 배열",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "page/limit/tid 잘못된 값",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "tid 없을 때 JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "서버 에러",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/pcs/list/{page}/{limit}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 본인이 구매한 스토리 목록을 페이징 조회합니다.\n\n**조회 규칙**\n- ` + "`" + `str_pcs.pcs_uid = JWT uid` + "`" + ` 인 구매 기록과 ` + "`" + `story` + "`" + `를 INNER JOIN\n- ` + "`" + `story.at_create DESC` + "`" + ` 최신순\n- 대표 미디어만 반환 (` + "`" + `cnt_url` + "`" + `/` + "`" + `cnt_type` + "`" + `/` + "`" + `cnt_thumb` + "`" + `, 전체 ` + "`" + `str_img` + "`" + ` 슬롯 맵 미포함)\n\n**응답 data**\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `total_count` + "`" + `: 구매·조인된 전체 건수\n- ` + "`" + `list` + "`" + `: ` + "`" + `StoryListResp` + "`" + ` 배열\n(` + "`" + `idx` + "`" + `, ` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `stat` + "`" + `, ` + "`" + `cnt_count` + "`" + `, ` + "`" + `cnt_url` + "`" + `, ` + "`" + `cnt_type` + "`" + `, ` + "`" + `cnt_thumb` + "`" + `, ` + "`" + `at_create` + "`" + `)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Story"
-                ],
-                "summary": "구매한 스토리 목록 조회",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 번호(1부터)",
-                        "name": "page",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "페이지 크기(기본 4, 최대 100)",
-                        "name": "limit",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "msg, total_count, list(StoryListResp[])",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "page/limit 잘못된 값",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "구매 목록 조회 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/assets": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 본인의 보유 화살(포인트), 캐시, DM 미읽음 쪽지 합계를 조회합니다.\n\n**처리**\n- ` + "`" + `GetUserAssetInfo(uid)` + "`" + ` → ` + "`" + `hold_point` + "`" + `, ` + "`" + `hold_cash` + "`" + ` (NULL이면 0)\n- ` + "`" + `GetAllUnreadForUser(uid)` + "`" + ` 합산 → ` + "`" + `msg_count` + "`" + ` (Redis)\n\n**응답 data**\n- ` + "`" + `hold_point` + "`" + `: 보유 화살/포인트\n- ` + "`" + `hold_cash` + "`" + `: 보유 캐시\n- ` + "`" + `msg_count` + "`" + `: 전체 DM 미읽음 쪽지 합계\n\n**Request example**\n- GET /story/v01/prf/assets\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"hold_point\":0,\"hold_cash\":0,\"msg_count\":3}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "스토리 프로필 자산 조회",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "hold_point, hold_cash, msg_count",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.PrfAssetsResp"
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "자산/쪽지 조회 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/info/{tid}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 인증 후 대상 사용자 프로필(` + "`" + `prf_info` + "`" + `)과 팔로워 수를 조회합니다.\n\n**조회 대상**\n- path ` + "`" + `tid` + "`" + `: 조회할 사용자 UID (본인 조회 시에도 본인 UID 전달)\n- 핸들러상 ` + "`" + `tid` + "`" + `가 비어 있으면 JWT 본인 UID 사용\n\n**처리**\n- ` + "`" + `GetPrfInfo(tid)` + "`" + ` → ` + "`" + `prf_Info` + "`" + `\n- ` + "`" + `GetFollowerCount(tid)` + "`" + ` → ` + "`" + `flw_cnt` + "`" + `\n\n**응답 data**\n- ` + "`" + `prf_Info` + "`" + `: ` + "`" + `PrfInfo` + "`" + ` (` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `gender` + "`" + `, ` + "`" + `birth` + "`" + `, ` + "`" + `age` + "`" + `, ` + "`" + `area` + "`" + `, ` + "`" + `intro` + "`" + `, ` + "`" + `main_pic` + "`" + `)\n- ` + "`" + `flw_cnt` + "`" + `: 팔로워 수\n\n**Request example**\n- GET /story/v01/prf/info/8697414060736839837\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"flw_cnt\":0,\"prf_Info\":{\"uid\":8697414060736839837,\"nick\":\"건강한 꼬마 오렌지\",\"gender\":\"1\",\"birth\":\"1990-01-01T00:00:00Z\",\"age\":\"-2\",\"area\":\"1\",\"intro\":\"반가워요 큐피톡에서 만나요!\",\"main_pic\":\"\"}}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "스토리 프로필 정보 조회",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "조회 대상 UID (본인 조회 시에도 UID 전달)",
-                        "name": "tid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "prf_Info, flw_cnt",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.PrfInfoResp"
-                        }
-                    },
-                    "400": {
-                        "description": "tid 형식 오류",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "프로필/팔로워 조회 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/pic/delete/{idx}": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 인증 사용자의 ` + "`" + `prf_info.sub_pic{slot}` + "`" + `를 삭제하고, 뒤 슬롯을 앞으로 당깁니다.\n\n**idx**(path): 삭제할 슬롯 번호 1~5\n- 예: ` + "`" + `2` + "`" + ` → sub_pic2 삭제 후 sub_pic3→2, sub_pic4→3, sub_pic5→4, sub_pic5=NULL\n- 슬롯 JSON은 ` + "`" + `{\"url\",\"stat\"}` + "`" + `만 저장(idx 없음). 순번은 컬럼 위치\n\n**응답**: ` + "`" + `SendResponse` + "`" + ` → ` + "`" + `RespHeader` + "`" + ` (` + "`" + `desc=success` + "`" + `, data 필드 없음)\n\n**Request example**\n- POST /story/v01/prf/pic/delete/2\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"desc\":\"success\"}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "프로필 사진 삭제",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "삭제할 프로필 사진 슬롯 (1~5)",
-                        "name": "idx",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "result=0, desc=success",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.RespHeader"
-                        }
-                    },
-                    "400": {
-                        "description": "idx 누락/형식 오류",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "DB 삭제 실패 (슬롯 범위 포함)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/pic/list": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 인증 후 프로필 사진(` + "`" + `prf_info.sub_pic1` + "`" + `~` + "`" + `sub_pic5` + "`" + `) 목록을 조회합니다.\n\n**조회 대상**\n- 등록 라우트: ` + "`" + `GET /prf/pic/list` + "`" + ` → JWT 본인 UID\n- 핸들러상 path ` + "`" + `tid` + "`" + `가 있으면 해당 UID 조회 (라우트 미등록 시 본인만)\n\n**응답 data**: 비어 있지 않은 슬롯만 포함한 ` + "`" + `PrfPicMap` + "`" + `\n- 키: ` + "`" + `\"1\"` + "`" + `~` + "`" + `\"5\"` + "`" + ` (` + "`" + `sub_pic` + "`" + ` 컬럼 번호)\n- 값: ` + "`" + `PrfPicInfo` + "`" + ` (` + "`" + `url` + "`" + `, ` + "`" + `stat` + "`" + `)\n\n**PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제\n\n**Request example**\n- GET /story/v01/prf/pic/list\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"1\":{\"url\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public\",\"stat\":3},\"2\":{\"url\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public\",\"stat\":3}}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "프로필 사진 목록 조회",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data: PrfPicMap",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.PrfPicListResp"
-                        }
-                    },
-                    "400": {
-                        "description": "tid 형식 오류",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "프로필 사진 조회 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/pic/stat": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "승인 대기 목록(` + "`" + `GetPrfPicWaitingList` + "`" + `)의 특정 항목을 승인합니다.\n` + "`" + `prf_info.sub_pic{slot}` + "`" + ` JSON의 ` + "`" + `stat` + "`" + `을 **3(승인)** 으로 변경합니다.\n\n**요청 body** (` + "`" + `SetPrfPicStatReq` + "`" + `)\n- ` + "`" + `uid` + "`" + `: 대상 사용자 UID (필수, 0 불가)\n- ` + "`" + `slot` + "`" + `: sub_pic 슬롯 1~5\n\n**조건**: 해당 슬롯의 현재 ` + "`" + `stat` + "`" + `이 1 또는 2일 때만 갱신\n\n**응답 data** (` + "`" + `SetPrfPicStatData` + "`" + `)\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `affected` + "`" + `: 갱신 행 수 (0이면 대상 없음/이미 처리됨)\n\n**Request example**\n- POST /story/v01/prf/pic/stat\n- Header: Authorization: Bearer {access_token}\n- Body: {\"uid\":8697414060736839837,\"slot\":1}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"affected\":1}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "프로필 사진 승인 (관리자)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "승인 대상 uid + slot",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/protocol.SetPrfPicStatReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data.msg, data.affected",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.SetPrfPicStatResp"
-                        }
-                    },
-                    "400": {
-                        "description": "JSON/uid/slot 오류",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "DB 업데이트 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/pic/upload": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "JWT 인증 사용자의 프로필 사진을 Cloudflare Images에 업로드하고 ` + "`" + `prf_info.sub_pic1~5` + "`" + `에 저장합니다.\n\n**미들웨어**: ` + "`" + `ValidateFileUpload(5, 5)` + "`" + ` — ` + "`" + `files` + "`" + ` 최대 5개, 이미지 ≤5MB. 이미지 전용(` + "`" + `thbnl` + "`" + ` 첨부 시 400)\n\n**요청 (multipart/form-data)**\n- ` + "`" + `files` + "`" + `: 신규 이미지 (JPG/PNG/GIF/WEBP). 업로드 순서가 슬롯에 반영\n- ` + "`" + `urls` + "`" + `: 유지할 기존 사진 URL JSON 배열 문자열. 신규만이면 ` + "`" + `[]` + "`" + ` (생략 시 ` + "`" + `[]` + "`" + `)\n\n**처리 순서**\n1. ` + "`" + `urls` + "`" + ` 기존 URL을 앞에서부터 채움 (` + "`" + `stat=3` + "`" + ` 승인)\n2. ` + "`" + `files` + "`" + ` 신규 업로드 URL을 이어 붙임 (` + "`" + `stat=1` + "`" + ` 요청중)\n3. 합계 최대 5장 → ` + "`" + `sub_pic1` + "`" + `~` + "`" + `sub_picN` + "`" + `에 ` + "`" + `{\"url\",\"stat\"}` + "`" + ` JSON 저장 (idx 없음, 나머지 슬롯 NULL)\n\n**PrfPicInfo.stat**: 1=요청중, 2=승인대기, 3=승인, 4=거절/삭제\n\n**응답 data**\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `pics` + "`" + `: ` + "`" + `[]PrfPicInfo` + "`" + ` (url/stat만, 배열 순서=슬롯 1..N)\n\n**Request example**\n- POST /story/v01/prf/pic/upload\n- Header: Authorization: Bearer {access_token}\n- multipart: files=@a.jpg, files=@b.jpg, urls=[\"https://imagedelivery.net/.../public\"]\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"pics\":[{\"url\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public\",\"stat\":3},{\"url\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public\",\"stat\":1}]}}",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "프로필 사진 업로드",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer access token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "신규 프로필 이미지 (최대 5개, 이미지 전용)",
-                        "name": "files",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "유지할 기존 URL JSON 배열. 예: [] 또는 [\\",
-                        "name": "urls",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "data.msg, data.pics",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.PrfPicUploadResp"
-                        }
-                    },
-                    "400": {
-                        "description": "파일 없음, urls JSON 오류, 저장할 사진 없음, thbnl 첨부",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "JWT 인증 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Cloudflare/DB 저장 실패",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/story/v01/prf/pic/waiting/{page}/{limit}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "` + "`" + `prf_info.sub_pic1` + "`" + `~` + "`" + `sub_pic5` + "`" + ` JSON 중 ` + "`" + `stat` + "`" + `이 1(요청중) 또는 2(승인대기)인 항목을 전체 사용자 대상으로 페이징 조회합니다.\n\n**path**\n- ` + "`" + `page` + "`" + `: 페이지 번호 (1부터, ` + "`" + `getPageAndLimit` + "`" + `)\n- ` + "`" + `limit` + "`" + `: 페이지 크기 (1~100)\n\n**응답 data** (` + "`" + `PrfPicWaitingListData` + "`" + `)\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `total_count` + "`" + `: 대기 항목 전체 개수\n- ` + "`" + `list` + "`" + `: ` + "`" + `[]PrfPicWaitingItem` + "`" + ` (` + "`" + `uid` + "`" + `, ` + "`" + `nick` + "`" + `, ` + "`" + `slot` + "`" + `, ` + "`" + `url` + "`" + `, ` + "`" + `stat` + "`" + `) — ` + "`" + `slot` + "`" + `=sub_pic 컬럼 번호\n\n**PrfPicWaitingItem.stat**: 1=요청중, 2=승인대기\n\n**Request example**\n- GET /story/v01/prf/pic/waiting/1/20\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\",\"total_count\":2,\"list\":[{\"uid\":8697414060736839837,\"nick\":\"건강한 꼬마 오렌지\",\"slot\":1,\"url\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public\",\"stat\":1}]}}",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "프로필 사진 승인 대기 목록 (관리자)",
+                "summary": "작성자별 스토리 목록 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -4261,32 +4446,811 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "data.msg, total_count, list",
+                        "description": "data: total_count, story(StoryDetailResp 배열). 관계 필드 is_locked는 최종 잠금 여부(1=잠김, 0=열림), good_byme는 JWT 사용자의 좋아요 여부(1=좋아요, 0=아님)입니다. is_flwd/is_paid는 글 공개 상태와 별도로 계산합니다.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.PrfPicWaitingListResp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "story": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.StoryDetailResp"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "page/limit 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "limit": 10,
+                        "page": 1,
+                        "story": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/list/{page}/{limit}/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "작성자별 스토리 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100. tid가 있는 경로는 해당 작성자, 없는 경로는 JWT 본인을 조회합니다.\n\n**처리**: viewer는 항상 JWT UID입니다. 목록과 COUNT에 owner UID를 적용합니다. 삭제 글과 타인의 비공개·예약 글은 제외합니다. FLW 글은 팔로우 권한, PAY 글은 구매 권한이 없으면 본문·댓글을 숨기며 미디어 URL·썸네일은 유지하고 is_locked로 클라이언트에서 표시를 제어합니다. GET은 조회수를 변경하지 않습니다.\n\n목록의 댓글·댓글 수·팔로워 수는 캐시 적중 시에도 DB에서 최신 값으로 갱신합니다.\n**응답 data**: page, limit, total_count, story(StoryDetailResp 배열). 관계 필드 is_locked는 최종 잠금 여부(1=잠김, 0=열림), good_byme는 JWT 사용자의 좋아요 여부(1=좋아요, 0=아님)입니다. is_flwd/is_paid는 글 공개 상태와 별도로 계산합니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "작성자별 스토리 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: total_count, story(StoryDetailResp 배열). 관계 필드 is_locked는 최종 잠금 여부(1=잠김, 0=열림), good_byme는 JWT 사용자의 좋아요 여부(1=좋아요, 0=아님)입니다. is_flwd/is_paid는 글 공개 상태와 별도로 계산합니다.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "story": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.StoryDetailResp"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "limit": 10,
+                        "page": 1,
+                        "story": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/pcs/list/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "완료 구매 스토리 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: 구매자는 JWT UID입니다. psc_stat=1인 유효한 완료 구매만 조회하며 스토리 가시성을 적용합니다. 금액이나 구매 행 존재만으로 권한을 부여하지 않습니다.\n\n**응답 data**: page, limit, total_count, story(StoryDetailResp 배열).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "완료 구매 스토리 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: total_count, story(StoryDetailResp 배열).",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "story": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/protocol.StoryDetailResp"
+                                                    }
+                                                },
+                                                "total_count": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "limit": 10,
+                        "page": 1,
+                        "story": [],
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/assets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "본인 보유 자산 조회 API입니다.\n\n**요청**: JWT 인증, 별도 입력 없음.\n\n**처리**: JWT 사용자의 포인트·캐시와 미읽음 메시지 수를 조회합니다.\n\n**응답 data**: hold_point, hold_cash, msg_count.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "본인 보유 자산 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: hold_point, hold_cash, msg_count.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfAssetsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/info/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "프로필 정보 조회 API입니다.\n\n**요청**: path tid: 조회 대상 UID.\n\n**처리**: 대상 프로필과 활성 팔로워 수를 조회합니다.\n\n**응답 data**: prf_Info, flw_cnt.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 정보 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: prf_Info, flw_cnt.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfInfoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "프로필 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/delete/{idx}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "본인 프로필 사진 삭제 API입니다.\n\n**요청**: path idx: 삭제할 사진 슬롯.\n\n**처리**: JWT 사용자의 사진 슬롯을 삭제합니다.\n\n**응답**: 성공 헤더: result, resultString, desc. data는 없습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "본인 프로필 사진 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "대상 인덱스",
+                        "name": "idx",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "성공 헤더: result, resultString, desc. data는 없습니다.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "msg": "success",
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/pic/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "본인 프로필 사진 목록 조회 API입니다.\n\n**요청**: JWT 인증, 별도 입력 없음.\n\n**처리**: 등록된 라우트에는 tid가 없으므로 JWT 본인의 사진을 조회합니다.\n\n**응답 data**: PrfPicMap: 슬롯별 프로필 사진(url, stat).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "본인 프로필 사진 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: PrfPicMap: 슬롯별 프로필 사진(url, stat).",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/protocol.PrfPicMap"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/story/v01/prf/pic/stat": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "관리자 프로필 사진 승인 API입니다.\n\n**요청**: body SetPrfPicStatReq: uid는 양의 정수(uint64), slot은 1~5.\n\n**처리**: JWT UID가 서버 ProfileAdminUIDs 허용 목록에 있어야 합니다. 요청·대기 상태(1/2) 사진만 승인(3)합니다.\n\n**응답 data**: msg, res.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "관리자 프로필 사진 승인",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "body SetPrfPicStatReq: uid는 양의 정수(uint64), slot은 1~5.",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.SetPrfPicStatReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: msg, res.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                },
+                                                "res": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "slot": 1,
+                    "uid": 4033287471439576600
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok",
+                        "res": 1
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/pic/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "프로필 사진 업로드 API입니다.\n\n**요청**: multipart files: 신규 이미지, 최대 5개·각 5MiB. urls: 유지할 기존 URL의 JSON 배열 문자열(기본 []).\n\n**처리**: 신규 파일 업로드 후 기존 URL(stat=3)과 신규 URL(stat=1)을 합쳐 최대 5개 슬롯으로 저장합니다. 파일이 하나 이상 필요합니다.\n\n**응답 data**: msg, pics.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.\n업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.\n**업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 사진 업로드",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "[]",
+                        "description": "유지할 기존 URL의 JSON 배열 문자열",
+                        "name": "urls",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: msg, pics.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfPicUploadResp"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "413": {
+                        "description": "업로드 요청 크기 제한 초과",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "조회 실패",
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     }
+                }
+            }
+        },
+        "/story/v01/prf/pic/waiting/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "관리자 프로필 사진 승인 대기 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100.\n\n**처리**: JWT UID가 서버 ProfileAdminUIDs 허용 목록에 있어야 합니다. 비관리자는 403입니다.\n\n**응답 data**: msg, total_count, list.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "관리자 프로필 사진 승인 대기 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: msg, total_count, list.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfPicWaitingListResp"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "403": {
+                        "description": "권한 없음 또는 차단 관계",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "list": [],
+                        "msg": "ok",
+                        "total_count": 0
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4297,7 +5261,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 사용자의 ` + "`" + `prf_info.main_pic` + "`" + `을 설정하거나 삭제합니다.\n\n**url**(path)\n- 값이 있으면 해당 URL을 대표사진으로 저장 (` + "`" + `IFNULL` + "`" + ` → 빈 문자열 허용)\n- 비어 있으면 대표사진 삭제(` + "`" + `main_pic` + "`" + ` 빈 문자열)\n- URL에 ` + "`" + `/` + "`" + `가 포함되면 path-escape 필수 (예: ` + "`" + `url.PathEscape` + "`" + `)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\"}` + "`" + `\n\n**Request example (설정)**\n- POST /story/v01/prf/set/mainpic/https%3A%2F%2Fimagedelivery.net%2FbhnuJ7hC7hq1zO__1yxVLg%2F5bca857f-75b1-4548-af93-ffa9fdd05600%2Fpublic\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\"}}",
+                "description": "본인 대표 사진 설정 API입니다.\n\n**요청**: path url: URL 인코딩한 대표 사진 URL.\n\n**처리**: JWT 사용자의 대표 사진을 변경합니다. 현재 빈 URL을 받는 별도 경로는 등록되어 있지 않습니다.\n\n**응답 data**: msg.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4307,7 +5271,7 @@ const docTemplate = `{
                 "tags": [
                     "Profile"
                 ],
-                "summary": "프로필 대표사진 설정/삭제",
+                "summary": "본인 대표 사진 설정",
                 "parameters": [
                     {
                         "type": "string",
@@ -4318,7 +5282,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "대표사진 URL (PathEscape). 삭제 시 빈 값",
+                        "description": "URL 인코딩한 대표 사진 URL",
                         "name": "url",
                         "in": "path",
                         "required": true
@@ -4326,25 +5290,215 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "data.msg=ok",
+                        "description": "data.msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.PrfUpdResp"
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "DB 업데이트 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/story/list/{page}/{limit}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "프로필 스토리 요약 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100. owner는 tid, 생략 시 JWT UID이며 viewer는 항상 JWT UID입니다.\n\n**처리**: owner 조건·가시성 조건과 공통 열람 판정을 적용합니다. 잠긴 항목은 is_locked=1이며 cnt_url/cnt_thumb/cnt_type은 빈 문자열입니다. 승인된 미리보기 자산이 없어 원본 URL을 대체 반환하지 않습니다.\n\n**응답 data**: StoryListResp 배열. total_count 래퍼는 없습니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 스토리 요약 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: StoryListResp 배열. total_count 래퍼는 없습니다.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/protocol.StoryListResp"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": [],
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/story/list/{page}/{limit}/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "프로필 스토리 요약 목록 조회 API입니다.\n\n**요청**: path page ≥ 1, limit 1~100. owner는 tid, 생략 시 JWT UID이며 viewer는 항상 JWT UID입니다.\n\n**처리**: owner 조건·가시성 조건과 공통 열람 판정을 적용합니다. 잠긴 항목은 is_locked=1이며 cnt_url/cnt_thumb/cnt_type은 빈 문자열입니다. 승인된 미리보기 자산이 없어 원본 URL을 대체 반환하지 않습니다.\n\n**응답 data**: StoryListResp 배열. total_count 래퍼는 없습니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 스토리 요약 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 번호(1부터)",
+                        "name": "page",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기(1~100)",
+                        "name": "limit",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: StoryListResp 배열. total_count 래퍼는 없습니다.",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/protocol.StoryListResp"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": [],
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4355,7 +5509,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 대상 UID의 최신 스토리 최대 4개의 대표 미디어 URL을 조회합니다.\n\n**조회 대상**\n- 등록 라우트: ` + "`" + `GET /prf/story/lists/:tid` + "`" + ` → path ` + "`" + `tid` + "`" + ` UID\n- 핸들러상 ` + "`" + `tid` + "`" + `가 비어 있으면 JWT 본인 UID (라우트는 ` + "`" + `:tid` + "`" + ` 필수)\n\n**응답 data** (` + "`" + `PrfStoryListsData` + "`" + `)\n- ` + "`" + `str_imgs` + "`" + `: 이미지 스토리 대표 URL 맵 (key=story idx, value=URL)\n- ` + "`" + `str_thmbls` + "`" + `: 동영상 스토리 썸네일 URL 맵 (key=story idx, value=thumb URL)\n\n**Request example**\n- GET /story/v01/prf/story/lists/8697414060736839837\n- Header: Authorization: Bearer {access_token}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"str_imgs\":{\"4\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public\",\"5\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e7b2b58b-a7ec-49a1-5e6d-175e42609b00/public\"},\"str_thmbls\":{\"11\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public\"}}}",
+                "description": "프로필 스토리 대표 미디어 조회 API입니다.\n\n**요청**: path tid: 대상 UID.\n\n**처리**: JWT viewer와 대상 owner를 분리합니다. 최신순으로 텍스트 글과 잠긴 항목을 건너뛰며 열람 가능한 미디어가 있는 스토리 최대 4개를 채웁니다. 부족하면 이전 스토리까지 조회하며 스토리 idx를 키로 반환합니다.\n\n**응답 data**: str_imgs, str_thmbls.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4365,7 +5519,7 @@ const docTemplate = `{
                 "tags": [
                     "Profile"
                 ],
-                "summary": "프로필 최근 스토리 대표 이미지 목록",
+                "summary": "프로필 스토리 대표 미디어 조회",
                 "parameters": [
                     {
                         "type": "string",
@@ -4376,7 +5530,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "조회 대상 UID (본인 조회 시에도 UID 전달)",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
                         "name": "tid",
                         "in": "path",
                         "required": true
@@ -4384,32 +5538,107 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "data: str_imgs, str_thmbls",
+                        "description": "data: str_imgs, str_thmbls.",
                         "schema": {
                             "$ref": "#/definitions/protocol.PrfStoryListsResp"
                         }
                     },
                     "400": {
-                        "description": "tid 형식 오류",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "스토리 목록 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "str_imgs": {},
+                        "str_thmbls": {}
+                    },
+                    "result": 0,
+                    "resultString": "Success"
+                }
+            }
+        },
+        "/story/v01/prf/story/{tid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "프로필 스토리 대표 미디어 조회 API입니다.\n\n**요청**: path tid: 대상 UID.\n\n**처리**: JWT viewer와 대상 owner를 분리합니다. 최신순으로 텍스트 글과 잠긴 항목을 건너뛰며 열람 가능한 미디어가 있는 스토리 최대 4개를 채웁니다. 부족하면 이전 스토리까지 조회하며 스토리 idx를 키로 반환합니다.\n\n**응답 data**: str_imgs, str_thmbls.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "프로필 스토리 대표 미디어 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인",
+                        "name": "tid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data: str_imgs, str_thmbls.",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.PrfStoryListsResp"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-response-example": {
+                    "data": {
+                        "str_imgs": {},
+                        "str_thmbls": {}
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4420,7 +5649,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 사용자의 ` + "`" + `prf_info` + "`" + `를 부분 수정합니다. UID는 JWT에서 강제 설정합니다.\n\n**요청 body** (` + "`" + `protocol.PrfInfo` + "`" + `): 값이 있는 필드만 UPDATE (빈 문자열은 무시)\n- 반영 필드: ` + "`" + `nick` + "`" + `, ` + "`" + `gender` + "`" + `, ` + "`" + `age` + "`" + `, ` + "`" + `area` + "`" + `, ` + "`" + `intro` + "`" + `\n- 미사용: ` + "`" + `uid` + "`" + `(JWT 강제), ` + "`" + `birth` + "`" + `, ` + "`" + `main_pic` + "`" + ` (대표사진은 ` + "`" + `/prf/set/mainpic` + "`" + `)\n- ` + "`" + `area` + "`" + `: 지역명 문자열 → 서버에서 area code로 변환 (` + "`" + `GetAreaCode` + "`" + `)\n- 모든 반영 필드가 비어 있으면 DB UPDATE 없이 성공 응답\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\"}` + "`" + `\n\n**Request example**\n- POST /story/v01/prf/upd\n- Header: Authorization: Bearer {access_token}\n- Body: {\"nick\":\"prf_test_nick\",\"intro\":\"프로필 소개 — automated prf test\",\"area\":\"서울\"}\n\n**Response example**\n{\"result\":0,\"resultString\":\"Success\",\"data\":{\"msg\":\"ok\"}}",
+                "description": "본인 프로필 수정 API입니다.\n\n**요청**: body PrfInfo: 수정할 프로필 필드.\n\n**처리**: body uid를 JWT UID로 덮어쓰고 프로필 정보를 갱신합니다.\n\n**응답 data**: msg.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4430,7 +5659,7 @@ const docTemplate = `{
                 "tags": [
                     "Profile"
                 ],
-                "summary": "스토리 프로필 정보 수정",
+                "summary": "본인 프로필 수정",
                 "parameters": [
                     {
                         "type": "string",
@@ -4440,7 +5669,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "수정할 프로필 필드 (부분 업데이트)",
+                        "description": "body PrfInfo: 수정할 프로필 필드.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -4451,32 +5680,39 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "data.msg=ok",
+                        "description": "data.msg.",
                         "schema": {
-                            "$ref": "#/definitions/protocol.PrfUpdResp"
+                            "$ref": "#/definitions/protocol.RespDataHeader"
                         }
                     },
                     "400": {
-                        "description": "JSON 바인딩 실패",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "DB 업데이트 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "nick": "새 닉네임"
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4487,7 +5723,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "지정한 스토리(` + "`" + `idx` + "`" + `)의 본문(` + "`" + `body` + "`" + `)을 갱신합니다.\n\n**요청 body** (` + "`" + `UpdateStrBodyReq` + "`" + `)\n- ` + "`" + `idx` + "`" + `: 스토리 인덱스 (문자열 숫자)\n- ` + "`" + `body` + "`" + `: 수정할 본문 (빈 문자열 불가, DB 컬럼 최대 512자)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"affected\":N}` + "`" + `",
+                "description": "본인 스토리 본문 변경 API입니다.\n\n**요청**: body UpdateStrBodyReq: idx는 숫자 문자열, body는 비어 있지 않은 문자열.\n\n**처리**: JWT UID와 idx를 함께 조건으로 갱신하고 콘텐츠 revision을 갱신합니다. 다른 작성자 또는 없는 글은 404입니다. 본인 글의 동일 값 재요청은 res=0일 수 있습니다.\n\n**응답**: 최상위 msg, res.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4497,7 +5733,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 본문 수정",
+                "summary": "본인 스토리 본문 변경",
                 "parameters": [
                     {
                         "type": "string",
@@ -4507,7 +5743,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "idx, body",
+                        "description": "body UpdateStrBodyReq: idx는 숫자 문자열, body는 비어 있지 않은 문자열.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -4518,31 +5754,120 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/idx/body 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리가 없거나 본인 소유가 아님",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "본문 갱신 실패",
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                },
+                "x-request-example": {
+                    "body": "수정한 본문",
+                    "idx": "15"
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
+                }
+            }
+        },
+        "/story/v01/updprice": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JWT UID와 idx로 소유권을 확인해 stat과 price를 함께 변경합니다. idx/stat은 숫자 문자열, price는 0 이상의 정수입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Story"
+                ],
+                "summary": "본인 스토리 상태 및 가격 변경",
+                "parameters": [
+                    {
+                        "description": "스토리 ID, 상태, 가격",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/protocol.UpdateStoryPriceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리가 없거나 본인 소유가 아님",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
                 }
@@ -4555,7 +5880,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "지정한 스토리(` + "`" + `idx` + "`" + `)의 ` + "`" + `stat` + "`" + `을 갱신합니다.\n\n**요청 body** (` + "`" + `UpdateStrStatReq` + "`" + `)\n- ` + "`" + `idx` + "`" + `: 스토리 인덱스 (문자열 숫자)\n- ` + "`" + `stat` + "`" + `: 상태 코드 (문자열 숫자)\n0=public, 1=private(팔로우공개), 2=limit(유료공개), 3=rsv, 4=del\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"affected\":N}` + "`" + `",
+                "description": "본인 스토리 상태 변경 API입니다.\n\n**요청**: body UpdateStrStatReq: idx와 stat은 숫자 문자열. stat은 0=pub/1=flw/2=pay/3=prv/4=del/5=rsv입니다.\n\n**처리**: JWT UID를 행위자로 사용하고 idx AND uid 조건으로 갱신합니다. 콘텐츠 revision도 갱신합니다. 다른 작성자 또는 없는 글은 404입니다.\nres = 1 : 정상 업데이트, res = 0 : 정상이나, 변경된 내용은 없음,  본인 글의 동일 값 재요청은 res=0일 수 있습니다.\n\n**응답**: 최상위 msg, res. data 래퍼가 없습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4565,7 +5890,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 상태 변경",
+                "summary": "본인 스토리 상태 변경",
                 "parameters": [
                     {
                         "type": "string",
@@ -4575,7 +5900,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "idx, stat",
+                        "description": "body UpdateStrStatReq: idx와 stat은 숫자 문자열. stat은 0=pub/1=flw/2=pay/3=prv/4=del/5=rsv입니다.",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -4586,33 +5911,51 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, affected",
+                        "description": "최상위 msg, res. data 래퍼가 없습니다.",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "properties": {
+                                "msg": {
+                                    "type": "string"
+                                },
+                                "res": {
+                                    "type": "integer"
+                                }
+                            }
                         }
                     },
                     "400": {
-                        "description": "JSON/idx/stat 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "스토리가 없거나 본인 소유가 아님",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "상태 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "idx": "15",
+                    "stat": "2"
+                },
+                "x-response-example": {
+                    "msg": "ok",
+                    "res": 1
                 }
             }
         },
@@ -4623,7 +5966,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "JWT 인증 후 스토리용 미디어를 Cloudflare에 업로드하고, DB 저장 없이 통합 ` + "`" + `media` + "`" + ` 슬롯 맵만 반환합니다.\n\n**미들웨어**: ` + "`" + `ValidateFileUpload(5, 5)` + "`" + ` — ` + "`" + `files` + "`" + ` 최대 5개, 이미지·썸네일 ≤5MB, MP4 ≤100MB\n\n**요청 (multipart/form-data)**\n- ` + "`" + `files` + "`" + `: 이미지(JPG/PNG/GIF/WEBP) 또는 MP4, 업로드 순서가 슬롯 ` + "`" + `1..N` + "`" + `\n- ` + "`" + `thbnl` + "`" + `: 동영상 썸네일 이미지. MP4마다 1장 필수(개수·순서 1:1)\n\n**처리**\n- 동영상 포함: Stream/Images 혼합 업로드 + ` + "`" + `thbnl` + "`" + ` 업로드\n- 이미지만: Images 업로드\n- ` + "`" + `BuildStrImgForDB` + "`" + ` → ` + "`" + `LoadStoryStrImg` + "`" + `로 정규화된 media 응답 (최대 5슬롯)\n\n**응답 data**\n- ` + "`" + `msg` + "`" + `: ` + "`" + `\"ok\"` + "`" + `\n- ` + "`" + `media` + "`" + `: ` + "`" + `StoryStrImg` + "`" + ` 슬롯 맵\n` + "`" + `{\"1\":{\"type\":\"img\",\"url\":\"...\"},\"2\":{\"type\":\"vdo\",\"url\":\"...m3u8\",\"thumb\":\"...\"}}` + "`" + `\n- ` + "`" + `type` + "`" + `: ` + "`" + `img` + "`" + ` | ` + "`" + `vdo` + "`" + ` / ` + "`" + `url` + "`" + `: 본편 / ` + "`" + `thumb` + "`" + `: vdo만\n\n**다음 단계**: 응답 ` + "`" + `media` + "`" + `를 ` + "`" + `POST /story/v01/create` + "`" + ` body에 넣어 스토리 생성",
+                "description": "스토리 미디어 업로드 (Cloudflare) API입니다.\n\n**요청**: multipart files: 최대 5개, 이미지·thbnl 각 5MiB 이하, MP4 각 100MiB 이하. 동영상마다 thbnl 이미지가 필요합니다.\n\n**처리**: ValidateFileUpload(5,5) 검증 후 업로드하고 DB 저장 없이 슬롯 맵을 반환합니다. 현재 UpTotalCldFlr의 동영상 분기는 실제 Stream 업로드 대신 예시 URL을 반환합니다. **현재 제한**: 동영상 업로드 완료를 보장하지 않습니다. 반환 media를 create body로 전달합니다.\n\n**응답 data**: msg, media. 슬롯 키는 1..5, type은 img/vdo, url은 본편, 동영상 썸네일 JSON 키는 **thumb1**입니다(Go 필드 Thumb).\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.\n업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.\n**업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -4644,47 +5987,90 @@ const docTemplate = `{
                     },
                     {
                         "type": "file",
-                        "description": "미디어 (이미지 ≤5MB 또는 MP4 ≤100MB, 최대 5개)",
+                        "description": "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)",
                         "name": "files",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "file",
-                        "description": "동영상 썸네일 (이미지 ≤5MB). 동영상마다 1장 필수",
+                        "description": "동영상마다 필수인 썸네일 이미지, 순서 1:1",
                         "name": "thbnl",
                         "in": "formData"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, media(StoryStrImg)",
+                        "description": "data: msg, media. 슬롯 키는 1..5, type은 img/vdo, url은 본편, 동영상 썸네일 JSON 키는 **thumb1**입니다(Go 필드 Thumb).",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "media": {
+                                                    "$ref": "#/definitions/protocol.StoryStrImg"
+                                                },
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "파일 없음, thbnl 부족, media 검증 실패",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "413": {
+                        "description": "업로드 요청 크기 제한 초과",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Cloudflare 업로드 또는 media 구성 실패",
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "media": {
+                            "1": {
+                                "type": "img",
+                                "url": "https://imagedelivery.net/example/public"
+                            }
+                        },
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4695,7 +6081,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "지정한 스토리(` + "`" + `idx` + "`" + `)의 현재 조회수(` + "`" + `story.qt_view` + "`" + `)를 반환합니다.\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\",\"count\":\u003cqt_view\u003e}` + "`" + `",
+                "description": "스토리 조회수 조회 API입니다.\n\n**요청**: path idx: 스토리 인덱스.\n\n**처리**: 해당 스토리의 카운트를 조회합니다.\n\n**응답 data**: msg, count.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4716,7 +6102,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "조회할 스토리 인덱스",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -4724,33 +6110,57 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg, count",
+                        "description": "data: msg, count.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer"
+                                                },
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "idx 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "스토리 없음 또는 조회 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "count": 17,
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4761,7 +6171,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "지정한 스토리(` + "`" + `idx` + "`" + `)의 ` + "`" + `qt_view` + "`" + `를 +1 합니다.\n\n**처리**\n- 대상 행이 없으면 500 (` + "`" + `story not found` + "`" + `)\n- 응답에는 증가 후 조회수 값을 포함하지 않음 (` + "`" + `msg` + "`" + `만 반환)\n\n**응답 data**: ` + "`" + `{\"msg\":\"ok\"}` + "`" + `",
+                "description": "스토리 조회 이력 갱신 API입니다.\n\n**요청**: path idx: 양의 스토리 인덱스.\n\n**처리**: JWT 사용자별 24시간 중복 조회를 억제하여 조회 이력과 qt_view를 갱신합니다. 없는 글은 404입니다.\n\n**응답 data**: msg만 반환합니다. 조회수는 /view/count/{idx}에서 조회합니다.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4771,7 +6181,7 @@ const docTemplate = `{
                 "tags": [
                     "Story"
                 ],
-                "summary": "스토리 조회수 증가",
+                "summary": "스토리 조회 이력 갱신",
                 "parameters": [
                     {
                         "type": "string",
@@ -4782,7 +6192,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "조회수를 올릴 스토리 인덱스",
+                        "description": "대상 인덱스",
                         "name": "idx",
                         "in": "path",
                         "required": true
@@ -4790,33 +6200,59 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "msg",
+                        "description": "data.msg만 반환합니다. 조회수는 /view/count/{idx}에서 조회합니다.",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "msg": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "idx 잘못된 값",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "JWT 인증 실패",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "404": {
+                        "description": "대상 없음 또는 조회 가능한 대상 없음",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "스토리 없음 또는 조회수 갱신 실패",
+                        "description": "내부 처리 실패",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": {
+                        "msg": "ok"
+                    },
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4827,7 +6263,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves notification settings for authenticated users via JWT token.\nNotification settings are managed using bit flags:",
+                "description": "본인 알림 설정 조회 API입니다.\n\n**요청**: path uid는 호환용이며 무시합니다.\n\n**처리**: JWT 본인의 알림 비트 값을 조회합니다.\n\n**응답 data**: 정수 알림 설정 값.\n응답은 ` + "`" + `{\"result\":0,\"resultString\":\"Success\",\"data\":...}` + "`" + ` 형식입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4837,18 +6273,18 @@ const docTemplate = `{
                 "tags": [
                     "Setting"
                 ],
-                "summary": "Get user notification settings",
+                "summary": "본인 알림 설정 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer {token}",
+                        "description": "Bearer access token",
                         "name": "Authorization",
                         "in": "header",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "User ID",
+                        "description": "호환용 값. 실제 대상은 JWT 본인",
                         "name": "uid",
                         "in": "path",
                         "required": true
@@ -4856,11 +6292,11 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Notification setting value (0-15)",
+                        "description": "data: 정수 알림 설정 값.",
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/protocol.RespHeader"
+                                    "$ref": "#/definitions/protocol.RespDataHeader"
                                 },
                                 {
                                     "type": "object",
@@ -4874,17 +6310,22 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Authentication failed - No JWT token",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-response-example": {
+                    "data": 0,
+                    "result": 0,
+                    "resultString": "Success"
                 }
             }
         },
@@ -4895,7 +6336,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates user settings based on category. Currently supports notification alert settings.\nAlert settings use bit flags (0-15) with XOR operation to toggle:\n- noti=1 (notification), call=2 (call), msg=4 (message), rvr=8 (reserve)\n- 0 = all alerts enabled\n- 15 = all alerts disabled\n- Example: To toggle notification, send value \"1\"",
+                "description": "본인 알림 설정 토글 API입니다.\n\n**요청**: 실제 입력은 JSON body cate, value(필수 문자열). path cate/value는 무시합니다.\n\n**처리**: cate는 alert만 허용합니다. value를 정수로 변환하여 기존 알림 값과 XOR하고 저장합니다.\n\n**응답**: 최상위 msg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4905,62 +6346,86 @@ const docTemplate = `{
                 "tags": [
                     "Setting"
                 ],
-                "summary": "Update user settings",
+                "summary": "본인 알림 설정 토글",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Bearer {token}",
+                        "description": "Bearer access token",
                         "name": "Authorization",
                         "in": "header",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Setting category (e.g. alert)",
+                        "description": "호환용 값. 실제 입력은 body cate",
                         "name": "cate",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Setting value",
+                        "description": "호환용 값. 실제 입력은 body value",
                         "name": "value",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "필수 문자열 필드: cate, value",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "cate": {
+                                    "type": "string"
+                                },
+                                "value": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Setting updated successfully",
+                        "description": "최상위 msg.",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "Invalid request - Missing or invalid parameters",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Authentication failed - No JWT token",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "내부 처리 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     }
+                },
+                "x-request-example": {
+                    "cate": "alert",
+                    "value": "1"
+                },
+                "x-response-example": {
+                    "msg": "ok"
                 }
             }
         },
         "/webrtc/v01/config": {
             "get": {
-                "description": "Get WebRTC configuration for the authenticated user",
+                "description": "WebRTC 설정 조회 (현재 라우트 제한) API입니다.\n\n**요청**: 별도 입력 없음. /serv/v01/wsconf와 /webrtc/v01/config는 같은 핸들러입니다.\n\n**처리**: 현재 두 라우트 모두 JWT 미들웨어가 없어 user 컨텍스트가 설정되지 않으며 401을 반환합니다. 핸들러의 SendResponse도 객체를 허용하지 않아 설정 객체 정상 응답은 구현과 일치하지 않습니다.\n\n**응답**: 현재 정상 설정 응답 없음. 오류 헤더(result, resultString, desc).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4970,24 +6435,59 @@ const docTemplate = `{
                 "tags": [
                     "WebRTC"
                 ],
-                "summary": "Get WebRTC configuration",
+                "summary": "WebRTC 설정 조회 (현재 라우트 제한)",
                 "responses": {
-                    "200": {
-                        "description": "WebRTC configuration",
-                        "schema": {
-                            "$ref": "#/definitions/protocol.WebRTCConfig"
-                        }
-                    },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "요청 형식·값 검증 실패",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 실패 또는 사용자 컨텍스트 없음",
                         "schema": {
                             "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    },
+                    "500": {
+                        "description": "내부 처리 실패",
+                        "schema": {
+                            "$ref": "#/definitions/protocol.RespHeader"
+                        }
+                    }
+                }
+            }
+        },
+        "/webrtc/v01/ws": {
+            "get": {
+                "description": "WebRTC 시그널링 WebSocket 연결 API입니다.\n\n**요청**: HTTP Upgrade 후 10초 이내 join-waiting 또는 join 메시지를 전송합니다.\n\n**처리**: 현재 라우트에 JWT 인증은 없습니다. user_id는 첫 메시지에서 읽습니다. 프로세스 연결 상한 초과 시 503입니다. 수신 프레임 최대 512KiB, 송신 큐 최대 256개/2MiB입니다.\n\n**응답**: 101 Switching Protocols 이후 WebSocket 메시지로 통신합니다. 첫 메시지 오류는 연결 종료로 처리합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WebRTC"
+                ],
+                "summary": "WebRTC 시그널링 WebSocket 연결",
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols (WebSocket)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "요청 형식·값 검증 실패",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "503": {
+                        "description": "서버 동시 처리·연결 한도 초과",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -4995,64 +6495,11 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "controller.HomeData": {
+        "protocol.AesDataForm": {
             "type": "object",
             "properties": {
-                "checkIn": {
-                    "type": "boolean"
-                },
-                "msgQuantity": {
-                    "type": "integer"
-                },
-                "notiNew": {
-                    "type": "integer"
-                },
-                "policyLink": {
+                "data": {
                     "type": "string"
-                },
-                "storyList": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/protocol.Pre7Story"
-                    }
-                },
-                "termsLink": {
-                    "type": "string"
-                },
-                "videoChatList": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/protocol.WTRoomUser"
-                    }
-                },
-                "voiceChatList": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/protocol.WTRoomUser"
-                    }
-                }
-            }
-        },
-        "protocol.Announcement": {
-            "type": "object",
-            "properties": {
-                "an_body": {
-                    "type": "string"
-                },
-                "an_title": {
-                    "type": "string"
-                },
-                "an_url": {
-                    "type": "string"
-                },
-                "at_msg": {
-                    "type": "string"
-                },
-                "idx": {
-                    "type": "integer"
-                },
-                "stat": {
-                    "type": "integer"
                 }
             }
         },
@@ -5087,108 +6534,28 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "price": {
+                    "description": "스토리 가격",
+                    "type": "integer",
+                    "example": 10
+                },
                 "sbody": {
                     "description": "최대 512자",
                     "type": "string",
                     "example": "스토리 본문"
                 },
                 "stat": {
-                    "description": "0=del, 1=pub, 2=private, 3=limit, 4=resv",
+                    "description": "0=pub, 1=flw, 2=pay, 3=prv, 4=del, 5=rsv; 6=all(query only)",
                     "type": "integer",
-                    "example": 1
-                }
-            }
-        },
-        "protocol.CutoutActionData": {
-            "type": "object",
-            "properties": {
-                "affected": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
-        "protocol.CutoutActionResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.CutoutActionData"
-                },
-                "result": {
-                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
                     "example": 0
-                },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
-                }
-            }
-        },
-        "protocol.CutoutCountData": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer",
-                    "example": 3
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
-        "protocol.CutoutCountResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.CutoutCountData"
-                },
-                "result": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
-                }
-            }
-        },
-        "protocol.CutoutListData": {
-            "type": "object",
-            "properties": {
-                "list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/protocol.CutoutUserItem"
-                    }
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "success"
-                },
-                "total_count": {
-                    "type": "integer",
-                    "example": 1
-                }
-            }
-        },
-        "protocol.CutoutListResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.CutoutListData"
-                },
-                "result": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
                 }
             }
         },
@@ -5245,35 +6612,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.DMRoomResp": {
-            "type": "object",
-            "properties": {
-                "at_crtchat": {
-                    "type": "string"
-                },
-                "at_update": {
-                    "type": "string"
-                },
-                "last_msg": {
-                    "type": "string"
-                },
-                "partner": {
-                    "$ref": "#/definitions/protocol.PartnerInfo"
-                },
-                "partner_left": {
-                    "type": "boolean"
-                },
-                "rid": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "unread": {
-                    "type": "integer"
-                }
-            }
-        },
         "protocol.DeleteStrPicReq": {
             "type": "object",
             "properties": {
@@ -5282,6 +6620,23 @@ const docTemplate = `{
                 },
                 "pic_idx": {
                     "type": "string"
+                }
+            }
+        },
+        "protocol.FollowUserItem": {
+            "type": "object",
+            "properties": {
+                "at_update": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "thumb_pic": {
+                    "type": "string"
+                },
+                "uid": {
+                    "type": "integer"
                 }
             }
         },
@@ -5297,23 +6652,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "protocol.LoginReq": {
-            "type": "object",
-            "properties": {
-                "did": {
-                    "type": "string"
-                },
-                "dos": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "pw": {
-                    "type": "string"
                 }
             }
         },
@@ -5348,89 +6686,6 @@ const docTemplate = `{
                 },
                 "video": {
                     "$ref": "#/definitions/protocol.VideoConfig"
-                }
-            }
-        },
-        "protocol.Noti": {
-            "type": "object",
-            "properties": {
-                "at_noti": {
-                    "type": "string"
-                },
-                "frm_nick": {
-                    "type": "string"
-                },
-                "frm_uid": {
-                    "type": "integer"
-                },
-                "frm_url": {
-                    "type": "string"
-                },
-                "idx": {
-                    "type": "integer"
-                },
-                "nt_msg": {
-                    "type": "string"
-                },
-                "nt_title": {
-                    "type": "string"
-                },
-                "nt_type": {
-                    "type": "integer"
-                },
-                "stat": {
-                    "type": "integer"
-                }
-            }
-        },
-        "protocol.OkResp": {
-            "type": "object",
-            "properties": {
-                "desc": {
-                    "type": "string"
-                },
-                "result": {
-                    "$ref": "#/definitions/protocol.ResultCode"
-                },
-                "resultString": {
-                    "type": "string"
-                }
-            }
-        },
-        "protocol.PartnerInfo": {
-            "type": "object",
-            "properties": {
-                "age": {
-                    "type": "string"
-                },
-                "area": {
-                    "type": "string"
-                },
-                "gender": {
-                    "type": "string"
-                },
-                "nick": {
-                    "type": "string"
-                },
-                "pid": {
-                    "type": "integer"
-                },
-                "thumb_pic": {
-                    "type": "string"
-                }
-            }
-        },
-        "protocol.Pre7Story": {
-            "type": "object",
-            "properties": {
-                "idx": {
-                    "type": "integer"
-                },
-                "nick": {
-                    "type": "string"
-                },
-                "pic1": {
-                    "type": "string"
                 }
             }
         },
@@ -5546,22 +6801,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.PrfPicListResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.PrfPicMap"
-                },
-                "result": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
-                }
-            }
-        },
         "protocol.PrfPicMap": {
             "type": "object",
             "additionalProperties": {
@@ -5573,7 +6812,7 @@ const docTemplate = `{
             "properties": {
                 "msg": {
                     "type": "string",
-                    "example": "success"
+                    "example": "ok"
                 },
                 "pics": {
                     "type": "array",
@@ -5637,7 +6876,7 @@ const docTemplate = `{
                 },
                 "msg": {
                     "type": "string",
-                    "example": "success"
+                    "example": "ok"
                 },
                 "total_count": {
                     "type": "integer",
@@ -5700,31 +6939,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.PrfUpdData": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
-        "protocol.PrfUpdResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.PrfUpdData"
-                },
-                "result": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
-                }
-            }
-        },
         "protocol.RefreshTokenReq": {
             "type": "object",
             "properties": {
@@ -5750,58 +6964,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.RegistReq": {
-            "type": "object",
-            "properties": {
-                "age": {
-                    "type": "string"
-                },
-                "area": {
-                    "type": "string"
-                },
-                "birth": {
-                    "type": "string"
-                },
-                "did": {
-                    "type": "string"
-                },
-                "dos": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "gender": {
-                    "type": "string"
-                },
-                "id": {
-                    "description": "key, sid",
-                    "type": "string"
-                },
-                "main_pic": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "nick": {
-                    "type": "string"
-                },
-                "pw": {
-                    "type": "string"
-                },
-                "spIntro": {
-                    "description": "본인 인삿말",
-                    "type": "string"
-                },
-                "thmb_pic": {
-                    "type": "string"
-                },
-                "uid": {
-                    "type": "integer"
-                }
-            }
-        },
         "protocol.RespDataHeader": {
             "type": "object",
             "properties": {
@@ -5817,7 +6979,7 @@ const docTemplate = `{
         "protocol.RespHeader": {
             "type": "object",
             "properties": {
-                "desc": {
+                "msg": {
                     "type": "string"
                 },
                 "result": {
@@ -5837,20 +6999,6 @@ const docTemplate = `{
                 "Success"
             ]
         },
-        "protocol.SetPrfPicStatData": {
-            "type": "object",
-            "properties": {
-                "affected": {
-                    "description": "0이면 대상 없음/이미 처리됨",
-                    "type": "integer",
-                    "example": 1
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
         "protocol.SetPrfPicStatReq": {
             "type": "object",
             "properties": {
@@ -5865,19 +7013,114 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.SetPrfPicStatResp": {
+        "protocol.StoryDetailResp": {
             "type": "object",
             "properties": {
-                "data": {
-                    "$ref": "#/definitions/protocol.SetPrfPicStatData"
+                "age": {
+                    "type": "string"
                 },
-                "result": {
+                "area": {
+                    "type": "string"
+                },
+                "at_create": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "cmt_count": {
+                    "type": "integer"
+                },
+                "cmt_list": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/protocol.StrComment"
+                    }
+                },
+                "ctnt_total": {
+                    "type": "integer"
+                },
+                "flw_cnt": {
+                    "description": "Active follower count for this author.",
+                    "type": "integer"
+                },
+                "gender": {
+                    "type": "integer"
+                },
+                "good_byme": {
                     "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
                     "example": 0
                 },
-                "resultString": {
-                    "type": "string",
-                    "example": "Success"
+                "idx": {
+                    "type": "integer"
+                },
+                "is_flwd": {
+                    "description": "Viewer actively follows this author, independent of stat.",
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                },
+                "is_locked": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                },
+                "is_paid": {
+                    "description": "Viewer has a completed, non-revoked purchase of this story, independent of stat.",
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                },
+                "main_pic": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "qt_like": {
+                    "type": "integer"
+                },
+                "qt_view": {
+                    "type": "integer"
+                },
+                "stat": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "example": 0
+                },
+                "str_img": {
+                    "description": "story.str_img 슬롯 맵 (img|vdo)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/protocol.StoryStrImg"
+                        }
+                    ]
+                },
+                "uid": {
+                    "type": "integer"
                 }
             }
         },
@@ -5889,6 +7132,75 @@ const docTemplate = `{
                 },
                 "uid": {
                     "type": "string"
+                }
+            }
+        },
+        "protocol.StoryListResp": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "area": {
+                    "type": "string"
+                },
+                "at_create": {
+                    "type": "string"
+                },
+                "cnt_count": {
+                    "type": "integer"
+                },
+                "cnt_thumb": {
+                    "type": "string"
+                },
+                "cnt_type": {
+                    "type": "string"
+                },
+                "cnt_url": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "integer"
+                },
+                "good_byme": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                },
+                "idx": {
+                    "type": "integer"
+                },
+                "is_locked": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                },
+                "main_pic": {
+                    "type": "string"
+                },
+                "nick": {
+                    "type": "string"
+                },
+                "stat": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "example": 0
+                },
+                "uid": {
+                    "type": "integer"
                 }
             }
         },
@@ -5926,11 +7238,12 @@ const docTemplate = `{
                     "example": "111111 test comment body"
                 },
                 "nick": {
+                    "description": "Compatibility only; server account nickname is used.",
                     "type": "string",
                     "example": "test"
                 },
                 "stat": {
-                    "description": "0=default, 1=private, 2=reserved, 3=reserved, 4=deleted",
+                    "description": "0,1=visible; 2,3=reserved; 4=deleted",
                     "type": "string",
                     "example": "1"
                 },
@@ -5939,21 +7252,9 @@ const docTemplate = `{
                     "example": "3"
                 },
                 "wuid": {
+                    "description": "Compatibility only; ignored, actor comes from JWT.",
                     "type": "string",
                     "example": "77645423236541"
-                }
-            }
-        },
-        "protocol.StrCmtCreateResp": {
-            "type": "object",
-            "properties": {
-                "lastID": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "Successfully created str comment"
                 }
             }
         },
@@ -5966,7 +7267,15 @@ const docTemplate = `{
                         "$ref": "#/definitions/protocol.StrComment"
                     }
                 },
-                "total_count": {
+                "limit": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total_cnt": {
                     "type": "integer",
                     "example": 52
                 }
@@ -6001,19 +7310,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.StrCmtUpdBodyResp": {
-            "type": "object",
-            "properties": {
-                "affected": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "Successfully updated str body comment"
-                }
-            }
-        },
         "protocol.StrCmtUpdStatReq": {
             "type": "object",
             "properties": {
@@ -6022,22 +7318,9 @@ const docTemplate = `{
                     "example": "3"
                 },
                 "stat": {
-                    "description": "0=default, 1=private, 2=reserved, 3=reserved, 4=deleted",
+                    "description": "Comment status: 0/1 visible, 2/3 hidden, 4 deleted.",
                     "type": "string",
                     "example": "2"
-                }
-            }
-        },
-        "protocol.StrCmtUpdStatResp": {
-            "type": "object",
-            "properties": {
-                "affected": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "msg": {
-                    "type": "string",
-                    "example": "Successfully updated str stat comment"
                 }
             }
         },
@@ -6095,6 +7378,38 @@ const docTemplate = `{
                 }
             }
         },
+        "protocol.UpdateStoryPriceReq": {
+            "type": "object",
+            "required": [
+                "idx",
+                "price",
+                "stat"
+            ],
+            "properties": {
+                "idx": {
+                    "type": "string",
+                    "example": "15"
+                },
+                "price": {
+                    "type": "integer",
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "example": 100
+                },
+                "stat": {
+                    "type": "string",
+                    "enum": [
+                        "0",
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                        "5"
+                    ],
+                    "example": "2"
+                }
+            }
+        },
         "protocol.UpdateStrBodyReq": {
             "type": "object",
             "properties": {
@@ -6113,7 +7428,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stat": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "0",
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                        "5"
+                    ],
+                    "example": "0"
                 }
             }
         },
@@ -6184,44 +7508,6 @@ const docTemplate = `{
                 }
             }
         },
-        "protocol.WTRoomUser": {
-            "type": "object",
-            "properties": {
-                "age": {
-                    "type": "string"
-                },
-                "area": {
-                    "type": "string"
-                },
-                "did": {
-                    "type": "string"
-                },
-                "gender": {
-                    "type": "string"
-                },
-                "intro": {
-                    "type": "string"
-                },
-                "mainPic": {
-                    "type": "string"
-                },
-                "newStat": {
-                    "type": "boolean"
-                },
-                "nick": {
-                    "type": "string"
-                },
-                "sid": {
-                    "type": "string"
-                },
-                "thumbPic": {
-                    "type": "string"
-                },
-                "uid": {
-                    "type": "integer"
-                }
-            }
-        },
         "protocol.WebRTCConfig": {
             "type": "object",
             "properties": {
@@ -6245,17 +7531,25 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Bearer access_token 형식으로 입력합니다.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "0.9.1",
 	Host:             "",
 	BasePath:         "",
 	Schemes:          []string{},
 	Title:            "ms-gateway API",
-	Description:      "ms-gateway API server",
+	Description:      "ms-gateway API server. 각 API의 요청 형식, 응답 래퍼 및 현재 구현 제한은 개별 문서를 참고하세요.\n공통 오류 응답은 {\"result\":1,\"resultString\":\"Failed\",\"msg\":\"오류 내용\"}입니다. 성공 응답의 data 래퍼 유무는 각 엔드포인트 스키마를 따릅니다.\n스토리 상태: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV. 조건 조회는 0/pub, 1/flw, 2/pay, 3/prv, 6/all만 허용하며 6은 저장하지 않습니다.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

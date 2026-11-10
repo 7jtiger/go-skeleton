@@ -95,8 +95,8 @@ type UserWebRTCSession struct {
 	NetworkInfo     string    `json:"networkInfo"`
 }
 
-// NewRedisDB : RedisDB 객체 할당 및 반환
-func NewRedisDB(cf *conf.Config, root *Repositories) (IRepository, error) {
+// NewRedisOptions shares application connection settings with project DB checks.
+func NewRedisOptions(cf *conf.Config) *redis.Options {
 	redisOption := redis.Options{
 		Addr:         cf.DB["rdb"]["host"].(string),
 		DB:           0,
@@ -109,25 +109,22 @@ func NewRedisDB(cf *conf.Config, root *Repositories) (IRepository, error) {
 	}
 
 	if strings.EqualFold(cf.Server.Mode, "prod") {
-		redisOption = redis.Options{
-			Addr:     cf.DB["rdb"]["host"].(string),
-			Username: cf.DB["rdb"]["user"].(string),
-			Password: cf.DB["rdb"]["pass"].(string), // no password set
-			// DB:        0,                             // use default DB
-			TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		redisOption.Username, _ = cf.DB["rdb"]["user"].(string)
+		redisOption.Password, _ = cf.DB["rdb"]["pass"].(string)
+		redisOption.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	} else {
-		redisOption = redis.Options{
-			Addr:     cf.DB["rdb"]["host"].(string),
-			Password: "qwer", // no password set
-			// DB:   0, // use default DB
-		}
-		redisOption.TLSConfig = nil
+		redisOption.Password, _ = cf.DB["rdb"]["pass"].(string)
 	}
+	return &redisOption
+}
 
-	client := redis.NewClient(&redisOption)
+func NewRedisDB(cf *conf.Config, root *Repositories) (IRepository, error) {
+	redisOption := NewRedisOptions(cf)
+
+	client := redis.NewClient(redisOption)
 
 	if _, err := client.Ping(context.Background()).Result(); err != nil {
+		_ = client.Close()
 		return nil, err
 	}
 
@@ -1507,6 +1504,50 @@ func (r *RedisDB) ExpiredMsg(ttl time.Duration) (*ChatPruneResult, error) {
 // Expired24hMsg는 ExpiredMsg의 별칭 (하위 호환)
 func (r *RedisDB) Expired24hMsg(ttl time.Duration) (*ChatPruneResult, error) {
 	return r.ExpiredMsg(ttl)
+}
+
+// v10 restores PUB=0, FLW=1, PAY=2, PRV=3; auxiliary fields are refreshed per request.
+func storyRawCacheKey(idx int) string { return fmt.Sprintf("story:raw:v10:%d", idx) }
+
+func (r *RedisDB) SetStory1000(entries []StoryCacheEntry, _ int) error {
+	pipe := r.client.Pipeline()
+	for _, entry := range entries {
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			return err
+		}
+		pipe.Set(r.ctx, storyRawCacheKey(entry.Story.Idx), raw, 3*time.Minute)
+	}
+	_, err := pipe.Exec(r.ctx)
+	return err
+}
+
+// Each decode returns fresh request-local objects, safe to redact independently.
+func (r *RedisDB) GetStoryEntries(ids []int) (map[int]StoryCacheEntry, error) {
+	entries := make(map[int]StoryCacheEntry, len(ids))
+	if len(ids) == 0 {
+		return entries, nil
+	}
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = storyRawCacheKey(id)
+	}
+	values, err := r.client.MGet(r.ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	for i, value := range values {
+		raw, ok := value.(string)
+		if !ok {
+			continue
+		}
+		var entry StoryCacheEntry
+		if json.Unmarshal([]byte(raw), &entry) != nil || entry.Story.Idx != ids[i] {
+			continue
+		}
+		entries[ids[i]] = entry
+	}
+	return entries, nil
 }
 
 /* ActivateChatRoom 채팅방 활성화

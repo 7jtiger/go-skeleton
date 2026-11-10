@@ -70,7 +70,7 @@ func NewCTL(cf *conf.Config, hch *haredis.HAChecker, rep *models.Repositories) (
 		return nil, err
 	}
 
-	if r.StoryCtl, err = NewStoryController(r, rep); err != nil {
+	if r.StoryCtl, err = NewStoryController(r, r.hchecker, rep); err != nil {
 		return nil, err
 	}
 

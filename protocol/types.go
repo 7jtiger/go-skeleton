@@ -13,7 +13,7 @@ import (
 type RespHeader struct {
 	Result       ResultCode `json:"result"`
 	ResultString string     `json:"resultString"`
-	Desc         string     `json:"desc"`
+	Msg          string     `json:"msg"`
 }
 
 type OkResp struct {
@@ -21,11 +21,11 @@ type OkResp struct {
 }
 
 // RespHeader : RespHeader 객체 생성 및 반환
-func NewRespHeader(resultCode ResultCode, desc ...string) *RespHeader {
+func NewRespHeader(resultCode ResultCode, msg ...string) *RespHeader {
 	return &RespHeader{
 		Result:       resultCode,
 		ResultString: resultCode.toString(),
-		Desc:         strings.Join(desc, ","),
+		Msg:          strings.Join(msg, ","),
 	}
 }
 
@@ -146,8 +146,8 @@ type CutoutUserItem struct {
 
 // CutoutActionData is set/cancel cutout response payload (data field).
 type CutoutActionData struct {
-	Msg      string `json:"msg" example:"success"`
-	Affected int64  `json:"affected" example:"1"`
+	Msg string `json:"msg" example:"ok"`
+	Res int64  `json:"res" example:"1"`
 }
 
 // CutoutActionResp is full API envelope for cutout set/cancel Swagger (@Success).
@@ -159,7 +159,7 @@ type CutoutActionResp struct {
 
 // CutoutCountData is GetCutoutCount response payload (data field).
 type CutoutCountData struct {
-	Msg   string `json:"msg" example:"success"`
+	Msg   string `json:"msg" example:"ok"`
 	Count int64  `json:"count" example:"3"`
 }
 
@@ -172,7 +172,7 @@ type CutoutCountResp struct {
 
 // CutoutListData is GetCutoutList response payload (data field).
 type CutoutListData struct {
-	Msg        string           `json:"msg" example:"success"`
+	Msg        string           `json:"msg" example:"ok"`
 	TotalCount int              `json:"total_count" example:"1"`
 	List       []CutoutUserItem `json:"list"`
 }

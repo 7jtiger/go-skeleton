@@ -2,6 +2,7 @@ package router
 
 import (
 	log "ms-gateway/common/logger"
+	"ms-gateway/common/version"
 	"ms-gateway/conf"
 	"ms-gateway/models"
 
@@ -109,17 +110,19 @@ func (p *Router) Idx() *gin.Engine {
 	// 커스텀 GinLogger/GinRecovery가 이중 실행되지 않도록 함
 	e := gin.New()
 
-	// MultipartForm: 동영상 최대 100MB 업로드를 위해 여유 있게 설정 (초과분은 임시 디스크)
-	e.MaxMultipartMemory = 128 << 20 // 128MB
+	// Multipart parsing spills excess file data to disk; total size and concurrency are limited separately.
+	e.MaxMultipartMemory = 8 << 20 // Bound per-request file memory; excess spills to disk.
 
 	e.Use(log.GinLogger())
 	e.Use(log.GinRecovery(true))
 	e.Use(CORS())
+	e.Use(uploadResourceLimits(p.cfg.Server.UploadMaxBytes, p.cfg.Server.UploadConcurrency))
 
 	log.Info("start server : ", p.cfg.Server.Port)
 
 	e.GET("/swagger/:any", ginSwg.WrapHandler(swgFiles.Handler))
 	docs.SwaggerInfo.Host = "localhost"
+	docs.SwaggerInfo.Version = version.Version
 
 	e.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
@@ -264,6 +267,7 @@ func (p *Router) Idx() *gin.Engine {
 		story.GET("/prf/pic/list", p.st.GetPrfPicLists)
 		// TODO : 확인
 		story.GET("/prf/story/:tid", p.st.GetPrfStoryLists)
+		story.GET("/prf/story/lists/:tid", p.st.GetPrfStoryLists)
 		story.GET("/prf/story/list/:page/:limit", p.st.GetPrfStoryList)
 		story.GET("/prf/story/list/:page/:limit/:tid", p.st.GetPrfStoryList)
 
@@ -282,10 +286,13 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/create", p.st.CreateStory)
 
 		// ------------- story list -------------
-		story.GET("/condition/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
+		story.GET("/cndt/list/:area/:stat/:type/:order/:gen/:page/:limit", p.st.GetStoryConditionList)
 
+		story.GET("/flwlist/:page/:limit", p.st.GetFollowingStory)
 		story.GET("/list/:page/:limit", p.st.GetStoryList)
 		story.GET("/list/:page/:limit/:tid", p.st.GetStoryList)
+
+		story.GET("/detail/:idx", p.st.GetStoryDetail)
 		// story.GET("/detail/:idx/:page/:limit/:tid", p.st.GetStoryDetail)
 		// story.GET("/detail/:idx/:page/:limit", p.st.GetStoryDetail)
 
@@ -294,6 +301,7 @@ func (p *Router) Idx() *gin.Engine {
 		story.POST("/buy/:idx", p.st.BuyStory)
 
 		// ------------- story -------------
+		story.POST("/updprice", p.st.UpdStoryPriceInfo)
 		story.POST("/updstat", p.st.UpdateStoryStat)
 		story.POST("/updbody", p.st.UpdateStrBody)
 		story.POST("/delpic", p.st.DeleteStrPic)

@@ -168,8 +168,7 @@ Retrieves condition-based story map (`idx -> first image url`) with dynamic filt
 **Notes:**
 - `stories` map is initialized before scan loop
 - `orderQuery` should be built from whitelist mapping (e.g. `protocol.GetOrderQuery`) to avoid invalid SQL
-- `str_img`는 `ParseStoryMedia`/`GetFirstPicUrl`로 파싱. 최소 슬롯의 img→url, vdo→thumb 반환.
-  파싱 실패 시 raw DB 값 fallback.
+- `str_img`는 `fillStoryDetail`로 미디어·댓글·구매·팔로우를 채운 `StoryDetailResp`를 반환. 조회자 UID가 첫 인자.
 
 #### str_img 포맷
 - 슬롯 키 `"1"`, `"2"`, ... (업로드 순서, 1-based)
@@ -184,11 +183,17 @@ func (p *StoryDB) BuyStory(pcsUid uint64, strIdx int) error
 
 #### GetPurchaseList
 ```go
-func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, int, error)
+func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryDetailResp, int, error)
 ```
-`str_pcs.pcs_uid = uid`인 구매 스토리를 `story`와 INNER JOIN 후 `story.at_create DESC`로 페이징.
+`str_pcs.pcs_uid = uid`인 구매 스토리를 `story`와 INNER JOIN 후 `story.at_create DESC`로 페이징. 행 후처리는 `fillStoryDetail` (미디어/댓글/구매/팔로우).
 
 **Returns:** `StoryListResp` 슬라이스(대표 미디어 포함), total_count
+
+#### GetFlwStoryList
+```go
+func (p *StoryDB) GetFlwStoryList(uid uint64, page int, limit int) (*[]ptc.StoryDetailResp, int, error)
+```
+`user_follow.uid = uid`, `stat=1`인 팔로잉 사용자(`followee_uid`)의 스토리를 `story.at_create DESC`로 페이징.
 
 #### GetStory
 ```go
@@ -499,3 +504,11 @@ type StrComment struct {
 *Last Updated: 2026-04-21*
 *Database: MySQL 8.0+*
 *Character Set: utf8mb4*
+
+### Batch story reads (2026-10-27)
+
+`readStoryList` closes the page cursor before auxiliary queries. `fillStoryAuxiliary` uses MySQL 8 window functions for the latest two comments plus counts, and groups active follower counts by author. `ApplyStoryAccessBatch` resolves follow/purchase flags in two queries, then redacts request-local copies. Hidden states remain excluded. `GetStory1000` uses three SELECTs; full list paths use six SELECTs including COUNT/page. Apply the optional batch-index migration after checking existing indexes.
+
+### calcStoryAge (`models/utils.go`)
+
+Story response `age` is derived from `prf_info.birth` (`YYYY-MM-DD`) plus `prf_info.age` offset (`-3`~`+3`, e.g. `"-2"`, `"2"`, `"+3"`). `calcStoryAge` computes full years from birth, then adds the signed offset and returns a string. Empty/invalid birth returns `""`.

@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -47,9 +48,9 @@ CREATE TABLE `story` (
   `area` tinyint DEFAULT NULL,
   `gender` int DEFAULT '1' COMMENT '0=woman, 1=man',
   `body` varchar(512) DEFAULT NULL,
-  `type` tinyint DEFAULT '1' COMMENT '0=only img, 1=only video, 2=img+video',
+  `type` tinyint DEFAULT '1' COMMENT '0=img, 1=vdo, 2=txt, 3=mix, 4=rsv',
   `stat` tinyint DEFAULT '1' COMMENT 'stat : 0=PUB(public 전체공개), 1=FLW(follower only), 2=PAY(paid only), 3=PRV(Private 비공개), 4=DEL(Deleted) 5=RSV(reserved)',
-  `qt_good` int DEFAULT '0',
+  `qt_like` int DEFAULT '0',
   `qt_view` int DEFAULT '0' COMMENT 'view count',
   `qt_checked` int DEFAULT '0' COMMENT '조회수',
   `price` int DEFAULT '0',
@@ -57,6 +58,7 @@ CREATE TABLE `story` (
   `at_update` datetime DEFAULT NULL,
   `at_create` datetime DEFAULT NULL,
   `str_imgbak` json DEFAULT NULL,
+  `cntt_rvsn` tinyint unsigned NOT NULL DEFAULT 1 COMMENT '콘텐츠 변경 버전: 본문·상태·미디어 수정 시 증가, 같은 초 변경의 캐시 검증용. 0=미확인, 1~254=버전, 255=포화 시 캐시 사용 안 함',
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
@@ -91,14 +93,16 @@ CREATE TABLE `story_like` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 CREATE TABLE `str_pcs` (
-  `idx` int NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT,
   `str_idx` int NOT NULL,
   `tid` bigint DEFAULT NULL COMMENT '판매자',
   `pcs_uid` bigint NOT NULL COMMENT '구매자 uid',
   `at_create` date DEFAULT NULL,
   `at_update` date DEFAULT NULL,
   `qt_payed` bigint DEFAULT NULL,
-  PRIMARY KEY (`idx`)
+  `psc_stat` tinyint NOT NULL DEFAULT '0' COMMENT '구매 상태: 0=대기, 1=완료(열람 권한), 2=회수. 현재 BuyStory는 결제 없이 완료 처리',
+  PRIMARY KEY (`idx`),
+  KEY `idx_str_pcs_story_buyer` (`str_idx`,`pcs_uid`,`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='스토리 구매 목록 리스트'
 
 CREATE TABLE `user_follow` (
@@ -245,7 +249,7 @@ func (p *StoryDB) GetPrfInfo(uid uint64) (*ptc.PrfInfo, error) {
 	err := row.Scan(&prf.Uid, &prf.Nick, &prf.Gender, &prf.Birth, &age, &prf.Area, &prf.Intro, &mainPic)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("profile not found")
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -402,36 +406,33 @@ WHERE uid = ?
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) GetStoryFirstPicUrls(uid uint64) (*map[int]string, *map[int]string, error) {
-	query := `SELECT idx, str_img FROM story WHERE uid = ? ORDER BY at_create DESC LIMIT 4`
-	rows, err := p.conndb.Query(query, uid)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-
-	strImgs := make(map[int]string)
-	strthmbls := make(map[int]string)
-	// var stories []ptc.StoryListResp
-	for rows.Next() {
-		i := 1
-		var idx int
-		var strImg string
-		err := rows.Scan(&idx, &strImg)
+// GetStoryFirstPicUrls fills up to four readable media entries, scanning past
+// text-only and locked stories without exposing their original media.
+func (p *StoryDB) GetStoryFirstPicUrls(viewer, owner uint64) (*map[int]string, *map[int]string, error) {
+	images, thumbs := map[int]string{}, map[int]string{}
+	for page := 1; len(images) < 4; page++ {
+		list, err := p.GetDefStoryList(viewer, owner, page, 100)
 		if err != nil {
 			return nil, nil, err
 		}
-		//strImg := {"1": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public", "2": "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0125d18e-aa56-45a0-98ac-853ecd3c1600/public"}
-
-		// firstURL, tcnts, err := GetFirstPicUrl(strImg)
-		// if err != nil {
-		// 	return nil, nil, err
-		// }
-
-		i++
+		for _, story := range *list {
+			if story.IsLocked == 1 || story.CntUrl == "" {
+				continue
+			}
+			images[story.Idx] = story.CntUrl
+			if story.CntThumb != "" {
+				thumbs[story.Idx] = story.CntThumb
+			}
+			if len(images) == 4 {
+				break
+			}
+		}
+		if len(*list) < 100 {
+			break
+		}
 	}
 
-	return &strImgs, &strthmbls, nil
+	return &images, &thumbs, nil
 }
 
 func (p *StoryDB) UpdatePrfInfo(req ptc.PrfInfo) error {
@@ -558,6 +559,9 @@ func (p *StoryDB) GetSList() (string, string, error) {
 }
 
 func (p *StoryDB) SaveStory(simg *ptc.StoryImage, media ptc.StoryStrImg) (int64, error) {
+	if len(media) == 0 && strings.TrimSpace(simg.Body) == "" {
+		return 0, fmt.Errorf("sbody is required for text stories")
+	}
 	strImg, mtype, err := BuildStrImgForDB(media)
 	if err != nil {
 		return 0, err
@@ -582,132 +586,256 @@ func (p *StoryDB) SaveStory(simg *ptc.StoryImage, media ptc.StoryStrImg) (int64,
 	return lastID, nil
 }
 
-// stat = 0 : pub, stat = 1 : private, stat = 2 : limit, stat = 3 : resv, stat = 4 : del
-func (p *StoryDB) GetDefStoryList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, error) {
-	query := `SELECT idx, uid, nick, stat, str_img, at_create FROM story WHERE stat IN (1, 2, 3) ORDER BY at_create DESC LIMIT ? OFFSET ?`
-	rows, err := p.conndb.Query(query, limit, (page-1)*limit)
+const storyAuthorColumns = `COALESCE(pr.nick,''),COALESCE(pr.main_pic,''),COALESCE(pr.gender,0),COALESCE(pr.area,0),COALESCE(DATE_FORMAT(pr.birth,'%Y-%m-%d'),''),COALESCE(pr.age,'')`
+const storyListColumns = `SELECT s.idx,s.uid,` + storyAuthorColumns + `,s.stat,s.body,s.qt_like,s.qt_view,s.price,s.str_img,s.at_create`
+const storyProfileJoin = ` LEFT JOIN prf_info pr ON pr.uid=s.uid `
+
+func (p *StoryDB) GetDefStoryList(viewer, owner uint64, page, limit int) (*[]ptc.StoryListResp, error) {
+	if page < 1 || limit < 1 || limit > 100 {
+		return nil, fmt.Errorf("invalid pagination")
+	}
+	rows, err := p.conndb.Query(storyListColumns+` FROM story s `+storyProfileJoin+` WHERE s.uid=? AND (s.stat IN (0,1,2) OR (s.uid=? AND s.uid<>0 AND s.stat IN (3,5)))
+ ORDER BY s.at_create DESC,s.idx DESC LIMIT ? OFFSET ?`, owner, viewer, limit, (page-1)*limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	// var stories []ptc.StoryListResp
-	var stories = make([]ptc.StoryListResp, 0)
-	story := ptc.StoryListResp{}
-	for rows.Next() {
-		var raw json.RawMessage
-		// var fstCnts ptc.StoryMediaItem
-		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate)
-		if err != nil {
-			return nil, err
-		}
-
-		// fstCnts, err = LoadStoryStrImg(raw)
-		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
-		if err != nil {
-			return nil, fmt.Errorf("story %d str_img: %w", story.Idx, err)
-		}
-
-		tmp := ptc.StoryListResp{
-			Idx:      story.Idx,
-			Uid:      story.Uid,
-			Nick:     story.Nick,
-			Stat:     story.Stat,
-			CntCount: nMaxCount,
-			CntUrl:   fstItem.URL,
-			CntType:  fstItem.Type,
-			CntThumb: fstItem.Thumb,
-			AtCreate: story.AtCreate,
-		}
-
-		stories = append(stories, tmp)
-	}
-
-	return &stories, nil
-}
-
-// GetCondStoryList builds a filtered story feed.
-// stat filter comes from conds (controller): 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV
-func (p *StoryDB) GetCondStoryList(conds []string, orderQuery string, args []interface{}) (*[]ptc.StoryListResp, error) {
-	base := `SELECT idx, uid, nick, stat, str_img, at_create FROM story`
-	if len(conds) > 0 {
-		base += " WHERE " + strings.Join(conds, " AND ")
-	}
-	query := base + " ORDER BY " + orderQuery + " LIMIT ? OFFSET ?"
-	// fmt.Println("query", query, " args ", args)
-	rows, err := p.conndb.Query(query, args...)
+	stories, err := p.readStoryList(rows, viewer)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var stories = make([]ptc.StoryListResp, 0)
-	story := ptc.StoryListResp{}
-	for rows.Next() {
-		var raw json.RawMessage
-		// var fstCnts ptc.StoryMediaItem
-		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate)
-		if err != nil {
-			return nil, err
+	list := make([]ptc.StoryListResp, 0, len(stories))
+	for _, story := range stories {
+		item := ptc.StoryListResp{Idx: story.Idx, Uid: story.Uid, Nick: story.Nick, MainPic: story.MainPic, Gender: story.Gender, Area: story.Area, Age: story.Age, Stat: story.Stat, AtCreate: story.AtCreate, CntCount: story.ContentTotal, IsLocked: story.IsLocked, GoodByMe: story.GoodByMe}
+		if story.IsLocked == 0 && len(story.StrImg) > 0 {
+			raw, err := json.Marshal(story.StrImg)
+			if err != nil {
+				return nil, err
+			}
+			first, _, err := GetFirstPicUrl(string(raw))
+			if err != nil {
+				return nil, err
+			}
+			item.CntUrl, item.CntType, item.CntThumb = first.URL, first.Type, first.Thumb
 		}
-
-		// fstCnts, err = LoadStoryStrImg(raw)
-		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
-		if err != nil {
-			return nil, fmt.Errorf("story %d str_img: %w", story.Idx, err)
-		}
-
-		tmp := ptc.StoryListResp{
-			Idx:      story.Idx,
-			Uid:      story.Uid,
-			Nick:     story.Nick,
-			Stat:     story.Stat,
-			CntCount: nMaxCount,
-			CntUrl:   fstItem.URL,
-			CntType:  fstItem.Type,
-			CntThumb: fstItem.Thumb,
-			AtCreate: story.AtCreate,
-		}
-
-		stories = append(stories, tmp)
+		list = append(list, item)
 	}
-
-	return &stories, nil
+	return &list, nil
 }
 
-// BuyStory records a purchase in str_pcs (pcs_uid = buyer, tid = story owner).
-func (p *StoryDB) BuyStory(pcsUid uint64, strIdx int) error {
-	var tid uint64
-	err := p.conndb.QueryRow(`SELECT uid FROM story WHERE idx = ?`, strIdx).Scan(&tid)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("story not found")
+func (p *StoryDB) storyAccess(story *ptc.StoryDetailResp, viewerUID uint64) (bool, error) {
+	owner := viewerUID != 0 && viewerUID == story.Uid
+	if !storyVisible(story, viewerUID) {
+		return false, sql.ErrNoRows
 	}
+
+	// Response flags describe actual relationships, independent of visibility.
+	story.IsPaid, story.IsFollowed = 0, 0
+	story.GoodByMe = 0
+	if viewerUID != 0 {
+		followed, err := p.IsFollowed(viewerUID, story.Uid)
+		if err != nil {
+			return false, err
+		}
+		paid, err := p.IsPcsPaid(story.Idx, viewerUID)
+		if err != nil {
+			return false, err
+		}
+		story.IsFollowed, story.IsPaid = followed, paid
+		if err := p.conndb.QueryRow("SELECT EXISTS(SELECT 1 FROM story_like WHERE story_idx=? AND uid=? AND stat=1)", story.Idx, viewerUID).Scan(&story.GoodByMe); err != nil {
+			return false, err
+		}
+	}
+
+	// Ownership grants access without implying a follow or purchase relationship.
+	locked := false
+	if !owner {
+		switch story.Stat {
+		case ptc.StoryStatFollower:
+			locked = story.IsFollowed == 0
+		case ptc.StoryStatPaid:
+			locked = story.IsPaid == 0
+		}
+	}
+
+	story.IsLocked = 0
+	if locked {
+		story.IsLocked = 1
+	}
+	return locked, nil
+}
+
+// ApplyStoryAccess personalizes a request-local copy; never write it back to cache.
+func (p *StoryDB) ApplyStoryAccess(story *ptc.StoryDetailResp, viewerUID uint64) error {
+	locked, err := p.storyAccess(story, viewerUID)
 	if err != nil {
 		return err
 	}
-
-	query := `
-		INSERT INTO str_pcs (idx, str_idx, tid, pcs_uid, at_create, at_update, qt_payed)
-		SELECT COALESCE(MAX(idx), 0) + 1, ?, ?, ?, NOW(), NOW(), 0
-		FROM str_pcs
-	`
-	_, err = p.conndb.Exec(query, strIdx, tid, pcsUid)
-	return err
+	if locked {
+		story.Body = ""
+		story.CommentList = nil
+		story.CmtCount = 0
+	}
+	return nil
 }
 
-func (p *StoryDB) isPaid(idx int, tid uint64) (int, error) {
-	query := `SELECT COUNT(1) FROM str_pcs WHERE str_idx = ? AND tid = ?`
-	var count int
-	err := p.conndb.QueryRow(query, idx, tid).Scan(&count)
+func (p *StoryDB) fillStoryDetail(story *ptc.StoryDetailResp, raw json.RawMessage, viewerUID uint64) error {
+	// Reject hidden stories before loading comments or media.
+	locked, err := p.storyAccess(story, viewerUID)
+	if err != nil {
+		return err
+	}
+	if err := p.fillStoryContent(story, raw); err != nil {
+		return err
+	}
+	if locked {
+		story.Body = ""
+		story.CommentList, story.CmtCount = nil, 0
+	}
+	return nil
+}
+
+func (p *StoryDB) fillStoryContent(story *ptc.StoryDetailResp, raw json.RawMessage) error {
+	var media ptc.StoryStrImg
+	if err := json.Unmarshal(raw, &media); err != nil {
+		return fmt.Errorf("invalid media JSON: %w", err)
+	}
+
+	cmtlist, tcount, err := p.GetStrComment2Low(int64(story.Idx))
+	if err != nil {
+		return err
+	}
+	story.ContentTotal = len(media)
+	story.StrImg = media
+	story.CmtCount = tcount
+	if tcount > 0 {
+		story.CommentList = *cmtlist
+	}
+
+	flwCount, err := p.GetFollowerCount(story.Uid)
+	if err != nil {
+		// return err
+		story.FlwCount = 0
+	} else {
+		story.FlwCount = flwCount
+	}
+	return nil
+}
+
+// GetCondStoryList builds a filtered story feed.
+// stat filter comes from conds (controller): 0=PUB, 1=FLW, 2=PAY, 3=PRV, 6=ALL(query only); 4/5 excluded from feed
+func (p *StoryDB) GetCondStoryList(uid uint64, conds []string, orderQuery string, args []interface{}) (*[]ptc.StoryDetailResp, int, error) {
+	// The caller appends LIMIT/OFFSET after the filter arguments.
+	if len(args) < 2 {
+		return nil, 0, fmt.Errorf("missing story pagination arguments")
+	}
+	filterArgs := append([]interface{}{}, args[:len(args)-2]...)
+	conds = append(append([]string{}, conds...), "(stat IN (0,1,2) OR (stat=3 AND uid=? AND uid<>0))")
+	filterArgs = append(filterArgs, uid)
+	args = append(append([]interface{}{}, filterArgs...), args[len(args)-2:]...)
+	cntQuery := `SELECT COUNT(1)
+					FROM story`
+	if len(conds) > 0 {
+		// area(0-12), gender(0,1), type(0-4), stat(0-3)
+		cntQuery += " WHERE " + strings.Join(conds, " AND ")
+	}
+
+	var totalCount int
+	if err := p.conndb.QueryRow(cntQuery, filterArgs...).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	base := `SELECT * FROM story`
+	if len(conds) > 0 {
+		base += " WHERE " + strings.Join(conds, " AND ")
+	}
+	query := storyListColumns + " FROM (" + base + ") s " + storyProfileJoin + " ORDER BY " + strings.NewReplacer("story.idx", "s.idx", "at_create", "s.at_create", "idx DESC", "s.idx DESC", "idx ASC", "s.idx ASC").Replace(orderQuery) + " LIMIT ? OFFSET ?"
+	// fmt.Println("query", query, " args ", args)
+	rows, err := p.conndb.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	stories, err := p.readStoryList(rows, uid)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &stories, totalCount, nil
+}
+
+// Purchase errors preserve validation and revoked entitlements.
+var ErrStoryPurchaseInvalid = errors.New("story is not available for purchase")
+var ErrStoryPurchaseNotPaid = errors.New("only paid stories (stat=2) are available for purchase")
+var ErrStoryPurchaseRevoked = errors.New("story purchase has been revoked")
+
+// BuyStory completes purchases without charging under the current no-payment policy.
+// Existing pending requests are completed on retry; revoked requests remain revoked.
+// Locking the story row serializes requests for the same story across instances.
+func (p *StoryDB) BuyStory(pcsUid uint64, strIdx int) (int, error) {
+	if pcsUid == 0 || strIdx <= 0 {
+		return 0, ErrStoryPurchaseInvalid
+	}
+	tx, err := p.conndb.Begin()
 	if err != nil {
 		return 0, err
 	}
-	return count, nil
+	defer tx.Rollback()
+
+	var owner uint64
+	var stat int
+	if err = tx.QueryRow(`SELECT uid, stat FROM story WHERE idx = ? FOR UPDATE`, strIdx).Scan(&owner, &stat); err != nil {
+		return 0, err
+	}
+	if owner == pcsUid {
+		return 0, ErrStoryPurchaseInvalid
+	}
+	if stat != ptc.StoryStatPaid {
+		return 0, ErrStoryPurchaseNotPaid
+	}
+
+	var status int
+	err = tx.QueryRow(`SELECT psc_stat FROM str_pcs
+		WHERE str_idx = ? AND pcs_uid = ? ORDER BY idx DESC LIMIT 1 FOR UPDATE`, strIdx, pcsUid).Scan(&status)
+	switch {
+	case err == nil:
+		if status != 0 && status != 1 {
+			return 0, ErrStoryPurchaseRevoked
+		}
+		if status == 0 {
+			_, err = tx.Exec(`UPDATE str_pcs SET psc_stat = 1, at_update = NOW()
+				WHERE str_idx = ? AND pcs_uid = ? AND psc_stat = 0 ORDER BY idx DESC LIMIT 1`, strIdx, pcsUid)
+			if err != nil {
+				return 0, err
+			}
+		}
+		return 1, tx.Commit()
+	case !errors.Is(err, sql.ErrNoRows):
+		return 0, err
+	}
+
+	_, err = tx.Exec(`INSERT INTO str_pcs
+		(str_idx, tid, pcs_uid, at_create, at_update, qt_payed, psc_stat)
+		VALUES (?, ?, ?, NOW(), NOW(), 0, 1)`, strIdx, owner, pcsUid)
+	if err != nil {
+		return 0, err
+	}
+	return 1, tx.Commit()
+}
+
+// IsPcsPaid accepts only server-confirmed, non-revoked purchases, regardless of amount.
+func (p *StoryDB) IsPcsPaid(idx int, uid uint64) (int, error) {
+	var count int
+	err := p.conndb.QueryRow(`SELECT COUNT(1) FROM str_pcs WHERE str_idx = ? AND pcs_uid = ? AND psc_stat = 1`, idx, uid).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	if count > 0 {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 // GetPurchaseList returns stories the user purchased (str_pcs.pcs_uid), newest first.
 // pcs_uid = my uid, 구매한 사람
-func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryListResp, int, error) {
+func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.StoryDetailResp, int, error) {
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -718,141 +846,218 @@ func (p *StoryDB) GetPurchaseList(uid uint64, page int, limit int) (*[]ptc.Story
 		SELECT COUNT(1)
 		FROM str_pcs p
 		INNER JOIN story s ON s.idx = p.str_idx
-		WHERE p.pcs_uid = ?
+		WHERE p.pcs_uid = ? AND p.psc_stat = 1 AND (s.stat IN (0,1,2) OR (s.uid = p.pcs_uid AND s.uid <> 0 AND s.stat IN (3,5)))
 	`
 	if err := p.conndb.QueryRow(cntQuery, uid).Scan(&totalCount); err != nil {
 		return nil, 0, err
 	}
 
-	query := `
-		SELECT s.idx, s.uid, s.nick, s.stat, s.str_img, s.at_create
+	query := storyListColumns + `
 		FROM str_pcs p
 		INNER JOIN story s ON s.idx = p.str_idx
-		WHERE p.pcs_uid = ?
-		ORDER BY s.at_create DESC
+		` + storyProfileJoin + ` WHERE p.pcs_uid = ? AND p.psc_stat = 1 AND (s.stat IN (0,1,2) OR (s.uid = p.pcs_uid AND s.uid <> 0 AND s.stat IN (3,5)))
+		ORDER BY s.at_create DESC, s.idx DESC
 		LIMIT ? OFFSET ?
 	`
 	rows, err := p.conndb.Query(query, uid, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-
-	stories := make([]ptc.StoryListResp, 0, limit)
-	for rows.Next() {
-		var (
-			story ptc.StoryListResp
-			raw   json.RawMessage
-		)
-		if err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &raw, &story.AtCreate); err != nil {
-			return nil, 0, err
-		}
-
-		fstItem, nMaxCount, err := GetFirstPicUrl(string(raw))
-		if err != nil {
-			return nil, 0, fmt.Errorf("story %d str_img: %w", story.Idx, err)
-		}
-
-		stories = append(stories, ptc.StoryListResp{
-			Idx:      story.Idx,
-			Uid:      story.Uid,
-			Nick:     story.Nick,
-			Stat:     story.Stat,
-			CntCount: nMaxCount,
-			CntUrl:   fstItem.URL,
-			CntType:  fstItem.Type,
-			CntThumb: fstItem.Thumb,
-			AtCreate: story.AtCreate,
-		})
-	}
-	if err := rows.Err(); err != nil {
+	stories, err := p.readStoryList(rows, uid)
+	if err != nil {
 		return nil, 0, err
 	}
 	return &stories, totalCount, nil
 }
 
-func (p *StoryDB) GetDetailList(tid uint64, nPage int, nLimit int) (*[]ptc.StoryDetailResp, int, error) {
-	cntQuery := `SELECT COUNT(1) FROM story WHERE stat IN (0, 1, 2, 3)`
-	var totalCount int
-	if err := p.conndb.QueryRow(cntQuery).Scan(&totalCount); err != nil {
+// StoryCacheEntry contains only viewer-independent data. ContentRevision detects
+// same-second edits; 255 saturates and bypasses cache instead of wrapping.
+// CachedAt bounds auxiliary-data staleness.
+type StoryCacheEntry struct {
+	ContentRevision uint8               `json:"cntt_rvsn"`
+	Story           ptc.StoryDetailResp `json:"story"`
+	UpdatedAt       sql.NullTime        `json:"updated_at"`
+	CachedAt        time.Time           `json:"cached_at"`
+}
+
+func (e StoryCacheEntry) Matches(current StoryCacheEntry) bool {
+	return e.ContentRevision != 0 && e.ContentRevision < 255 && e.ContentRevision == current.ContentRevision &&
+		!e.CachedAt.IsZero() && time.Since(e.CachedAt) < 3*time.Minute &&
+		e.Story.Idx == current.Story.Idx && e.Story.Uid == current.Story.Uid &&
+		e.Story.Stat == current.Story.Stat && e.UpdatedAt.Valid == current.UpdatedAt.Valid &&
+		e.UpdatedAt.Time.Equal(current.UpdatedAt.Time)
+}
+
+func (p *StoryDB) loadStoryCacheEntries(query string, args ...interface{}) ([]StoryCacheEntry, error) {
+	rows, err := p.conndb.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]StoryCacheEntry, 0)
+	for rows.Next() {
+		var entry StoryCacheEntry
+		var raw json.RawMessage
+		story := &entry.Story
+		var mainPic, body sql.NullString
+		var price sql.NullInt64
+		if err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &mainPic, &body, &story.QtLike, &story.QtView, &price, &raw, &story.AtCreate, &entry.UpdatedAt, &entry.ContentRevision); err != nil {
+			return nil, err
+		}
+		story.MainPic, story.Body, story.Price = mainPic.String, body.String, int(price.Int64)
+		if err := json.Unmarshal(raw, &story.StrImg); err != nil {
+			return nil, err
+		}
+		story.ContentTotal = len(story.StrImg)
+		entry.CachedAt = time.Now()
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+const storyCacheColumns = "SELECT idx, uid, nick, stat, main_pic, body, qt_like, qt_view, price, str_img, at_create, at_update, cntt_rvsn FROM story"
+
+func (p *StoryDB) GetStory1000() ([]StoryCacheEntry, int, error) {
+	entries, err := p.loadStoryCacheEntries(storyCacheColumns + " WHERE stat IN (0,1,2,3,5) ORDER BY at_create DESC, idx DESC LIMIT 1000")
+	return entries, len(entries), err
+}
+
+func (p *StoryDB) GetStoryCacheEntry(idx int) (StoryCacheEntry, error) {
+	entries, err := p.loadStoryCacheEntries(storyCacheColumns+" WHERE idx = ?", idx)
+	if err != nil {
+		return StoryCacheEntry{}, err
+	}
+	if len(entries) == 0 {
+		return StoryCacheEntry{}, sql.ErrNoRows
+	}
+	return entries[0], nil
+}
+
+// GetStoryPage filters by owner and current viewer visibility before pagination, without loading body/media.
+func (p *StoryDB) GetStoryPage(viewerUID, ownerUID uint64, page, limit int) ([]StoryCacheEntry, int, error) {
+	const where = " WHERE s.uid = ? AND (s.stat IN (0,1,2) OR (s.uid = ? AND s.uid <> 0 AND s.stat IN (3,5)))"
+	var total int
+	if err := p.conndb.QueryRow("SELECT COUNT(1) FROM story s"+where, ownerUID, viewerUID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-
-	// query := `SELECT idx, uid, nick, stat, str_img, at_create FROM story WHERE idx = ? AND uid = ? ORDER BY at_create DESC LIMIT ? OFFSET ?`
-	// query := `SELECT idx, uid, nick, body, stat, qt_good, qt_view, price, str_img, at_create FROM story WHERE uid = ? AND idx <= ? ORDER BY idx DESC LIMIT ? OFFSET ?`
-	query := `SELECT idx, uid, nick, stat, main_pic, body, qt_good, qt_view, price, str_img, at_create FROM story WHERE stat IN (0,1,2,3) ORDER BY at_create DESC LIMIT ? OFFSET ?`
-	rows, err := p.conndb.Query(query, nLimit, (nPage-1)*nLimit)
+	rows, err := p.conndb.Query("SELECT s.idx,s.uid,s.stat,s.qt_like,s.qt_view,s.price,s.at_update,s.cntt_rvsn,"+storyAuthorColumns+" FROM story s "+storyProfileJoin+where+" ORDER BY s.at_create DESC,s.idx DESC LIMIT ? OFFSET ?", ownerUID, viewerUID, limit, (page-1)*limit)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
-
-	stlist := make([]ptc.StoryDetailResp, 0)
+	entries := make([]StoryCacheEntry, 0)
 	for rows.Next() {
-		var raw json.RawMessage
-		story := ptc.StoryDetailResp{}
-		err := rows.Scan(&story.Idx, &story.Uid, &story.Nick, &story.Stat, &story.MainPic, &story.Body, &story.QtGood, &story.QtView, &story.Price, &raw, &story.AtCreate)
-		if err != nil {
+		var e StoryCacheEntry
+		var price sql.NullInt64
+		var birth, profileAge string
+		var areaCode int
+		if err := rows.Scan(&e.Story.Idx, &e.Story.Uid, &e.Story.Stat, &e.Story.QtLike, &e.Story.QtView, &price, &e.UpdatedAt, &e.ContentRevision, &e.Story.Nick, &e.Story.MainPic, &e.Story.Gender, &areaCode, &birth, &profileAge); err != nil {
 			return nil, 0, err
 		}
-
-		// story.StrImg, err = LoadStoryStrImg(raw)
-		var media ptc.StoryStrImg
-		if err := json.Unmarshal([]byte(raw), &media); err != nil {
-			return nil, 0, fmt.Errorf("invalid media JSON: %w", err)
-		}
-
-		cmtlist, tcount, err := p.GetStrComment2Low(int64(story.Idx))
-		if err != nil {
-			return nil, 0, err
-		}
-
-		story.ContentTotal = len(media)
-		story.StrImg = media
-		if tcount > 0 {
-			story.CmtCount = tcount
-			story.CommentList = *cmtlist
-		} else {
-			story.CmtCount = 0
-			story.CommentList = nil
-		}
-
-		paid, err := p.isPaid(story.Idx, tid)
-		if err != nil {
-			return nil, 0, err
-		}
-		story.IsPaid = paid // 0=not paid, 1=paid
-
-		Followed, err := p.IsFollowed(tid, story.Uid)
-		if err != nil {
-			return nil, 0, err
-		}
-		story.IsFollowed = Followed // 0=not followed, 1=followed
-
-		stlist = append(stlist, story)
+		e.Story.Price = int(price.Int64)
+		e.Story.Area = ptc.GetAreaName(areaCode)
+		e.Story.Age = calcStoryAge(birth, profileAge)
+		entries = append(entries, e)
 	}
-	return &stlist, totalCount, nil
+	return entries, total, rows.Err()
 }
 
-func (p *StoryDB) GetStory(strIdx int) (*ptc.StoryDetailResp, error) {
-	query := `SELECT nick, body, str_img, at_create FROM story WHERE idx = ?`
+// GetFlwStoryList returns stories of users that uid is following (user_follow.stat=1), newest first.
+func (p *StoryDB) GetFlwStoryList(uid uint64, page int, limit int) (*[]ptc.StoryDetailResp, int, error) {
+	offset := (page - 1) * limit
+	if offset < 0 {
+		offset = 0
+	}
+
+	var totalCount int
+	cntQuery := `
+		SELECT COUNT(1)
+		FROM user_follow f
+		INNER JOIN story s ON s.uid = f.followee_uid
+		WHERE f.uid = ? AND f.stat = 1 AND (s.stat IN (0,1,2) OR (s.uid = f.uid AND s.uid <> 0 AND s.stat IN (3,5)))
+	`
+	if err := p.conndb.QueryRow(cntQuery, uid).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := storyListColumns + `
+		FROM user_follow f
+		INNER JOIN story s ON s.uid = f.followee_uid
+		` + storyProfileJoin + ` WHERE f.uid = ? AND f.stat = 1 AND (s.stat IN (0,1,2) OR (s.uid = f.uid AND s.uid <> 0 AND s.stat IN (3,5)))
+		ORDER BY s.at_create DESC, s.idx DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := p.conndb.Query(query, uid, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	stories, err := p.readStoryList(rows, uid)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &stories, totalCount, nil
+}
+
+func (p *StoryDB) GetStoryList(viewerUID uint64, nPage int, nLimit int) (*[]ptc.StoryDetailResp, int, error) {
+	cntQuery := `SELECT COUNT(1) FROM story WHERE (stat IN (0,1,2) OR (uid = ? AND uid <> 0 AND stat IN (3,5)))`
+	var totalCount int
+	if err := p.conndb.QueryRow(cntQuery, viewerUID).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := storyListColumns + ` FROM story s ` + storyProfileJoin + `
+ WHERE (s.stat IN (0,1,2) OR (s.uid = ? AND s.uid <> 0 AND s.stat IN (3,5)))
+ ORDER BY s.at_create DESC,s.idx DESC LIMIT ? OFFSET ?`
+	rows, err := p.conndb.Query(query, viewerUID, nLimit, (nPage-1)*nLimit)
+	if err != nil {
+		return nil, 0, err
+	}
+	stories, err := p.readStoryList(rows, viewerUID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &stories, totalCount, nil
+}
+
+func (p *StoryDB) GetStoryDetail(uid uint64, strIdx int) (*ptc.StoryDetailResp, error) {
+	query := storyListColumns + ` FROM story s ` + storyProfileJoin + ` WHERE s.idx = ?`
 	row := p.conndb.QueryRow(query, strIdx)
 	var (
-		story ptc.StoryDetailResp
-		raw   json.RawMessage
+		story   ptc.StoryDetailResp
+		raw     json.RawMessage
+		mainPic sql.NullString
+		body    sql.NullString
+		price   sql.NullInt64
 	)
-	err := row.Scan(&story.Nick, &story.Body, &raw, &story.AtCreate)
+	var birth, profileAge string
+	var areaCode int
+	err := row.Scan(&story.Idx, &story.Uid, &story.Nick, &mainPic, &story.Gender, &areaCode, &birth, &profileAge, &story.Stat, &body, &story.QtLike, &story.QtView, &price, &raw, &story.AtCreate)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("story not found")
+		return nil, sql.ErrNoRows
 	}
 	if err != nil {
 		return nil, err
 	}
-	var media ptc.StoryStrImg
-	if err := json.Unmarshal([]byte(raw), &media); err != nil {
-		return nil, fmt.Errorf("invalid media JSON: %w", err)
+	story.Price = int(price.Int64)
+	story.Area = ptc.GetAreaName(areaCode)
+	story.Age = calcStoryAge(birth, profileAge)
+	if mainPic.Valid {
+		story.MainPic = mainPic.String
 	}
-	story.StrImg = media
+	if body.Valid {
+		story.Body = body.String
+	}
+
+	if err := p.fillStoryDetail(&story, raw, uid); err != nil {
+		return nil, err
+	}
+
 	return &story, nil
 }
 
@@ -868,7 +1073,7 @@ func (p *StoryDB) GetStoryViewCount(strIdx int) (int, error) {
 }
 
 func (p *StoryDB) GetStoryLikeCount(strIdx int) (int, error) {
-	query := `SELECT qt_good FROM story WHERE idx = ?`
+	query := `SELECT qt_like FROM story WHERE idx = ?`
 	row := p.conndb.QueryRow(query, strIdx)
 	var qtGood int
 	err := row.Scan(&qtGood)
@@ -878,44 +1083,109 @@ func (p *StoryDB) GetStoryLikeCount(strIdx int) (int, error) {
 	return qtGood, nil
 }
 
-// UpdateStoryView increments story.qt_view by 1 and returns the new value.
-// Uses LAST_INSERT_ID(expr) so one UPDATE covers both increment and return.
-func (p *StoryDB) UpdateStoryView(strIdx int) error {
-	query := `UPDATE story SET qt_view = LAST_INSERT_ID(COALESCE(qt_view, 0) + 1), at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, strIdx)
+// UpdateStoryView counts at most once per viewer/story in a rolling 24-hour
+// window. The ledger and counter commit together, including on client retries.
+// counted=false means the previous counted view is still inside the window.
+func (p *StoryDB) UpdateStoryView(uid uint64, strIdx int) (counted bool, err error) {
+	if uid == 0 || strIdx <= 0 {
+		return false, fmt.Errorf("invalid viewer or story ID")
+	}
+	tx, err := p.conndb.Begin()
 	if err != nil {
-		return err
+		return false, err
+	}
+	defer tx.Rollback()
+
+	// The unique key serializes concurrent requests for this viewer/story.
+	// Do not use RowsAffected here: MySQL clientFoundRows changes its semantics.
+	_, err = tx.Exec(`INSERT INTO story_view_history (story_idx, uid, last_counted_at)
+		VALUES (?, ?, NULL) ON DUPLICATE KEY UPDATE uid = uid`, strIdx, uid)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := tx.Exec(`UPDATE story_view_history SET last_counted_at = UTC_TIMESTAMP(6)
+		WHERE story_idx = ? AND uid = ?
+		AND (last_counted_at IS NULL OR last_counted_at <= UTC_TIMESTAMP(6) - INTERVAL 24 HOUR)`, strIdx, uid)
+	if err != nil {
+		return false, err
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if affected == 0 {
-		return fmt.Errorf("story not found")
+		return false, nil
 	}
 
-	return nil
+	// Views do not change content; leave at_update unchanged to retain raw cache hits.
+	result, err = tx.Exec(`UPDATE story SET qt_view = COALESCE(qt_view, 0) + 1 WHERE idx = ?`, strIdx)
+	if err != nil {
+		return false, err
+	}
+	affected, err = result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if affected == 0 {
+		return false, sql.ErrNoRows
+	}
+	if err := tx.Commit(); err != nil {
+		// Even if the commit outcome is unknown, retrying checks the same ledger.
+		return false, err
+	}
+	return true, nil
 }
 
-func (p *StoryDB) UpdateStoryStat(strIdx int, stat int) (int64, error) {
-	query := `UPDATE story SET stat = ?, at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, stat, strIdx)
+// storyMutationResult distinguishes a missing/foreign story from an owned no-op
+// (for example, identical content after the revision counter has saturated).
+func (p *StoryDB) storyMutationResult(result sql.Result, idx int, actor uint64) (int64, error) {
+	affected, err := result.RowsAffected()
+	if err != nil || affected != 0 {
+		return affected, err
+	}
+	var found int
+	err = p.conndb.QueryRow("SELECT 1 FROM story WHERE idx=? AND uid=? AND uid<>0", idx, actor).Scan(&found)
+	return 0, err
+}
+
+func (p *StoryDB) UpdateStoryStat(strIdx int, actorUID uint64, stat int) (int64, error) {
+	query := `UPDATE story SET stat = ?, cntt_rvsn = LEAST(cntt_rvsn + 1, 255), at_update = NOW() WHERE idx = ? AND uid = ? AND uid <> 0`
+	result, err := p.conndb.Exec(query, stat, strIdx, actorUID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return p.storyMutationResult(result, strIdx, actorUID)
 }
 
-func (p *StoryDB) UpdateStrBody(strIdx int, body string) (int64, error) {
-	query := `UPDATE story SET body = ?, at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, body, strIdx)
+func (p *StoryDB) UpdatePriceStat(strIdx int, actorUID uint64, stat, price int) (int64, error) {
+	if !ptc.IsValidStoryStat(stat) || price < 0 || price > 2147483647 {
+		return 0, fmt.Errorf("invalid story status or price")
+	}
+	query := `UPDATE story SET stat = ?, price = ?, cntt_rvsn = LEAST(cntt_rvsn + 1, 255), at_update = NOW() WHERE idx = ? AND uid = ? AND uid <> 0`
+	result, err := p.conndb.Exec(query, stat, price, strIdx, actorUID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return p.storyMutationResult(result, strIdx, actorUID)
+}
+
+func (p *StoryDB) UpdateStrBody(strIdx int, actorUID uint64, body string) (int64, error) {
+	query := `UPDATE story SET body = ?, cntt_rvsn = LEAST(cntt_rvsn + 1, 255), at_update = NOW() WHERE idx = ? AND uid = ? AND uid <> 0`
+	result, err := p.conndb.Exec(query, body, strIdx, actorUID)
+	if err != nil {
+		return 0, err
+	}
+	return p.storyMutationResult(result, strIdx, actorUID)
 }
 
 func (p *StoryDB) SetStrComment(cmt *ptc.StrComment) (int64, error) {
+	if cmt.Wuid == 0 {
+		return 0, ErrStoryLocked
+	}
+	if _, err := p.RequireStoryRead(cmt.Wuid, cmt.StrIdx); err != nil {
+		return 0, err
+	}
 	query := `INSERT INTO str_cmt (str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update) 
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
 	result, err := p.conndb.Exec(
@@ -937,7 +1207,10 @@ func (p *StoryDB) SetStrComment(cmt *ptc.StrComment) (int64, error) {
 }
 
 // func (p *StoryDB) GetStrCmtDetail(cmtIdx int, page int) (*[]ptc.StrComment, int, error) {
-func (p *StoryDB) GetStrCmtDetail(cmtIdx, page, limit int) (*[]ptc.StrComment, int, error) {
+func (p *StoryDB) GetStrCmtDetail(viewer uint64, cmtIdx, page, limit int) (*[]ptc.StrComment, int, error) {
+	if _, err := p.RequireStoryRead(viewer, cmtIdx); err != nil {
+		return nil, 0, err
+	}
 	if limit == 0 {
 		limit = 20
 	}
@@ -956,7 +1229,7 @@ func (p *StoryDB) GetStrCmtDetail(cmtIdx, page, limit int) (*[]ptc.StrComment, i
 	query := `SELECT idx, str_idx, wuid, nick, thumb_url, wgender, wage, warea, body, stat, at_create, at_update
 	          FROM str_cmt
 	          WHERE str_idx = ? AND stat IN (0,1)
-	          ORDER BY at_create DESC
+	          ORDER BY at_create DESC, idx DESC
 	          LIMIT ? OFFSET ?`
 	rows, err := p.conndb.Query(query, cmtIdx, limit, offset)
 	if err != nil {
@@ -1089,9 +1362,9 @@ func (p *StoryDB) GetStrComment2Low(strIdx int64) (*[]ptc.StrComment, int, error
 	return &comments, totalCount, nil
 }
 
-func (p *StoryDB) GetStrPicList(strIdx int) (json.RawMessage, json.RawMessage, error) {
-	query := `SELECT str_img, str_imgbak FROM story WHERE idx = ?`
-	row := p.conndb.QueryRow(query, strIdx)
+func (p *StoryDB) GetStrPicList(strIdx int, actorUID uint64) (json.RawMessage, json.RawMessage, error) {
+	query := `SELECT str_img, str_imgbak FROM story WHERE idx = ? AND uid = ? AND uid <> 0`
+	row := p.conndb.QueryRow(query, strIdx, actorUID)
 
 	// fmt.Println("strIdx ", row)
 	var strImg, strImgBak json.RawMessage
@@ -1109,9 +1382,13 @@ func (p *StoryDB) GetStrPicList(strIdx int) (json.RawMessage, json.RawMessage, e
 	return strImg, strImgBak, nil
 }
 
-func (p *StoryDB) DeleteStrPic(strIdx int, pic, picback json.RawMessage) (int64, error) {
-	query := `UPDATE story SET str_img = ?, str_imgbak = ?, at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, pic, picback, strIdx)
+func (p *StoryDB) DeleteStrPic(strIdx int, actorUID uint64, pic, picback json.RawMessage) (int64, error) {
+	var media ptc.StoryStrImg
+	if err := json.Unmarshal(pic, &media); err != nil {
+		return 0, err
+	}
+	query := `UPDATE story SET str_img = ?, str_imgbak = ?, type = ?, cntt_rvsn = LEAST(cntt_rvsn + 1, 255), at_update = NOW() WHERE idx = ? AND uid = ? AND uid <> 0`
+	result, err := p.conndb.Exec(query, pic, picback, MediaMType(media), strIdx, actorUID)
 	if err != nil {
 		return 0, err
 	}
@@ -1119,18 +1396,32 @@ func (p *StoryDB) DeleteStrPic(strIdx int, pic, picback json.RawMessage) (int64,
 	// return 0, nil
 }
 
-func (p *StoryDB) UpdateStrStatComment(cmtIdx int, stat int) (int64, error) {
-	query := `UPDATE str_cmt SET stat = ?, at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, stat, cmtIdx)
+func (p *StoryDB) UpdateStrStatComment(cmtIdx int, actor uint64, admin bool, stat int) (int64, error) {
+	parent, err := p.GetCommentStoryID(cmtIdx, actor, admin)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = p.RequireStoryRead(actor, parent); err != nil {
+		return 0, err
+	}
+	query := `UPDATE str_cmt SET stat = ?, at_update = NOW() WHERE idx = ? AND (wuid = ? OR ?) AND ? <> 0`
+	result, err := p.conndb.Exec(query, stat, cmtIdx, actor, admin, actor)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) UpdateStrBodyComment(cmtIdx int, body string) (int64, error) {
-	query := `UPDATE str_cmt SET body = ?, at_update = NOW() WHERE idx = ?`
-	result, err := p.conndb.Exec(query, body, cmtIdx)
+func (p *StoryDB) UpdateStrBodyComment(cmtIdx int, actor uint64, admin bool, body string) (int64, error) {
+	parent, err := p.GetCommentStoryID(cmtIdx, actor, admin)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = p.RequireStoryRead(actor, parent); err != nil {
+		return 0, err
+	}
+	query := `UPDATE str_cmt SET body = ?, at_update = NOW() WHERE idx = ? AND (wuid = ? OR ?) AND ? <> 0`
+	result, err := p.conndb.Exec(query, body, cmtIdx, actor, admin, actor)
 	if err != nil {
 		return 0, err
 	}
@@ -1157,7 +1448,7 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 			if _, err = tx.Exec(`INSERT INTO story_like (story_idx, uid, stat, at_create, at_update) VALUES (?, ?, 1, NOW(), NOW())`, storyIdx, uid); err != nil {
 				return false, 0, err
 			}
-			if _, err = tx.Exec(`UPDATE story SET qt_good = COALESCE(qt_good, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+			if _, err = tx.Exec(`UPDATE story SET qt_like = COALESCE(qt_like, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
 				return false, 0, err
 			}
 			stat = 1
@@ -1169,7 +1460,7 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 			if _, err = tx.Exec(`UPDATE story_like SET stat = 0, at_update = NOW() WHERE story_idx = ? AND uid = ?`, storyIdx, uid); err != nil {
 				return false, 0, err
 			}
-			if _, err = tx.Exec(`UPDATE story SET qt_good = GREATEST(COALESCE(qt_good, 0) - 1, 0), at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+			if _, err = tx.Exec(`UPDATE story SET qt_like = GREATEST(COALESCE(qt_like, 0) - 1, 0), at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
 				return false, 0, err
 			}
 			stat = 0
@@ -1177,7 +1468,7 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 			if _, err = tx.Exec(`UPDATE story_like SET stat = 1, at_update = NOW() WHERE story_idx = ? AND uid = ?`, storyIdx, uid); err != nil {
 				return false, 0, err
 			}
-			if _, err = tx.Exec(`UPDATE story SET qt_good = COALESCE(qt_good, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
+			if _, err = tx.Exec(`UPDATE story SET qt_like = COALESCE(qt_like, 0) + 1, at_update = NOW() WHERE idx = ?`, storyIdx); err != nil {
 				return false, 0, err
 			}
 			stat = 1
@@ -1185,7 +1476,7 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 	}
 
 	var likeCount int
-	if err = tx.QueryRow(`SELECT COALESCE(qt_good, 0) FROM story WHERE idx = ?`, storyIdx).Scan(&likeCount); err != nil {
+	if err = tx.QueryRow(`SELECT COALESCE(qt_like, 0) FROM story WHERE idx = ?`, storyIdx).Scan(&likeCount); err != nil {
 		return false, 0, err
 	}
 
@@ -1196,19 +1487,22 @@ func (p *StoryDB) ToggleStoryLikeTx(storyIdx int, uid uint64) (bool, int, error)
 	return stat == 1, likeCount, nil
 }
 
-func (p *StoryDB) IsFollowed(tid, uid uint64) (int, error) {
-	query := `SELECT COUNT(1) FROM user_follow WHERE uid = ? AND followee_uid = ?`
+func (p *StoryDB) IsFollowed(viewerUID, authorUID uint64) (int, error) {
+	query := `SELECT COUNT(1) FROM user_follow WHERE uid = ? AND followee_uid = ? AND stat = 1`
 	var count int
-	err := p.conndb.QueryRow(query, uid, tid).Scan(&count)
+	err := p.conndb.QueryRow(query, viewerUID, authorUID).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
-	return count, nil
+	if count > 0 {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 func (p *StoryDB) SetFollow(followerUid, followeeUid uint64) (int64, error) {
 	query := `
-		INSERT INTO user_follow (follower_uid, followee_uid, stat, at_create, at_update)
+		INSERT INTO user_follow (uid, followee_uid, stat, at_create, at_update)
 		VALUES (?, ?, 1, NOW(), NOW())
 		ON DUPLICATE KEY UPDATE stat = 1, at_update = NOW()
 	`
@@ -1220,7 +1514,7 @@ func (p *StoryDB) SetFollow(followerUid, followeeUid uint64) (int64, error) {
 }
 
 func (p *StoryDB) SetUnfollow(followerUid, followeeUid uint64) (int64, error) {
-	query := `UPDATE user_follow SET stat = 0, at_update = NOW() WHERE follower_uid = ? AND followee_uid = ?`
+	query := `UPDATE user_follow SET stat = 0, at_update = NOW() WHERE uid = ? AND followee_uid = ? AND stat = 1`
 	result, err := p.conndb.Exec(query, followerUid, followeeUid)
 	if err != nil {
 		return 0, err
@@ -1228,9 +1522,9 @@ func (p *StoryDB) SetUnfollow(followerUid, followeeUid uint64) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (p *StoryDB) GetFollowerCount(uid uint64) (int64, error) {
+func (p *StoryDB) GetFollowerCount(uid uint64) (int, error) {
 	query := `SELECT COUNT(1) FROM user_follow WHERE followee_uid = ? AND stat = 1`
-	var count int64
+	var count int
 	err := p.conndb.QueryRow(query, uid).Scan(&count)
 	if err != nil {
 		return 0, err
@@ -1248,7 +1542,24 @@ func (p *StoryDB) GetFollowingCount(uid uint64) (int64, error) {
 	return count, nil
 }
 
+// accountUserInfoTable qualifies the account table because this connection uses sdb.
+func (p *StoryDB) accountUserInfoTable() (string, error) {
+	if p.cfg == nil {
+		return "", fmt.Errorf("account database configuration is missing")
+	}
+	name, ok := p.cfg.DB["adb"]["name"].(string)
+	if !ok || name == "" {
+		return "", fmt.Errorf("account database name is missing")
+	}
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`.`user_info`", nil
+}
+
 func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptc.FollowUserItem, int, error) {
+	accountTable, err := p.accountUserInfoTable()
+	if err != nil {
+		return nil, 0, err
+	}
+
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -1265,9 +1576,9 @@ func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptc.Follo
 	}
 
 	query := `
-		SELECT uf.follower_uid, COALESCE(u.nick, ''), COALESCE(u.thumb_pic, ''), uf.at_update
+		SELECT uf.uid, COALESCE(u.nick, ''), COALESCE(u.thmb_pic, ''), uf.at_update
 		FROM user_follow uf
-		LEFT JOIN user_info u ON u.uid = uf.follower_uid
+		LEFT JOIN ` + accountTable + ` u ON u.uid = uf.uid
 		WHERE uf.followee_uid = ? AND uf.stat = 1
 		ORDER BY uf.at_update DESC
 		LIMIT ? OFFSET ?
@@ -1293,6 +1604,11 @@ func (p *StoryDB) GetFollowerList(uid uint64, page int, limit int) (*[]ptc.Follo
 }
 
 func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptc.FollowUserItem, int, error) {
+	accountTable, err := p.accountUserInfoTable()
+	if err != nil {
+		return nil, 0, err
+	}
+
 	offset := (page - 1) * limit
 	if offset < 0 {
 		offset = 0
@@ -1301,7 +1617,7 @@ func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptc.FollowUs
 	countQuery := `
 		SELECT COUNT(1)
 		FROM user_follow uf
-		WHERE uf.follower_uid = ? AND uf.stat = 1
+		WHERE uf.uid = ? AND uf.stat = 1
 	`
 	var totalCount int
 	if err := p.conndb.QueryRow(countQuery, uid).Scan(&totalCount); err != nil {
@@ -1309,10 +1625,10 @@ func (p *StoryDB) GetFollowingList(uid uint64, page, limit int) (*[]ptc.FollowUs
 	}
 
 	query := `
-		SELECT uf.followee_uid, COALESCE(u.nick, ''), COALESCE(u.thumb_pic, ''), uf.at_update
+		SELECT uf.followee_uid, COALESCE(u.nick, ''), COALESCE(u.thmb_pic, ''), uf.at_update
 		FROM user_follow uf
-		LEFT JOIN user_info u ON u.uid = uf.followee_uid
-		WHERE uf.follower_uid = ? AND uf.stat = 1
+		LEFT JOIN ` + accountTable + ` u ON u.uid = uf.followee_uid
+		WHERE uf.uid = ? AND uf.stat = 1
 		ORDER BY uf.at_update DESC
 		LIMIT ? OFFSET ?
 	`

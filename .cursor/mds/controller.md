@@ -213,7 +213,8 @@
 ## storyCtl.go - Story Management Controller
 
 ### Story Controller Initialization
-- `NewStoryController()`: Creates StoryController instance with AccountDB, HistoryDB, and StoryDB connections
+- `NewStoryController()`: Account/History/Story/Redis 연결. 리더만 3분마다 `GetStory1000` 결과를 Redis `story:top1000`에 저장 (`initStory`, TTL 30분)
+- `GetCachedStory(viewerUID, ownerUID, page, limit)`: owner별 DB 페이지와 revision으로 캐시를 검증. 미적중 항목·관계 플래그는 일괄 조회하며 원본 캐시와 응답 권한 처리를 분리. SQL은 캐시 전부 적중 시 4회, 전부 미적중 시 7회(인증 미들웨어 제외).
 
 ### Profile Functions (`/story/v01/prf/*`, JWT)
 - `GetPrfInfo()`: `GET /prf/info/{tid}` — 프로필 + 팔로워 수 (`prf_Info`, `flw_cnt`), Swagger=`PrfInfoResp`
@@ -263,7 +264,7 @@
 - `GetCutoutList()`: `GET /cutout/list/{page}/{limit}` — `getPageAndLimit`, 응답 `{msg,total_count,list}`, Swagger=`CutoutListResp`
 - `GetPurchaseList()`: `GET /pcs/list/{page}/{limit}` — JWT 본인 `str_pcs`↔`story` JOIN, `at_create DESC`, 응답 `{msg,total_count,list(StoryListResp[])}`
 - `BuyStory()`: `POST /buy/{idx}` — JWT 본인을 `pcs_uid`로 `str_pcs` INSERT (결제 TODO)
-- `UpdateStoryViewCnt()`: `POST /view/update/{idx}` — `qt_view` 원자적 +1, 응답 `{msg:success}`
+- `UpdateViewHistory()`: `POST /view/update/{idx}` — Redis 조회 기록이 없으면 `qt_view` +1 후 24시간 키 저장, 있으면 건너뜀 (`updated` 1/0)
 - `GetStoryViewCount()`: `GET /view/count/{idx}` — `qt_view` 조회, 응답 `{msg,count}`
 - `GetStoryLikeCount()`: `GET /like/count/{idx}` — `qt_good` 조회, 응답 `{msg,count}`
 - `UpdateStoryLike()`: `POST /like/toggle` — body `{story_idx,uid}`, `ToggleStoryLikeTx`, 응답 `{msg,liked,like_count}` (block 검사 비활성)
@@ -488,3 +489,12 @@
 - 방 준비: `POST /chat/v01/room`이 라우터에 등록되어 있으면 JWT와 함께 시도하고, 없거나 실패 시 `ensureDMRoom`과 동일한 `min(uid)_max(uid)` 규칙으로 `roomId` 계산
 - REST: `GET /chat/v01/rooms`, `GET /inbox/v01/unread`는 Redis 등록 JWT 필수; 기본 서버 주소 예시는 `localhost:8080` (`conf/config.toml`의 `port`와 맞출 것)
 - **쪽지함 API**: `GetChatRooms` → MySQL `dm_room` 행만 조회하므로, 상대 WS 접속만으로는 목록이 비어 있을 수 있음(첫 `text-message`로 `ensureDMRoom` 실행 후 DB 반영). 테스트 페이지는 DB 미등록 시 로컬 준비 방을 점선으로 합쳐 표시하고, `msg-ack` 후 목록을 다시 불러옴
+
+### Resource limits (2026-10-27)
+
+- Pagination: page >= 1, limit 1..100, integer-overflow-safe offsets.
+- Signaling and DM: each allows at most 25,000 reserved WebSocket slots, including handshakes. Rooms do not contribute to the connection counter. This is a configured ceiling, not measured capacity.
+- Send queues: signaling 2 MiB, DM 512 KiB payload budget per connection, plus the existing 256-message limit.
+- Waiting-room notifications reuse the existing messages and snapshot recipients once per burst of up to 64 events. The bounded advisory queue can drop events under overload; clients can refresh get-user-list.
+- DM presence operations use 256 UID-striped locks; Redis I/O no longer holds the global client map lock.
+- Resource logs once per minute include heap, GC, goroutines, live/reserved connections, queue depths and story DB pool waits. They are debug-level, so they appear only when the server mode is `dev`.

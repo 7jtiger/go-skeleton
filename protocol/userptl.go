@@ -213,7 +213,7 @@ type PrfInfoResp struct {
 
 // PrfUpdData is UpdatePrfInfo response payload (data field).
 type PrfUpdData struct {
-	Msg string `json:"msg" example:"success"`
+	Msg string `json:"msg" example:"ok"`
 }
 
 // PrfUpdResp is full API envelope for UpdatePrfInfo Swagger (@Success).
@@ -238,10 +238,10 @@ type PrfAssetsResp struct {
 }
 
 type CreateStoryReq struct {
-	Stat  int         `json:"stat" example:"1"`       // 0=pub, 1=private, 2=limitrivate, 3=rsv, 4=del
-	Sbody string      `json:"sbody" example:"스토리 본문"` // 최대 512자
-	Price int         `json:"price" example:"10"`     // 스토리 가격
-	Media StoryStrImg `json:"media"`                  // story.str_img와 동일 슬롯 맵
+	Stat  int         `json:"stat" example:"0" enums:"0,1,2,3,4,5"` // 0=pub, 1=flw, 2=pay, 3=prv, 4=del, 5=rsv; 6=all(query only)
+	Sbody string      `json:"sbody" example:"스토리 본문"`               // 최대 512자
+	Price int         `json:"price" example:"10"`                   // 스토리 가격
+	Media StoryStrImg `json:"media"`                                // story.str_img와 동일 슬롯 맵
 }
 
 // Story media type constants for story.str_img slot objects
@@ -250,9 +250,9 @@ const (
 	StoryMediaTypeVdo = "vdo"
 )
 
-// StoryStrImg is story.str_img JSON shape (max 5 slots, keys "1".."5"):
+// StoryStrImg is story.str_img JSON shape (max 5 slots; empty for text-only stories, keys "1".."5"):
 //
-//	{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb":"..."},"3":{"type":"img","url":"..."}}
+//	{"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...m3u8","thumb1":"..."},"3":{"type":"img","url":"..."}}
 type StoryStrImg map[string]StoryMediaItem
 
 // StoryMediaItem is one slot in story.str_img (img | vdo).
@@ -282,7 +282,7 @@ type PrfPicListResp struct {
 // PrfPicUploadData is UploadPrfPic response payload (data field).
 // pics 배열 순서 = sub_pic1..N 슬롯.
 type PrfPicUploadData struct {
-	Msg  string       `json:"msg" example:"success"`
+	Msg  string       `json:"msg" example:"ok"`
 	Pics []PrfPicInfo `json:"pics"`
 }
 
@@ -294,7 +294,8 @@ type PrfPicUploadResp struct {
 }
 
 // PrfStoryListsData is GetPrfStoryLists response payload (data field).
-// Keys are story idx (JSON object keys). Latest stories LIMIT 4.
+// Keys are story idx (JSON object keys). Up to four readable media stories;
+// text-only and locked entries are skipped before filling the result.
 type PrfStoryListsData struct {
 	StrImgs   map[string]string `json:"str_imgs" example:"{\"12\":\"https://imagedelivery.net/.../public\"}"`
 	StrThmbls map[string]string `json:"str_thmbls" example:"{\"15\":\"https://imagedelivery.net/.../public\"}"`
@@ -318,7 +319,7 @@ type PrfPicWaitingItem struct {
 
 // PrfPicWaitingListData is GetPrfPicWaitingList response payload (data field).
 type PrfPicWaitingListData struct {
-	Msg        string              `json:"msg" example:"success"`
+	Msg        string              `json:"msg" example:"ok"`
 	TotalCount int                 `json:"total_count" example:"2"`
 	List       []PrfPicWaitingItem `json:"list"`
 }
@@ -338,8 +339,8 @@ type SetPrfPicStatReq struct {
 
 // SetPrfPicStatData is SetPrfPicStat response payload (data field).
 type SetPrfPicStatData struct {
-	Msg      string `json:"msg" example:"success"`
-	Affected int64  `json:"affected" example:"1"` // 0이면 대상 없음/이미 처리됨
+	Msg string `json:"msg" example:"ok"`
+	Res int64  `json:"res" example:"1"` // 0이면 대상 없음/이미 처리됨
 }
 
 // SetPrfPicStatResp is full API envelope for SetPrfPicStat Swagger (@Success).

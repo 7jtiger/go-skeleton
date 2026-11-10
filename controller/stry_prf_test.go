@@ -62,10 +62,10 @@ func Test_GetPrfPicList(t *testing.T) {
 	// {"result":0,"resultString":"Success","data":{"1":{"url":"https://imagedelivery.net/.../public","stat":3},"2":{"url":"https://imagedelivery.net/.../public","stat":3}}}
 }
 
-// Test_GetPrfStoryLists GET /story/v01/prf/story/lists/:tid
+// Test_GetPrfStoryLists GET /story/v01/prf/story/:tid
 func Test_GetPrfStoryLists(t *testing.T) {
 	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/prf/story/lists/" + prfTestUID
+	qurl := "/story/v01/prf/story/" + prfTestUID
 
 	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
 	if err != nil {
@@ -90,7 +90,7 @@ func Test_UpdatePrfInfo(t *testing.T) {
 	}
 
 	fmt.Println(res)
-	//{"result":0,"resultString":"Success","data":{"msg":"success"}}
+	//{"result":0,"resultString":"Success","data":{"msg":"ok"}}
 }
 
 // Test_DeletePrfPic POST /story/v01/prf/pic/delete/:idx
@@ -187,7 +187,7 @@ func Test_UploadPrfPic(t *testing.T) {
 
 	fmt.Printf("Status Code: %d\n", resp.StatusCode)
 	fmt.Printf("Response: %s\n", string(bodyBytes))
-	//Response: {"result":0,"resultString":"Success","data":{"msg":"success"}}
+	//Response: {"result":0,"resultString":"Success","data":{"msg":"ok"}}
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		t.Fatalf("JWT auth failed: %s", string(bodyBytes))

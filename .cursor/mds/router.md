@@ -144,7 +144,7 @@
 - `GET /story/v01/cutout/list/:page/:limit`: 활성 cutout 목록 (응답 `CutoutListResp`)
 - `GET /story/v01/pcs/list/:page/:limit`: JWT 본인이 구매한 스토리 목록 (`str_pcs` → `story`, 최신순)
 - `POST /story/v01/buy/:idx`: JWT 본인이 스토리 구매 기록 (`str_pcs` INSERT, 결제 TODO)
-- `POST /story/v01/view/update/:idx`: 스토리 조회수(`qt_view`) +1
+- `POST /story/v01/view/update/:idx`: 스토리 조회수(`qt_view`) +1. Redis `story:view:{uid}:{idx}`가 있으면 24시간 동안 건너뜀 (`UpdateViewHistory`)
 - `GET /story/v01/view/count/:idx`: 스토리 조회수(`qt_view`) 조회
 - `GET /story/v01/like/count/:idx`: 스토리 좋아요 수(`qt_good`) 조회
 - `POST /story/v01/block/create`: Block user endpoint

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	ptc "ms-gateway/protocol"
 )
@@ -17,7 +18,7 @@ const MaxStoryMediaSlots = 5
 //
 //	{
 //	  "1": {"type":"img","url":"https://imagedelivery.net/.../pic1/public"},
-//	  "2": {"type":"vdo","url":"https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8","thumb":"https://imagedelivery.net/.../thumb2/public"},
+//	  "2": {"type":"vdo","url":"https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8","thumb1":"https://imagedelivery.net/.../thumb2/public"},
 //	  "3": {"type":"img","url":"https://imagedelivery.net/.../pic3/public"}
 //	}
 
@@ -59,7 +60,7 @@ func LoadStoryStrImg(raw json.RawMessage) (ptc.StoryStrImg, error) {
 */
 
 // BuildStrImgForDB builds canonical story.str_img JSON for DB storage.
-// Slots are renumbered 1..N; img keeps type+url, vdo keeps type+url+thumb.
+// Slots are renumbered 1..N; img keeps type+url, vdo keeps type+url+thumb1.
 func BuildStrImgForDB(media ptc.StoryStrImg) (json.RawMessage, int, error) {
 	if _, err := ValidateStoryMedia(media); err != nil {
 		return nil, 0, err
@@ -95,8 +96,11 @@ func BuildStrImgForDB(media ptc.StoryStrImg) (json.RawMessage, int, error) {
 	return raw, MediaMType(canonical), nil
 }
 
-// MediaMType returns story.type: 0=img only, 1=vdo only, 2=both.
+// MediaMType returns story.type: 0=img only, 1=vdo only, 2=txt, 3=mixed.
 func MediaMType(media ptc.StoryStrImg) int {
+	if len(media) == 0 {
+		return 2
+	}
 	hasImg, hasVdo := false, false
 	for _, item := range media {
 		switch item.Type {
@@ -108,7 +112,7 @@ func MediaMType(media ptc.StoryStrImg) int {
 	}
 	switch {
 	case hasImg && hasVdo:
-		return 2
+		return 3
 	case hasVdo:
 		return 1
 	default:
@@ -116,12 +120,11 @@ func MediaMType(media ptc.StoryStrImg) int {
 	}
 }
 
-// ValidateStoryMedia checks StoryStrImg before save / upload response (1..5 slots).
-// ValidateStoryMedia checks StoryStrImg before save/upload response (1..5 slots)
-// Returns: 0 (img only), 1 (vdo only), 2 (both), and error if invalid
+// ValidateStoryMedia checks media slots; an empty map denotes a text story.
+// Returns: 0 (img only), 1 (vdo only), 2 (text), 3 (mixed), and error if invalid
 func ValidateStoryMedia(media ptc.StoryStrImg) (int, error) {
 	if len(media) == 0 {
-		return 0, fmt.Errorf("media is required")
+		return 2, nil
 	}
 	if len(media) > MaxStoryMediaSlots {
 		return 0, fmt.Errorf("media allows at most %d items", MaxStoryMediaSlots)
@@ -144,7 +147,7 @@ func ValidateStoryMedia(media ptc.StoryStrImg) (int, error) {
 		case ptc.StoryMediaTypeVdo:
 			hasVdo = true
 			if item.Thumb == "" {
-				return 0, fmt.Errorf("media[%s].thumb is required for vdo", k)
+				return 0, fmt.Errorf("media[%s].thumb1 is required for vdo", k)
 			}
 		default:
 			return 0, fmt.Errorf("media[%s].type must be img or vdo", k)
@@ -154,7 +157,7 @@ func ValidateStoryMedia(media ptc.StoryStrImg) (int, error) {
 
 	switch {
 	case hasImg && hasVdo:
-		return 2, nil
+		return 3, nil
 	case hasVdo:
 		return 1, nil
 	default:
@@ -163,6 +166,7 @@ func ValidateStoryMedia(media ptc.StoryStrImg) (int, error) {
 }
 
 // GetFirstPicUrl returns representative list URL and type (0=img, 1=vdo).
+// Call only with media already filtered by viewer access. This parser does not authorize.
 func GetFirstPicUrl(strImg string) (*ptc.StoryMediaItem, int, error) {
 	// media, err := ParseStoryMedia(strImg)
 	// var StoryMediaItem
@@ -220,4 +224,34 @@ func ReIdxAfterDel(media ptc.StoryStrImg, delKey string) ptc.StoryStrImg {
 		out[strconv.Itoa(i+1)] = media[strconv.Itoa(n)]
 	}
 	return out
+}
+
+// Owner-scoped profile summaries use the same visibility and content policy as detail lists.
+// calcStoryAge converts profile birth and age to the response age.
+// birth is YYYY-MM-DD; prfAge is an offset like "-2", "2", "+3", or "0".
+func calcStoryAge(birth, prfAge string) string {
+	if birth == "" {
+		return ""
+	}
+	born, err := time.Parse("2006-01-02", birth)
+	if err != nil {
+		return ""
+	}
+
+	now := time.Now()
+	age := now.Year() - born.Year()
+	if now.Month() < born.Month() || (now.Month() == born.Month() && now.Day() < born.Day()) {
+		age--
+	}
+
+	adj := 0
+	if prfAge != "" {
+		n, err := strconv.Atoi(prfAge)
+		if err != nil {
+			return ""
+		}
+		adj = n
+	}
+
+	return strconv.Itoa(age + adj)
 }

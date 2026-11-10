@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	log "ms-gateway/common/logger"
 	"ms-gateway/common/utils"
+	"ms-gateway/common/version"
 	"ms-gateway/conf"
 	"ms-gateway/models"
 	"ms-gateway/protocol"
@@ -53,26 +54,46 @@ func NewAccountController(ctl *Controller, rep *models.Repositories) (*AccountCo
 	return r, nil
 }
 
-// @Summary get version
-// @Description get version
-// @Tags Server
-// @Produce json
-// @Success 200 {object} map[string]interface{} "version info"
-// @Router /serv/v01/version [get]
+// GetVersion godoc
+// @Summary      서버 버전 조회
+// @Description  서버 버전 조회 API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: 빌드 및 실행 중인 Go 버전 정보를 조회합니다.
+// @Description
+// @Description  **응답**: 최상위 version, go_version, revision, modified 및 선택적 빌드 정보.
+// @Tags         Server
+// @Accept       json
+// @Produce      json
+// @Success      200 {object} map[string]interface{} "최상위 version, go_version, revision, modified 및 선택적 빌드 정보."
+// @Router       /serv/v01/version [get]
+// @Example Request: GET /serv/v01/version
 func (p *AccountController) GetVersion(c *gin.Context) {
-	p.ctl.SimpleRespOK(c, gin.H{"version": "0.9.1"})
+	p.ctl.SimpleRespOK(c, version.Info())
 }
 
-// @Summary check user id
-// @Description When /acc/v01/check/:id is called, it returns "ok" on success and a message on failure.
-// @Description id : user id
-// @Tags user
-// @Accept json
-// @Produce json
-// @Success 200 {object} protocol.OkResp "result: ok"
-// @Failure 400 {object} protocol.RespHeader "result: request failed"
-// @Failure 14 {object} protocol.RespHeader "result: ID is duplicate"
-// @Router /acc/v01/check/:id [get]
+// CheckID godoc
+// @Summary      아이디 중복 확인
+// @Description  아이디 중복 확인 API입니다.
+// @Description
+// @Description  **요청**: path id: 확인할 값.
+// @Description
+// @Description  **처리**: 사용 가능하면 msg=ok입니다. **현재 제한**: 중복 시 비표준 HTTP 상태 14를 전달하여 net/http 응답 처리에 실패할 수 있습니다. 409 응답으로 구현되어 있지 않습니다.
+// @Description
+// @Description  **응답**: 사용 가능할 때 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "계정 아이디"
+// @Success      200 {object} map[string]interface{} "사용 가능할 때 최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      409 {object} protocol.RespHeader "이미 사용 중인 ID"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /acc/v01/check/{id} [get]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: GET /acc/v01/check/example
 func (p *AccountController) CheckID(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -88,16 +109,26 @@ func (p *AccountController) CheckID(c *gin.Context) {
 	}
 }
 
-// @Summary check user email
-// @Description When /acc/v01/ckemail/:email is called, it returns "ok" on success and a message on failure.
-// @Description email : user email
-// @Tags user
-// @Accept json
-// @Produce json
-// @Success 200 {object} protocol.OkResp "result: ok"
-// @Failure 400 {object} protocol.RespHeader "result: request failed"
-// @Failure 15 {object} protocol.RespHeader "result: email is duplicate"
-// @Router /acc/v01/ckemail/:email [get]
+// CheckEmail godoc
+// @Summary      이메일 중복 확인
+// @Description  이메일 중복 확인 API입니다.
+// @Description
+// @Description  **요청**: path email: 확인할 값.
+// @Description
+// @Description  **처리**: 사용 가능하면 msg=ok입니다. **현재 제한**: 중복 시 비표준 HTTP 상태 15를 전달하여 net/http 응답 처리에 실패할 수 있습니다. 409 응답으로 구현되어 있지 않습니다.
+// @Description
+// @Description  **응답**: 사용 가능할 때 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        email path string true "이메일"
+// @Success      200 {object} map[string]interface{} "사용 가능할 때 최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /acc/v01/ckemail/{email} [get]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: GET /acc/v01/ckemail/user@example.com
 func (p *AccountController) CheckEmail(c *gin.Context) {
 	email := c.Param("email")
 	if email == "" {
@@ -112,48 +143,28 @@ func (p *AccountController) CheckEmail(c *gin.Context) {
 	}
 }
 
-// @Summary Register a new user
-// @Description Calls /acc/v01/regist to register a new user. Returns "success" message on success.
-// @Description Required fields: id, pw (hashed), name, gender (1=male, 0=female), birth (YYYY-MM-DD format), area, email
-// @Description Optional fields: did (device ID), dos (device OS)
-// @Description System generates: uid (unique user ID), nick (default nickname), main_pic (default profile image), thmb_pic (default thumbnail), sp_intro (default introduction)
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param request body protocol.RegistReq true "register request data"
-// @Success 200 {object} protocol.OkResp "result: success"
-// @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 104 {object} protocol.RespHeader "Failed Register User"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 14 {object} protocol.RespHeader "ID is duplicate"
-// @Failure 15 {object} protocol.RespHeader "Email is duplicate"
-// @Router /acc/v01/regist [post]
-// @Example request:
-//
-//	{
-//	  "id": "testuser123",
-//	  "pw": "hashedpassword123",
-//	  "name": "홍길동",
-//	  "email": "test@example.com",
-//	  "gender": 1,
-//	  "birth": "1990-01-01",
-//	  "area": "서울",
-//	  "did": "device_token_12345",
-//	  "dos": "android"
-//	}
-//
-// @Example response (success):
-// {"msg": "success" }
-//
-// @Example response (ID duplicate):
-// {"result": 14, "msg": "ID is already in use."}
-//
-// @Example response (Email duplicate):
-// {"result": 15,"msg": "Email is already in use."}
-//
-// @Example response (missing parameter):
-// {"result": 102, "msg": "all fields are required" }
+// RegistUserInfo godoc
+// @Summary      회원 가입
+// @Description  회원 가입 API입니다.
+// @Description
+// @Description  **요청**: 실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화 후 RegistReq의 id/pw/area/name/birth/email 등 필드를 검증합니다.
+// @Description
+// @Description  **처리**: AesDecrypt 미들웨어가 JSON을 복호화합니다. 서버 UID·닉네임 생성, 비밀번호 해시와 초기 정보를 저장합니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body protocol.AesDataForm true "실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화 후 RegistReq의 id/pw/area/name/birth/email 등 필드를 검증합니다."
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /acc/v01/regist [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /acc/v01/regist
+// @Example Request Body: {"data":"<AES-GCM encrypted RegistReq>"}
+// @x-request-example {"data":"<AES-GCM encrypted RegistReq>"}
 func (p *AccountController) RegistUserInfo(c *gin.Context) {
 	var req ptl.RegistReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -204,7 +215,7 @@ func (p *AccountController) RegistUserInfo(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
 func (p *AccountController) getUid() uint64 {
@@ -224,44 +235,26 @@ func (p *AccountController) getUid() uint64 {
 	}
 }
 
-// @Summary Login a user
-// @Description Calls /acc/v01/login to login a user. Returns JWT token, user ID, and WebRTC config on success. Also sets x-meta header with user metadata.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body protocol.LoginReq true "Login request data {id : xxx, pw : hash}"
-// @Success 200 {object} protocol.LoginUserResp "Login success with token, uid, and webrtc config"
-// @Header 200 {string} x-meta "User metadata in format: uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro"
-// @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 104 {object} protocol.RespHeader "Failed to login user"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /acc/v01/login [post]
-// @Example request:// {//   "id": "test123",//   "pw": "mypassword123"// }
-//
-// @Example response (success):
-//
-//	{
-//	  "msg": "success",
-//	  "acTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-//	  "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-//	  "uid": "77665817",
-//	  "wrtc": {
-//	    "iceServers": [
-//	      {
-//	        "urls": ["stun:stun.l.google.com:19302"]
-//	      }
-//	    ]
-//	  }
-//	}
-//
-// @Example response (failure):
-// {"result": 104,"msg": "failed to login user","data": null}
-//
-// @Note x-meta header format:
-// uid/sid/did/nick/gender/age/area/email/main_pic/thmb_pic/sp_intro
-// Example: "77665817/test123/device123/nickname/1/25/Seoul/test@email.com/pic.jpg/thumb.jpg/Hello!"
+// LoginUser godoc
+// @Summary      로그인
+// @Description  로그인 API입니다.
+// @Description
+// @Description  **요청**: 실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화된 LoginReq는 id, pw가 필요합니다.
+// @Description
+// @Description  **처리**: 로그인 검증 후 JWT 발급·Redis 저장, WebRTC 설정과 대기실 정보를 구성합니다.
+// @Description
+// @Description  **응답 data**: LoginUserResp (msg, acTok, refTok, uid, meta, wrtc).
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body protocol.AesDataForm true "실제 body는 AesDataForm: {data: AES-GCM 암호문}. 복호화된 LoginReq는 id, pw가 필요합니다."
+// @Success      200 {object} protocol.RespDataHeader{data=protocol.LoginUserResp} "data: LoginUserResp (msg, acTok, refTok, uid, meta, wrtc)."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Router       /acc/v01/login [post]
+// @Example Request: POST /acc/v01/login
+// @Example Request Body: {"data":"<AES-GCM encrypted LoginReq>"}
+// @x-request-example {"data":"<AES-GCM encrypted LoginReq>"}
 func (p *AccountController) LoginUser(c *gin.Context) {
 	var req ptl.LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -305,7 +298,7 @@ func (p *AccountController) LoginUser(c *gin.Context) {
 
 	uidStr := strconv.FormatUint(user.Uid, 10)
 	responseData := ptl.LoginUserResp{
-		Message: "success",
+		Message: "ok",
 		// MetaHeader:   "mStr",
 		MetaHeader:   "",
 		AccessToken:  acTok,
@@ -370,39 +363,28 @@ func (p *AccountController) genLoginUserToken(user *ptl.UserInfoResp) (string, s
 	return acTok, refTok, nil
 }
 
-// @Summary Refresh access token
-// @Description Reissues access and refresh token using a valid refresh token.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param Authorization header string false "Bearer refresh_token"
-// @Param data body protocol.RefreshTokenReq false "Refresh token payload { refTok: xxx }"
-// @Success 200 {object} protocol.RespDataHeader{data=protocol.RefreshTokenResp}
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Invalid refresh token"
-// @Router /acc/v01/refresh [post]
-// @xample 요청 예시
-// POST /acc/v01/refresh
-// Header:
-//
-//	Authorization: Bearer <refresh_token>
-//
-// Body:
-//
-//	{
-//	    "refTok": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2ODg4ODg4ODgsInVzZXJpZCI6IjEyMzQ1In0.sM4wL5WOEV2TqtW06R1vGuFsxWXhYMrh6oZ7PWnykJc"
-//	}
-//
-// @xample 응답 예시
-// HTTP/1.1 200 OK
-// Content-Type: application/json
-//
-//	{
-//	    "msg": "success",
-//	    "acTok": "new-access-token-here",
-//	    "refTok": "new-refresh-token-here",
-//	    "uid": "12345"
-//	}
+// RefreshToken godoc
+// @Summary      인증 토큰 재발급
+// @Description  인증 토큰 재발급 API입니다.
+// @Description
+// @Description  **요청**: Authorization: Bearer refresh_token 또는 body RefreshTokenReq의 refTok. 유효한 형식의 헤더 토큰이 우선합니다.
+// @Description
+// @Description  **처리**: refresh JWT와 Redis 저장값 검증 후 access/refresh 토큰을 재발급합니다.
+// @Description
+// @Description  **응답 data**: RefreshTokenResp (msg, acTok, refTok, uid).
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string false "Bearer refresh_token (body보다 우선)"
+// @Param        request body protocol.RefreshTokenReq false "Authorization: Bearer refresh_token 또는 body RefreshTokenReq의 refTok. 유효한 형식의 헤더 토큰이 우선합니다."
+// @Success      200 {object} protocol.RespDataHeader{data=protocol.RefreshTokenResp} "data: RefreshTokenResp (msg, acTok, refTok, uid)."
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /acc/v01/refresh [post]
+// @Example Request: POST /acc/v01/refresh
+// @Example Request Body: {"refTok":"<refresh_token>"}
+// @x-request-example {"refTok":"<refresh_token>"}
 func (p *AccountController) RefreshToken(c *gin.Context) {
 	refTok := extractRefreshToken(c)
 	if refTok == "" {
@@ -452,7 +434,7 @@ func (p *AccountController) RefreshToken(c *gin.Context) {
 	// c.Header("x-meta", metaHeader)
 
 	resp := ptl.RefreshTokenResp{
-		Message:      "success",
+		Message:      "ok",
 		AccessToken:  acTok,
 		RefreshToken: newRefTok,
 		UID:          uidStr,
@@ -500,17 +482,28 @@ func extractRefreshToken(c *gin.Context) string {
 	return ""
 }
 
-// @Summary Logout user
-// @Description Logout user
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param Authorization header string false "Bearer access_token"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 401 {object} protocol.RespHeader "Unauthorized"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /inserv/v01/logout [post]
+// LogoutUser godoc
+// @Summary      로그아웃
+// @Description  로그아웃 API입니다.
+// @Description
+// @Description  **요청**: JWT Authorization 헤더, body 없음.
+// @Description
+// @Description  **처리**: JWT 저장값과 대기실 정보를 삭제하고 로그아웃 상태를 갱신합니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /inserv/v01/logout [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /inserv/v01/logout
 func (p *AccountController) LogoutUser(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -555,21 +548,33 @@ func (p *AccountController) LogoutUser(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Leave a user
-// @Description Performs user leave. Returns "success" message on success.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "Bad request"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 113 {object} protocol.RespHeader "Failed to leave user"
-// @Router /inserv/v01/leave [post]
+// LeaveUser godoc
+// @Summary      회원 탈퇴
+// @Description  회원 탈퇴 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: id (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: body id로 탈퇴를 처리합니다. 토큰 삭제는 현재 구현되어 있지 않습니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        request body object{id=string} true "필수 문자열 필드: id"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Router       /inserv/v01/leave [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /inserv/v01/leave
+// @Example Request Body: {"id":"example"}
+// @x-request-example {"id":"example"}
 func (p *AccountController) LeaveUser(c *gin.Context) {
 	var req struct {
 		ID string `json:"id" binding:"required"`
@@ -598,21 +603,31 @@ func (p *AccountController) LeaveUser(c *gin.Context) {
 	// delete jwt
 	// delete chat room
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Find user ID
-// @Description Find user ID by name and birth date
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 GCM mode {name : xxx, birth : 1990-01-01, gener : 1}"
-// @Success 200 {object} protocol.RespDataHeader{data=[]string}
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 111 {object} protocol.RespHeader "Failed to find id"
-// @Router /acc/v01/fnid [post]
+// FindID godoc
+// @Summary      아이디 찾기
+// @Description  아이디 찾기 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: name, birth, gender (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: 입력 정보로 계정을 조회합니다.
+// @Description
+// @Description  **응답 data**: ids.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body object{name=string,birth=string,gender=string} true "필수 문자열 필드: name, birth, gender"
+// @Success      200 {object} protocol.RespDataHeader{data=[]string} "아이디 문자열 배열."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Router       /acc/v01/fnid [post]
+// @Example Response: {"result":0,"resultString":"Success","data":[]}
+// @x-response-example {"result":0,"resultString":"Success","data":[]}
+// @Example Request: POST /acc/v01/fnid
+// @Example Request Body: {"name":"홍길동","birth":"1990-01-01","gender":"1"}
+// @x-request-example {"name":"홍길동","birth":"1990-01-01","gender":"1"}
 func (p *AccountController) FindID(c *gin.Context) {
 	var req struct {
 		Name   string `json:"name" binding:"required"`
@@ -640,20 +655,27 @@ func (p *AccountController) FindID(c *gin.Context) {
 	p.ctl.SendDataResponse(c, http.StatusOK, ids)
 }
 
-// @Summary Find user PW
-// @Description Find user password by id and birth date
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 {sid : xxx, name: xxx, birth 1990-01-018, gender : 1}"
-// @Success 200 {object} protocol.OkResp
-// @Success 200 {object} protocol.RespDataHeader{data=object} "success with {msg : ok, email : xxx}"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 104 {object} protocol.RespHeader "Failed Decrypt"
-// @Failure 106 {object} protocol.RespHeader "Failed Parse JSON"
-// @Failure 102 {object} protocol.RespHeader "All fields are required"
-// @Failure 112 {object} protocol.RespHeader "Failed to find pw"
-// @Router /acc/v01/fnpw [post]
+// FindPW godoc
+// @Summary      비밀번호 찾기
+// @Description  비밀번호 찾기 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: sid, name, birth, gender (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: 입력 정보로 이메일을 조회합니다.
+// @Description
+// @Description  **응답**: 최상위 msg, email.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body object{sid=string,name=string,birth=string,gender=string} true "필수 문자열 필드: sid, name, birth, gender"
+// @Success      200 {object} object{msg=string,email=string} "최상위 msg, email."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Router       /acc/v01/fnpw [post]
+// @Example Response: {"msg":"ok","email":"user@example.com"}
+// @x-response-example {"msg":"ok","email":"user@example.com"}
+// @Example Request: POST /acc/v01/fnpw
+// @Example Request Body: {"sid":"example","name":"홍길동","birth":"1990-01-01","gender":"1"}
+// @x-request-example {"sid":"example","name":"홍길동","birth":"1990-01-01","gender":"1"}
 func (p *AccountController) FindPW(c *gin.Context) {
 	// Email string `json:"email" binding:"required"`
 	var req struct {
@@ -760,21 +782,30 @@ func (p *AccountController) ReqAuthOTP(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Verify OTP authentication code
-// @Description Verify OTP code for authentication
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 {email : xxx, otp : xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 116 {object} protocol.RespHeader "Failed to verify OTP"
-// @Router /acc/v01/verifyotp [post]
+// VerifyOTP godoc
+// @Summary      OTP 확인
+// @Description  OTP 확인 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: email, otp (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: 이메일 OTP를 검증합니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body object{email=string,otp=string} true "필수 문자열 필드: email, otp"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Router       /acc/v01/verifyotp [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /acc/v01/verifyotp
+// @Example Request Body: {"email":"user@example.com","otp":"<otp>"}
+// @x-request-example {"email":"user@example.com","otp":"<otp>"}
 func (p *AccountController) VerifyOTP(c *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required"`
@@ -804,21 +835,30 @@ func (p *AccountController) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Change user password
-// @Description Change the password of a user
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 {id : xxx, uid : xxx, email : xxx, pw : hash, newpw : hash}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 109 {object} protocol.RespHeader "Failed to change pw"
-// @Router /acc/v01/cngpw [post]
+// ChangePW godoc
+// @Summary      비밀번호 변경
+// @Description  비밀번호 변경 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: id, uid, email, pw, newpw (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: 전달된 계정 정보와 기존 비밀번호로 변경을 처리합니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Param        request body object{id=string,uid=string,email=string,pw=string,newpw=string} true "필수 문자열 필드: id, uid, email, pw, newpw"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Router       /acc/v01/cngpw [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /acc/v01/cngpw
+// @Example Request Body: {"id":"example","uid":"4033287471439576593","email":"user@example.com","pw":"<current-password>","newpw":"<new-password>"}
+// @x-request-example {"id":"example","uid":"4033287471439576593","email":"user@example.com","pw":"<current-password>","newpw":"<new-password>"}
 func (p *AccountController) ChangePW(c *gin.Context) {
 	var req struct {
 		ID    string `json:"id" binding:"required"`
@@ -846,21 +886,33 @@ func (p *AccountController) ChangePW(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Modify user information
-// @Description Modify user information. The 'cate' field should be one of "pw, area, nick, email" indicating the target to be changed, and the 'value' field should contain the new value for the target.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx, uid : xxx, email : xxx, cate : xxx, value : xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 104 {object} protocol.RespHeader "Failed to change pw"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Router /inserv/v01/modify [post]
+// ModifyUserInfo godoc
+// @Summary      회원 정보 변경
+// @Description  회원 정보 변경 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: id, uid, email, cate, value (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: JWT 인증 후 body의 uid와 수정 필드를 전달합니다. 이 핸들러는 uid를 JWT 값으로 덮어쓰지 않습니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        request body object{id=string,uid=string,email=string,cate=string,value=string} true "필수 문자열 필드: id, uid, email, cate, value"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Router       /inserv/v01/modify [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /inserv/v01/modify
+// @Example Request Body: {"id":"example","uid":"4033287471439576593","email":"user@example.com","cate":"nick","value":"새 닉네임"}
+// @x-request-example {"id":"example","uid":"4033287471439576593","email":"user@example.com","cate":"nick","value":"새 닉네임"}
 func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 	var req struct {
 		ID    string `json:"id" binding:"required"`
@@ -889,19 +941,29 @@ func (p *AccountController) ModifyUserInfo(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Get user information
-// @Description Get user from sid information
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param id path string true "User ID"
-// @Success 200 {object} protocol.UserInfoResp "User information"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 114 {object} protocol.RespHeader "Failed to get user info"
-// @Router /inserv/v01/info/{id} [get]
+// GetSidUserInfo godoc
+// @Summary      아이디로 회원 조회 (현재 응답 제한)
+// @Description  아이디로 회원 조회 (현재 응답 제한) API입니다.
+// @Description
+// @Description  **요청**: path id: 계정 아이디.
+// @Description
+// @Description  **처리**: 조회 결과 객체를 문자열 전용 SendResponse에 전달하므로 조회 성공 후에도 500을 반환합니다.
+// @Description
+// @Description  **응답**: 현재 정상 회원 응답 없음. 오류 헤더.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        id path string true "계정 아이디"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /inserv/v01/info/{id} [get]
+// @Example Request: GET /inserv/v01/info/example
 func (p *AccountController) GetSidUserInfo(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -918,16 +980,27 @@ func (p *AccountController) GetSidUserInfo(c *gin.Context) {
 	p.ctl.SendResponse(c, http.StatusOK, user)
 }
 
-// @Summary Get user information by UID
-// @Description 주어진 UID로 사용자의 정보를 조회합니다.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param tid path string true "Target User UID"
-// @Success 200 {object} protocol.UserInfoResp "User information"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 114 {object} protocol.RespHeader "Failed to get user info"
-// @Router /inserv/v01/uinfo/{tid} [get]
+// GetUidFromInfo godoc
+// @Summary      UID로 회원 정보 조회
+// @Description  UID로 회원 정보 조회 API입니다.
+// @Description
+// @Description  **요청**: path tid: 대상 UID.
+// @Description
+// @Description  **처리**: 대상 회원 정보를 조회합니다.
+// @Description
+// @Description  **응답 data**: UserInfoResp.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Success      200 {object} protocol.RespDataHeader{data=protocol.UserInfoResp} "data: UserInfoResp."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Router       /inserv/v01/uinfo/{tid} [get]
+// @Example Request: GET /inserv/v01/uinfo/4033287471439576593
 func (p *AccountController) GetUidFromInfo(c *gin.Context) {
 	tid := c.Param("tid")
 	if tid == "" {
@@ -950,18 +1023,31 @@ func (p *AccountController) GetUidFromInfo(c *gin.Context) {
 	p.ctl.SendDataResponse(c, http.StatusOK, user)
 }
 
-// @Summary Delete user
-// @Description Delete user, but just update user status to 4
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param data body object true "Encrypted data by aes256 GCM mode {id : xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message"
-// @Failure 102 {object} protocol.RespHeader "Parameter is missing"
-// @Failure 106 {object} protocol.RespHeader "Failed to parse JSON"
-// @Failure 115 {object} protocol.RespHeader "Failed to delete user"
-// @Router /inserv/v01/delete/{id} [post]
+// DeleteUser godoc
+// @Summary      회원 삭제
+// @Description  회원 삭제 API입니다.
+// @Description
+// @Description  **요청**: 일반 JSON body: id (모두 필수 문자열). AES 래퍼를 사용하지 않습니다.
+// @Description
+// @Description  **처리**: 실제 삭제 대상은 body id입니다. path id는 사용하지 않습니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        id path string true "경로 호환용이며 무시합니다. body id가 삭제 대상입니다."
+// @Param        request body object{id=string} true "필수 문자열 필드: id"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Router       /inserv/v01/delete/{id} [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /inserv/v01/delete/example
+// @Example Request Body: {"id":"example"}
+// @x-request-example {"id":"example"}
 func (p *AccountController) DeleteUser(c *gin.Context) {
 	var req struct {
 		ID string `json:"id" binding:"required"`
@@ -983,28 +1069,33 @@ func (p *AccountController) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
-// @Summary Modify main picture
-// @Description Upload and modify user's main profile picture to Cloudflare Images
-// @Tags user
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param files formData file true "Profile image file (max 5MB)"
-// @Param data formData string true "Encrypted user data {uid: xxx}"
-// @Success 200 {object} protocol.OkResp "msg: success"
-// @Failure 400 {object} protocol.RespHeader "error: error message - No files uploaded, No sinfo uploaded, Failed to decrypt sinfo, Failed to parse sinfo data, UID is required in sinfo"
-// @Failure 500 {object} protocol.RespHeader "error: error message - Failed to upload main picture, Failed to modify main picture on db"
-// @Router /inserv/v01/upd/mpic [post]
-//
-//	@Example curl -X POST http://localhost:8080/inserv/v01/upd/mpic \
-//	  -F "files=@/home/tmp/bc1.jpg" \
-//	  -F "data=wdXTrpgAu+c8HhkKx6fNEzLIdrtGCsVYSLcDT6rgBm0+aEEGPSjnQVqL2nc=" {"uid": "8697414060736839837"} \
-//	  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-//	  -H "x-meta: 8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!" \
-//	  -v
+// ModifyMainPic godoc
+// @Summary      계정 대표 사진 업로드 (현재 연결 제한)
+// @Description  계정 대표 사진 업로드 (현재 연결 제한) API입니다.
+// @Description
+// @Description  **요청**: multipart files: 1개·5MiB 이하.
+// @Description
+// @Description  **처리**: 현재 미들웨어는 upFiles를 설정하지만 핸들러는 uploadedFiles와 sinfo를 기대합니다. 일반 요청은 No files uploaded(400)로 실패하며 정상 업로드 경로가 연결되지 않았습니다.
+// @Description
+// @Description  **응답**: 현재 정상 업로드 응답 없음. 오류 헤더.
+// @Description  업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.
+// @Description  **업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.
+// @Tags         Account
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        files formData file true "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      413 {object} map[string]interface{} "업로드 요청 크기 제한 초과"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Failure      503 {object} map[string]interface{} "서버 동시 처리·연결 한도 초과"
+// @Router       /inserv/v01/upd/mpic [post]
+// @Example Request: POST /inserv/v01/upd/mpic
 func (p *AccountController) ModifyMainPic(c *gin.Context) {
 	fileInfo, ok := c.Get("uploadedFiles")
 	if !ok {
@@ -1060,16 +1151,24 @@ func (p *AccountController) ModifyMainPic(c *gin.Context) {
 	p.ctl.SendResponse(c, http.StatusOK, "success")
 }
 
-// @Summary Get WebRTC configuration
-// @Description Get WebRTC configuration for the authenticated user
-// @Tags WebRTC
-// @Accept json
-// @Produce json
-// @Success 200 {object} protocol.WebRTCConfig "WebRTC configuration"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Unauthorized"
-// @Router /serv/v01/wsconf [get]
-// @Router /webrtc/v01/config [get]
+// GetWebRTCConfig godoc
+// @Summary      WebRTC 설정 조회 (현재 라우트 제한)
+// @Description  WebRTC 설정 조회 (현재 라우트 제한) API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음. /serv/v01/wsconf와 /webrtc/v01/config는 같은 핸들러입니다.
+// @Description
+// @Description  **처리**: 현재 두 라우트 모두 JWT 미들웨어가 없어 user 컨텍스트가 설정되지 않으며 401을 반환합니다. 핸들러의 SendResponse도 객체를 허용하지 않아 설정 객체 정상 응답은 구현과 일치하지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 설정 응답 없음. 오류 헤더(result, resultString, desc).
+// @Tags         WebRTC
+// @Accept       json
+// @Produce      json
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /serv/v01/wsconf [get]
+// @Router       /webrtc/v01/config [get]
+// @Example Request: GET /serv/v01/wsconf
 func (p *AccountController) GetWebRTCConfig(c *gin.Context) {
 	// JWT에서 사용자 ID 추출
 	userID, exists := c.Get("user")
@@ -1124,19 +1223,25 @@ func (p *AccountController) TestSpecificStunServer(c *gin.Context) {
 */ // 내가(현재 유저) - 해당 사용자를 즐겨찾기 등록
 
 // SetFavoriteUser godoc
-// @Summary      즐겨찾기 등록
-// @Description  현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에 추가합니다.
-// @Description  request : POST /account/v01/favorite/set/{tid}
-// @Description  response : {"result":0,"msg":"Success"}
-// @Tags         account
+// @Summary      즐겨찾기 등록 (현재 인증 컨텍스트 제한)
+// @Description  즐겨찾기 등록 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path tid, body 없음.
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
 // @Accept       json
 // @Produce      json
-// @Param        tid   path      string  true  "즐겨찾기 등록 대상 사용자 uid"
-// @Success      200   {object}  map[string]interface{}
-// @Failure      400   {object}  map[string]string
-// @Failure      401   {object}  map[string]string
-// @Failure      500   {object}  map[string]string
-// @Router       /account/v01/favorite/set/{tid} [post]
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /fav/v01/set/{tid} [post]
+// @Example Request: POST /fav/v01/set/4033287471439576593
 func (p *AccountController) SetFavoriteUser(c *gin.Context) {
 	tid := c.Param("tid")
 	if tid == "" {
@@ -1169,24 +1274,30 @@ func (p *AccountController) SetFavoriteUser(c *gin.Context) {
 	}
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 	})
 }
 
 // UnfavoriteUser godoc
-// @Summary      즐겨찾기 해제
-// @Description  현재 로그인한 사용자가 특정 사용자를 즐겨찾기 목록에서 제거합니다.
-// @Description  request : POST /account/v01/favorite/cancel/{tid}
-// @Description  response : {"result":0,"msg":"Success"}
-// @Tags         account
+// @Summary      즐겨찾기 해제 (현재 인증 컨텍스트 제한)
+// @Description  즐겨찾기 해제 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path tid, body 없음.
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
 // @Accept       json
 // @Produce      json
-// @Param        tid   path      string  true  "즐겨찾기 해제 대상 사용자 uid"
-// @Success      200   {object}  map[string]interface{}
-// @Failure      400   {object}  map[string]string
-// @Failure      401   {object}  map[string]string
-// @Failure      500   {object}  map[string]string
-// @Router       /account/v01/favorite/cancel/{tid} [post]
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /fav/v01/cancel/{tid} [post]
+// @Example Request: POST /fav/v01/cancel/4033287471439576593
 func (p *AccountController) UnfavoriteUser(c *gin.Context) {
 	tid := c.Param("tid")
 	if tid == "" {
@@ -1220,7 +1331,7 @@ func (p *AccountController) UnfavoriteUser(c *gin.Context) {
 	}
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 	})
 }
 
@@ -1230,24 +1341,30 @@ func (p *AccountController) UnfavoriteUser(c *gin.Context) {
 // 내가 즐겨찾기 한 사용자 목록 조회 (페이지 단위), 사용자 정보(닉네임, 나이, 젠더, 프로필사진, 소개글, 지역, 등록시간, 영상통화 가능여부)
 */
 
-// GetFavoriteList
-// @Summary 즐겨찾기한 사용자 목록 조회
-// @Description 내가 즐겨찾기한 사용자 목록을 페이지 단위로 조회합니다. (페이지네이션 지원)
-//
-// @Tags Favorite
-// @Security BearerAuth
-// @Produce json
-//
-// @Param page query int false "페이지 번호 (기본값 1)"
-// @Param limit query int false "페이지당 항목 수 (기본값 10)"
-// @Success 200 {object} map[string]interface{} "result, msg, count, list"
-// @Description 요청 예시: GET /fav/v01/list?page=1&limit=10 (Authorization: Bearer)
-// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":35,\"list\":[...]}
-// @Failure 400 {object} object "잘못된 요청(파라미터 에러) 또는 사용자 정보 없음 예시: {\"result\":400, \"msg\":\"bad request\"}"
-// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
-// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
-//
-// @Router /fav/v01/list [get]
+// GetFavoriteList godoc
+// @Summary      즐겨찾기 목록 (현재 인증 컨텍스트 제한)
+// @Description  즐겨찾기 목록 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path page/limit은 사용하지 않으며 query page/limit을 사용합니다(기본 1/4).
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다.
+// @Description
+// @Description  **응답 data**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        page path int true "경로 호환용이며 무시합니다. query 값을 사용하세요."
+// @Param        limit path int true "경로 호환용이며 무시합니다. query 값을 사용하세요."
+// @Param        page query int false "실제 조회 페이지" default(1)
+// @Param        limit query int false "실제 페이지 크기" default(4)
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /fav/v01/list/{page}/{limit} [get]
+// @Example Request: GET /fav/v01/list/1/10
 func (p *AccountController) GetFavoriteList(c *gin.Context) {
 	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
 	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
@@ -1272,7 +1389,7 @@ func (p *AccountController) GetFavoriteList(c *gin.Context) {
 
 	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 		"list":   list,
 	})
@@ -1280,18 +1397,25 @@ func (p *AccountController) GetFavoriteList(c *gin.Context) {
 
 // 해당 사용자를 팔로우 하는 사용자 수
 
-// GetFavoriteCount
-// @Summary 즐겨찾기 한 사용자 수 조회
-// @Description 해당 사용자를 즐겨찾기 한 사용자의 총 개수를 반환합니다.
-// @Tags Favorite
-// @Produce json
-// @Success 200 {object} object "성공 예시: {\"result\":0, \"msg\":\"Success\", \"count\":5}"
-// @Failure 400 {object} object "잘못된 요청(파라미터 에러) 예시: {\"result\":400, \"msg\":\"bad request\"}"
-// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
-// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
-// @Router /fav/v01/count [get]
-// @Description 요청 예시: GET /fav/v01/count (Authorization: Bearer)
-// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+// GetFavoriteCount godoc
+// @Summary      즐겨찾기 수 (현재 인증 컨텍스트 제한)
+// @Description  즐겨찾기 수 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /fav/v01/count [get]
+// @Example Request: GET /fav/v01/count
 func (p *AccountController) GetFavoriteCount(c *gin.Context) {
 	uid, exists := c.Get("user")
 	if !exists {
@@ -1313,7 +1437,7 @@ func (p *AccountController) GetFavoriteCount(c *gin.Context) {
 
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 	})
 }
@@ -1322,20 +1446,28 @@ func (p *AccountController) GetFavoriteCount(c *gin.Context) {
 // 내가(현재 유저) - 해당 사용자를 차단
 
 // SetBlockUser godoc
-// @Summary 사용자 차단하기 (Block a User)
-// @Description 현재 로그인한 사용자가 대상 사용자를 차단합니다. reason 값이 없으면 "etc"로 처리됩니다.
-// @Tags Account
-// @Accept json
-// @Produce json
-// @Param tid path string true "차단할 대상 사용자 ID (target user id)"
-// @Param reason body object true "차단 사유 JSON {\"reason\":\"욕설\"}"
-// @Success 200 {object} object "성공 예시: {\"result\":0, \"msg\":\"Success\", \"count\":5}"
-// @Failure 400 {object} object "잘못된 요청(파라미터/바디 오류) 예시: {\"result\":400, \"msg\":\"bad request\"}"
-// @Failure 401 {object} object "인증 실패 예시: {\"result\":401, \"msg\":\"unauthorized\"}"
-// @Failure 500 {object} object "서버 오류 예시: {\"result\":500, \"msg\":\"internal server error\"}"
-// @Router /block/v01/add/{tid} [post]
-// @Description 요청 예시: POST /block/v01/add/125 Body {\"reason\":\"욕설\"}
-// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+// @Summary      사용자 차단 (현재 인증 컨텍스트 제한)
+// @Description  사용자 차단 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path tid, body reason(필수 문자열).
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Param        request body object{reason=string} true "필수 문자열 필드: reason"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /block/v01/set/{tid} [post]
+// @Example Request: POST /block/v01/set/4033287471439576593
+// @Example Request Body: {"reason":"욕설"}
+// @x-request-example {"reason":"욕설"}
 func (p *AccountController) SetBlockUser(c *gin.Context) {
 	tid := c.Param("tid")
 	if tid == "" {
@@ -1395,7 +1527,7 @@ func (p *AccountController) SetBlockUser(c *gin.Context) {
 
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 	})
 }
@@ -1403,20 +1535,25 @@ func (p *AccountController) SetBlockUser(c *gin.Context) {
 // 해당 사용자를 차단 해제
 
 // UnblockUser godoc
-// @Summary 차단 해제 (Unblock User)
-// @Description 지정된 상대방(tid)에 대한 차단을 해제합니다. 성공 시 unblock 후 현재 차단 유저수(count)를 반환합니다.
-// @Tags Account
-// @Accept  json
-// @Produce  json
-// @Param tid path string true "차단 해제 대상 유저 ID (Target User ID)"
-// @Success 200 {object} map[string]interface{} "차단 해제 성공 - result=0, msg=Success, count=차단 유저수"
-// @Failure 400 {object} protocol.RespHeader "잘못된 요청 (tid/uid 변환 오류)"
-// @Failure 401 {object} protocol.RespHeader "인증 실패 (user not found in context)"
-// @Failure 500 {object} protocol.RespHeader "서버 에러 (차단 해제 실패 또는 블록 카운트 조회 실패)"
-// @Router /account/v01/unblock/{tid} [post]
-// @Security Bearer
-// @Description 요청 예시: POST /account/v01/unblock/7
-// @Description 응답 예시: {"result":0,"msg":"Success","count":2}
+// @Summary      사용자 차단 해제 (현재 인증 컨텍스트 제한)
+// @Description  사용자 차단 해제 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path tid, body 없음.
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /block/v01/cancel/{tid} [post]
+// @Example Request: POST /block/v01/cancel/4033287471439576593
 func (p *AccountController) UnblockUser(c *gin.Context) {
 	tid := c.Param("tid")
 	if tid == "" {
@@ -1456,26 +1593,35 @@ func (p *AccountController) UnblockUser(c *gin.Context) {
 
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 	})
 }
 
-// @Summary Get blocked user list
-// @Description Retrieves the list of users blocked by the authenticated user, with paging.
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param page query int false "Page number" default(1)
-// @Param limit query int false "Number of results per page" default(10)
-// @Success 200 {object} map[string]interface{} "list: blocked user list, count: 총 차단 인원"
-// @Failure 400 {object} protocol.RespHeader "파라미터 오류 혹은 파싱 에러"
-// @Failure 401 {object} protocol.RespHeader "인증 실패 (user not found in context)"
-// @Failure 500 {object} protocol.RespHeader "서버 에러 (차단 리스트 조회 실패)"
-// @Router /block/v01/list/{page}/{limit} [get]
-// @Security Bearer
-// @Description 요청 예시: GET /block/v01/list/1/10
-// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":2,\"list\":[...]}
+// GetBlockUser godoc
+// @Summary      차단 사용자 목록 (현재 인증 컨텍스트 제한)
+// @Description  차단 사용자 목록 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: path page/limit은 사용하지 않으며 query page/limit을 사용합니다(기본 1/4).
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다.
+// @Description
+// @Description  **응답 data**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        page path int true "경로 호환용이며 무시합니다. query 값을 사용하세요."
+// @Param        limit path int true "경로 호환용이며 무시합니다. query 값을 사용하세요."
+// @Param        page query int false "실제 조회 페이지" default(1)
+// @Param        limit query int false "실제 페이지 크기" default(4)
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /block/v01/list/{page}/{limit} [get]
+// @Example Request: GET /block/v01/list/1/10
 func (p *AccountController) GetBlockUser(c *gin.Context) {
 	pageInt := ptc.CvtParamAtoi(c.Query("page"), 1)   //defaultQuery "1"
 	limitInt := ptc.CvtParamAtoi(c.Query("limit"), 4) //defaultQuery "10"
@@ -1499,26 +1645,31 @@ func (p *AccountController) GetBlockUser(c *gin.Context) {
 
 	p.ctl.SendDataResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 		"list":   list,
 	})
 }
 
 // GetBlockCount godoc
-// @Summary      Get blocked user count
-// @Description  Returns the total number of users blocked by the authenticated user.
-// @Tags         account
-// @Security     BearerAuth
+// @Summary      차단 사용자 수 (현재 인증 컨텍스트 제한)
+// @Description  차단 사용자 수 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: JWT 미들웨어는 *UserInfoResp를 저장하지만 현재 핸들러는 user를 string으로 단언하여 정상 요청에서도 panic/Recovery 500이 발생합니다. 이후 SendResponse에 객체를 전달하는 응답 경로도 문자열 전용 도우미와 맞지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Account
+// @Accept       json
 // @Produce      json
-// @Success      200  {object}  map[string]interface{} "Blocked user count"
-// @Failure      401  {object}  map[string]interface{} "user not found in context"
-// @Failure      400  {object}  map[string]interface{} "failed to parse uid"
-// @Failure      500  {object}  map[string]interface{} "failed to get block count"
-// @Router       /account/block/count [get]
-// @Param        Authorization header string true "Bearer Token"
-// @Description 요청 예시: GET /account/block/count (Authorization: Bearer)
-// @Description 응답 예시: {\"result\":0,\"msg\":\"Success\",\"count\":5}
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /block/v01/count [get]
+// @Example Request: GET /block/v01/count
 func (p *AccountController) GetBlockCount(c *gin.Context) {
 	uid, exists := c.Get("user")
 	if !exists {
@@ -1539,7 +1690,7 @@ func (p *AccountController) GetBlockCount(c *gin.Context) {
 
 	p.ctl.SendResponse(c, http.StatusOK, gin.H{
 		"result": 0,
-		"msg":    "Success",
+		"msg":    "ok",
 		"count":  count,
 	})
 }

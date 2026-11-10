@@ -75,17 +75,24 @@ type Story struct {
 }
 
 // GetHomeMenInfo godoc
-// @Summary Retrieves main information to be displayed on the home screen
-// @Description Retrieves main information to be displayed on the home screen (new notifications, message count, check-in status, video/voice chat lists, story list, terms links)
-// @Tags Home
-// @Accept json
-// @Produce json
-// @Security JwtAuth
-// @Success 200 {object} HomeData "Home screen information"
-// @Failure 400 {object} protocol.RespHeader "Invalid request"
-// @Failure 401 {object} protocol.RespHeader "Authentication failed"
-// @Failure 500 {object} protocol.RespHeader "Server error"
-// @Router /home/v01/mdata [get]
+// @Summary      남성 홈 데이터 조회 (현재 인증 컨텍스트 제한)
+// @Description  남성 홈 데이터 조회 (현재 인증 컨텍스트 제한) API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: 현재 user를 int로 단언하지만 JWT 미들웨어는 *UserInfoResp를 제공합니다. 정상 JWT 요청도 panic/Recovery 500이 발생하여 홈 데이터 응답이 완료되지 않습니다.
+// @Description
+// @Description  **응답**: 현재 정상 응답 없음. Recovery 오류는 JSON 헤더 형식이 보장되지 않습니다.
+// @Tags         Home
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {string} string "내부 처리 실패"
+// @Router       /home/v01/mdata [get]
+// @Example Request: GET /home/v01/mdata
 func (p *HomeController) GetHomeMenInfo(c *gin.Context) {
 	//noti 확인
 	userID, ok := c.Get("user")

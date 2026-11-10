@@ -144,7 +144,7 @@ func TestAccLogin(t *testing.T) {
 	res, err := PostEncJson(*targetUrl, qurl, key, []string{encryptedData})
 	/*
 		"{\"result\":0,\"resultString\":\"Success\",
-		\"data\":{\"msg\":\"success\",\"acTok\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNjEyNiwibmJmIjoxNzcwMTI5NzI2LCJpYXQiOjE3NzAxMjk3MjYsImp0aSI6IjM5OTIwNTE2LWQ0OTgtNDhiNi1iNTdhLTliOGMwOWI5NmZlMiJ9.6qz-WDaNQVeR7X1YyYLr4_n6QFtH3rLl-DSkhOIC2dI\",
+		\"data\":{\"msg\":\"ok\",\"acTok\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNjEyNiwibmJmIjoxNzcwMTI5NzI2LCJpYXQiOjE3NzAxMjk3MjYsImp0aSI6IjM5OTIwNTE2LWQ0OTgtNDhiNi1iNTdhLTliOGMwOWI5NmZlMiJ9.6qz-WDaNQVeR7X1YyYLr4_n6QFtH3rLl-DSkhOIC2dI\",
 		\"refTok\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiaXNzIjoiY3VwaXRvay5jb20iLCJzdWIiOiJBdXRoZW50aWNhdGlvbiIsImF1ZCI6WyI4Njk3NDE0MDYwNzM2ODM5ODM3Il0sImV4cCI6MTc3MDIxNjEyNiwibmJmIjoxNzcwMTI5NzI2LCJpYXQiOjE3NzAxMjk3MjYsImp0aSI6IjM5OTIwNTE2LWQ0OTgtNDhiNi1iNTdhLTliOGMwOWI5NmZlMiJ9.6qz-WDaNQVeR7X1YyYLr4_n6QFtH3rLl-DSkhOIC2dI\",
 		\"uid\":\"8697414060736839837\",
 		\"meta\":\"8697414060736839837/test243//건강한 꼬마 오렌지/1/24/서울/test243@test.com/https://i.ibb.co/QF37KRST/male-ai-02.webp/https://i.ibb.co/C5c51dYg/icon-male-04.webp/반가워요 큐피톡에서 만나요!\",

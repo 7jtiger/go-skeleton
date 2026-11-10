@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -64,7 +65,7 @@ type StoryImage struct {
 	Body      string          `json:"body"`
 	MType     int             `json:"type"`
 	Stat      int             `json:"stat"`
-	QtGood    int             `json:"qt_good"`
+	QtLike    int             `json:"qt_like"`
 	QtChecked int             `json:"qt_checked"`
 	Price     int             `json:"price"`
 	StrImg    json.RawMessage `json:"str_img"`
@@ -83,20 +84,17 @@ type StorySearchReq struct {
 	Limit string `json:"limit"`
 }
 
-/* type StoryListResp struct {
-	Idx      int         `json:"idx"`
-	Uid      uint64      `json:"uid"`
-	Nick     string      `json:"nick"`
-	StrImg   StoryStrImg `json:"str_img"` // {"1":{"type":"img","url":"..."},"2":{"type":"vdo","url":"...","thumb":"..."}}
-	AtCreate time.Time   `json:"at_create"`
-}
-*/
-
 type StoryListResp struct {
+	IsLocked int       `json:"is_locked" enums:"0,1" example:"0"`
+	GoodByMe int       `json:"good_byme" enums:"0,1" example:"0"`
 	Idx      int       `json:"idx"`
 	Uid      uint64    `json:"uid"`
 	Nick     string    `json:"nick"`
-	Stat     int       `json:"stat"`
+	MainPic  string    `json:"main_pic"`
+	Gender   int       `json:"gender"`
+	Area     string    `json:"area"`
+	Age      string    `json:"age"`
+	Stat     int       `json:"stat" enums:"0,1,2,3,4,5" example:"0"`
 	CntCount int       `json:"cnt_count"`
 	CntUrl   string    `json:"cnt_url"`
 	CntType  string    `json:"cnt_type"`
@@ -105,27 +103,39 @@ type StoryListResp struct {
 }
 
 type StoryDetailResp struct {
+	IsLocked     int          `json:"is_locked" enums:"0,1" example:"0"`
+	GoodByMe     int          `json:"good_byme" enums:"0,1" example:"0"`
 	Idx          int          `json:"idx"`
 	Uid          uint64       `json:"uid"`
 	Nick         string       `json:"nick"`
 	MainPic      string       `json:"main_pic"`
+	Gender       int          `json:"gender"`
+	Area         string       `json:"area"`
+	Age          string       `json:"age"`
 	Body         string       `json:"body"`
-	Stat         int          `json:"stat"`
-	QtGood       int          `json:"qt_good"`
+	Stat         int          `json:"stat" enums:"0,1,2,3,4,5" example:"0"`
+	QtLike       int          `json:"qt_like"`
 	QtView       int          `json:"qt_view"`
-	ContentTotal int          `json:"content_total"`
+	ContentTotal int          `json:"ctnt_total"`
 	Price        int          `json:"price"`
-	IsPaid       int          `json:"is_paid"`     // 0=not paid, 1=paid
-	IsFollowed   int          `json:"is_followed"` // 0=not followed, 1=followed
-	StrImg       StoryStrImg  `json:"str_img"`     // story.str_img 슬롯 맵 (img|vdo)
+	IsPaid       int          `json:"is_paid" enums:"0,1" example:"0"` // Viewer has a completed, non-revoked purchase of this story, independent of stat.
+	FlwCount     int          `json:"flw_cnt"`                         // Active follower count for this author.
+	IsFollowed   int          `json:"is_flwd" enums:"0,1" example:"0"` // Viewer actively follows this author, independent of stat.
+	StrImg       StoryStrImg  `json:"str_img"`                         // story.str_img 슬롯 맵 (img|vdo)
 	AtCreate     time.Time    `json:"at_create"`
 	CmtCount     int          `json:"cmt_count"`
-	CommentList  []StrComment `json:"comment_list"`
+	CommentList  []StrComment `json:"cmt_list"`
 }
 
 type UpdateStrStatReq struct {
 	Idx  string `json:"idx"`
-	Stat string `json:"stat"`
+	Stat string `json:"stat" enums:"0,1,2,3,4,5" example:"0"`
+}
+
+type UpdateStoryPriceReq struct {
+	Idx   string `json:"idx" binding:"required" example:"15"`
+	Stat  string `json:"stat" binding:"required" enums:"0,1,2,3,4,5" example:"2"`
+	Price *int   `json:"price" binding:"required" minimum:"0" maximum:"2147483647" example:"100"`
 }
 
 type UpdateStrBodyReq struct {
@@ -175,22 +185,24 @@ type StrComment struct {
 
 type StrCmtCreateReq struct {
 	StrIdx string `json:"str_idx" example:"3"`
-	Wuid   string `json:"wuid" example:"77645423236541"`
-	Nick   string `json:"nick" example:"test"`
-	Stat   string `json:"stat" example:"1"`                        // 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+	Wuid   string `json:"wuid" example:"77645423236541"`           // Compatibility only; ignored, actor comes from JWT.
+	Nick   string `json:"nick" example:"test"`                     // Compatibility only; server account nickname is used.
+	Stat   string `json:"stat" example:"1"`                        // 0,1=visible; 2,3=reserved; 4=deleted
 	Body   string `json:"body" example:"111111 test comment body"` // max 256
 }
 
 // StrCmtCreateResp is CreateStrComment response (SimpleRespOK — no result envelope).
 type StrCmtCreateResp struct {
-	Msg    string `json:"msg" example:"Successfully created str comment"`
+	Msg    string `json:"msg" example:"ok"`
 	LastID int64  `json:"lastID" example:"1"`
 }
 
 // StrCmtDetailData is GetStrCmtDetail response payload (data field).
 type StrCmtDetailData struct {
 	Comment    []StrComment `json:"comment"`
-	TotalCount int          `json:"total_count" example:"52"`
+	TotalCount int          `json:"total_cnt" example:"52"`
+	Page       int          `json:"page" example:"1"`
+	Limit      int          `json:"limit" example:"10"`
 }
 
 // StrCmtDetailResp is full API envelope for GetStrCmtDetail Swagger (@Success).
@@ -202,13 +214,13 @@ type StrCmtDetailResp struct {
 
 type StrCmtUpdStatReq struct {
 	Idx  string `json:"idx" example:"3"`
-	Stat string `json:"stat" example:"2"` // 0=default, 1=private, 2=reserved, 3=reserved, 4=deleted
+	Stat string `json:"stat" example:"2"` // Comment status: 0/1 visible, 2/3 hidden, 4 deleted.
 }
 
 // StrCmtUpdStatResp is UpdateStrStatComment response (SimpleRespOK — no result envelope).
 type StrCmtUpdStatResp struct {
-	Msg      string `json:"msg" example:"Successfully updated str stat comment"`
-	Affected int64  `json:"affected" example:"1"`
+	Msg string `json:"msg" example:"ok"`
+	Res int64  `json:"res" example:"1"`
 }
 
 type StrCmtUpdBodyReq struct {
@@ -218,8 +230,8 @@ type StrCmtUpdBodyReq struct {
 
 // StrCmtUpdBodyResp is UpdateStrBodyComment response (SimpleRespOK — no result envelope).
 type StrCmtUpdBodyResp struct {
-	Msg      string `json:"msg" example:"Successfully updated str body comment"`
-	Affected int64  `json:"affected" example:"1"`
+	Msg string `json:"msg" example:"ok"`
+	Res int64  `json:"res" example:"1"`
 }
 
 type StoryLikeToggleReq struct {
@@ -253,53 +265,75 @@ type BlockUserItem struct {
 	AtUpdate time.Time `json:"at_update"`
 }
 
-// stat : 0 = pub, 1 = private(follower only), 2 = limit(paid only), 3 = all(pub/prv/limit), 4 : del
-func GetStatCode(stat string) int {
+// StoryFilterAll is the media-filter sentinel; story status ALL uses StoryStatAll (6).
+const StoryFilterAll = -1
+
+const (
+	StoryStatPublic = iota
+	StoryStatFollower
+	StoryStatPaid
+	StoryStatPrivate
+	StoryStatDeleted
+	StoryStatReserved
+	StoryStatAll // Query only; never persisted.
+)
+
+func IsValidStoryStat(stat int) bool {
+	return stat >= StoryStatPublic && stat <= StoryStatReserved
+}
+
+func GetStatCode(stat string) (int, error) {
 	switch strings.ToLower(stat) {
-	case "pub":
-		return 0
-	case "prv":
-		return 1
-	case "lmt":
-		return 2
-	case "all":
-		return 3
+	case "pub", "0":
+		return StoryStatPublic, nil
+	case "flw", "1":
+		return StoryStatFollower, nil
+	case "pay", "2":
+		return StoryStatPaid, nil
+	case "prv", "3":
+		return StoryStatPrivate, nil
+	case "all", "6":
+		return StoryStatAll, nil
 	}
-	return 0
+	return 0, fmt.Errorf("invalid story status: %q (allowed: 0=pub, 1=flw, 2=pay, 3=prv, 6=all)", stat)
 }
 
 // order : 0=old(oldest), 1=new(latest)/all, 2=cmt(comMost), 3=god(goodMost), 4=view(viewMost), 5=rsv(reserved)
 func GetOrderQuery(order string) string {
 	switch strings.ToLower(order) {
 	case "new", "all":
-		return "at_create DESC"
+		return "at_create DESC, idx DESC"
 	case "old":
-		return "at_create ASC"
+		return "at_create ASC, idx ASC"
 	case "cmt":
-		return "qt_checked DESC"
+		return "(SELECT COUNT(*) FROM str_cmt c WHERE c.str_idx = story.idx AND c.stat IN (0,1)) DESC, idx DESC"
 	case "god":
-		return "qt_good DESC"
+		return "qt_like DESC, idx DESC"
 	case "view":
-		return "qt_checked DESC"
+		return "qt_view DESC, idx DESC"
 	case "rsv":
-		return "at_create DESC"
+		return "at_create DESC, idx DESC"
 	}
-	return "at_create DESC"
+	return "at_create DESC, idx DESC"
 }
 
-// type : 0=img, 1 = vdo, 2 = all, 3=rsv(reserved)
-func GetTypeCode(mtype string) int {
+// Stored media types: 0=img, 1=vdo, 2=txt, 3=mix, 4=rsv. all is query-only.
+func GetTypeCode(mtype string) (int, error) {
 	switch strings.ToLower(mtype) {
 	case "img":
-		return 0
+		return 0, nil
 	case "vdo":
-		return 1
+		return 1, nil
+	case "txt":
+		return 2, nil
+	case "mix":
+		return 3, nil
 	case "all":
-		return 2
+		return StoryFilterAll, nil
 	case "rsv":
-		return 3
+		return 4, nil
 	}
-	return 0
+	return 0, fmt.Errorf("invalid story media type: %q", mtype)
 }
 
 func GetAreaCode(area string) int {

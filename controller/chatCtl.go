@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "ms-gateway/common/logger"
@@ -40,20 +41,25 @@ type ChatClient struct {
 	uid  uint64
 	nick string
 
-	closeOnce sync.Once
+	sendMu      sync.Mutex
+	sendClosed  bool
+	queuedBytes int64
+	closeOnce   sync.Once
 }
 
 // ChatController 텍스트 채팅 컨트롤러
 type ChatController struct {
-	ctl       *Controller
-	cfg       *conf.Config
-	rep       *models.Repositories
-	rdb       *models.RedisDB
-	adb       *models.AccountDB
-	hdb       *models.HistoryDB
-	clients   map[uint64]*ChatClient // uid -> ChatClient
-	clientsMu sync.RWMutex
-	upgrader  websocket.Upgrader
+	ctl           *Controller
+	cfg           *conf.Config
+	rep           *models.Repositories
+	rdb           *models.RedisDB
+	adb           *models.AccountDB
+	hdb           *models.HistoryDB
+	clients       map[uint64]*ChatClient // uid -> ChatClient
+	clientsMu     sync.RWMutex
+	presenceLocks [256]sync.Mutex // Serialize per-UID presence updates without holding the clients map lock.
+	totalConn     int64
+	upgrader      websocket.Upgrader
 }
 
 // NewChatController ChatController 생성
@@ -79,46 +85,26 @@ func NewChatController(ctl *Controller, rep *models.Repositories) (*ChatControll
 	return r, nil
 }
 
-// @Summary      Connect DM WebSocket
-// @Description  Upgrades HTTP connection to WebSocket for DM real-time messaging. This endpoint requires JWT authentication and uses the authenticated user's UID from context.
-// @Description  Request example: GET /dm/v01/ws HTTP/1.1, Host: api.example.com, Upgrade: websocket, Connection: Upgrade.
-// @Description  Response example: 101 Switching Protocols (WebSocket handshake success; binary/text frames exchanged).
-// @Description  This endpoint is for authenticated sessions, and user identity is derived from JWT context.
-// @Description  Legacy note: some clients may still include userId query for compatibility, but auth source is the access token.
-// @Description  WebSocket message request examples:
-// @Description  1) text-message: {"type":"text-message","to":"456","content":"Hello, how are you?","callMode":"txt|img|...","msgId":"1234567890"}
-// @Description  1-1) text-message-ack: {"type":"msg-ack","from":"123","to":"456","roomId":"1234567890","msgId":"1234567890","unread":1,"timestamp":1718851200}
-// @Description  2) typing(optional): {"type":"typing","to":"456","roomId":"1234567890"}
-// @Description  3) read-receipt: {"type":"read-receipt","to":"456","roomId":"1234567890","msgId":"last-read-mid"}
-// @Description  DM Client Work flow:
-// @Description  1) connection : 로그인시 ws 연결
-// @Description  1-1) {domain}/dm/v01/ws GET 로그인후
-// @Description  2) request : 신규 파트너 dm 요청시 방 생성 및 채팅 시작
-// @Description  2-1) {domain}/dm/v01/mkroom/:pid POST 신규 파트너 dm 요청시 방 생성 및 채팅 시작
-// @Description  3) chatlist : 기존 채팅방 리스트 요청
-// @Description  3-1) {domain}/dm/v01/list/:page GET 기존 채팅방 리스트 요청
-// @Description  4) totalunread : 총 미읽음 메시지 수 조회
-// @Description  4-1) {domain}/dm/v01/total/unread GET 총 미읽음 메시지 수 조회
-// @Description  5) read-receipt : 방 입장/읽음 시 미읽음 초기화 + DM:READ mid 갱신(3일 TTL)
-// @Description  5-1) Type : "read-receipt", To : 수신자 UID, RoomID : 채팅방 ID, MsgID : 마지막으로 읽은 메시지 mid
-// @Description  6) text-message : 텍스트 메시지 전송
-// @Description  6-1) Type : "text-message", To : 수신자 UID, Content : 텍스트 메시지, MsgID : uniq 값값
-// @Description  6-2) msg-ack : 메시지 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
-// @Description  7) 채팅방 나가기 : 채팅방 나가기시 채팅방 나가기 메시지 전송
-// @Description  7-1) Type : "partner-left", To : 수신자 UID, From : 방 나간 파트너 UID, RoomID : 채팅방 ID, Content : "상대방이 대화를 종료하였습니다."(고정메세지), MsgID : sys-leave-{unix_timestamp}: 채팅방 나가기 메시지 식별자
-// @Description  8) 선물 전송 : 선물 전송시 선물 메시지 전송
-// @Description  8-1) Type : "send-gift", To : 수신자 UID, From : 선물 보낸 사람 UID, RoomID : 채팅방 ID, Content : 화살갯수(ex: 3), MsgID : uniq 값
-// @Description  8-2) 수신메세지 : 선물 [{nickname}님이(가) 화살 {화살갯수}개를 선물했습니다.]
-// @Description  8-3) msg-ack : 선물 전송 확인 서버에서 보낸사람에게 전송, 수신자에게는 전송하지 않음.
-// @Description  9) 로그아웃 : 로그아웃시 ws disconnect
-// @Description  9-1) 상대방에게 로그아웃은 전송하지 않음. 로그아웃시에도 전송가능
-// @Tags         chat
+// HandleWebSocket godoc
+// @Summary      DM WebSocket 연결
+// @Description  DM WebSocket 연결 API입니다.
+// @Description
+// @Description  **요청**: Authorization: Bearer access token. HTTP Upgrade 요청.
+// @Description
+// @Description  **처리**: JWT UID로 연결하며 같은 UID의 기존 연결을 교체합니다. 프로세스 연결 상한 초과 시 503입니다. 수신 프레임 최대 64KiB, 송신 큐 최대 256개/512KiB입니다.
+// @Description
+// @Description  **응답**: 101 Switching Protocols 이후 WebSocket 메시지로 통신합니다. REST JSON 성공 응답은 없습니다.
+// @Tags         DM
+// @Accept       json
 // @Produce      json
-// @Param        Authorization  header    string  true  "Bearer access token. Example: Bearer {access_token}"
-// @Success      101  {string}  string  "Switching Protocols (WebSocket handshake success)"
-// @Failure      401  {object}  protocol.RespHeader  "Unauthorized"
-// @Failure      500  {object}  protocol.RespHeader  "Internal Server Error"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Success      101 {string} string "Switching Protocols (WebSocket)"
+// @Failure      400 {string} string "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      503 {object} protocol.RespHeader "서버 동시 처리·연결 한도 초과"
 // @Router       /dm/v01/ws [get]
+// @Example Request: GET /dm/v01/ws
 func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -131,9 +117,14 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 		return
 	}
 	uid64 := userInfo.Uid
+	if !reserveConnection(&cc.totalConn, MAX_VDWS_CONNECT) {
+		cc.ctl.SimpleError(c, http.StatusServiceUnavailable, "Server at capacity")
+		return
+	}
 	// WebSocket 업그레이드
 	conn, err := cc.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		atomic.AddInt64(&cc.totalConn, -1)
 		log.Error("WebSocket upgrade failed:", err)
 		return
 	}
@@ -152,21 +143,28 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 
 	// 고루틴 시작
 	go cc.writePump(client)
-	go cc.readPump(client)
+	go func() {
+		defer atomic.AddInt64(&cc.totalConn, -1)
+		cc.readPump(client)
+	}()
 }
 
 // registerClient 클라이언트 등록
 func (cc *ChatController) registerClient(client *ChatClient) {
+	lock := &cc.presenceLocks[client.uid%uint64(len(cc.presenceLocks))]
+	lock.Lock()
+	defer lock.Unlock()
 	cc.clientsMu.Lock()
-	defer cc.clientsMu.Unlock()
+	oldClient := cc.clients[client.uid]
+	cc.clients[client.uid] = client
+	cc.clientsMu.Unlock()
 
 	// 기존 연결이 있으면 종료 (맵 교체 후 구 연결의 unregister는 no-op)
-	if oldClient, exists := cc.clients[client.uid]; exists && oldClient != client {
+	if oldClient != nil && oldClient != client {
 		cc.closeClientSend(oldClient)
 		oldClient.conn.Close()
 	}
 
-	cc.clients[client.uid] = client
 	if err := cc.rdb.SetOnline(client.uid); err != nil {
 		log.Warn("failed to set online state for %d: %v", client.uid, err)
 	}
@@ -177,23 +175,30 @@ func (cc *ChatController) closeClientSend(client *ChatClient) {
 	if client == nil {
 		return
 	}
+	client.sendMu.Lock()
+	defer client.sendMu.Unlock()
 	client.closeOnce.Do(func() {
+		client.sendClosed = true
 		close(client.send)
 	})
 }
 
 // unregisterClient 클라이언트 등록 해제
 func (cc *ChatController) unregisterClient(client *ChatClient) {
+	lock := &cc.presenceLocks[client.uid%uint64(len(cc.presenceLocks))]
+	lock.Lock()
+	defer lock.Unlock()
 	cc.clientsMu.Lock()
-	defer cc.clientsMu.Unlock()
 
 	current, exists := cc.clients[client.uid]
 	if !exists || current != client {
 		// 재접속으로 맵이 새 클라이언트로 교체된 경우 구 연결 정리는 스킵
+		cc.clientsMu.Unlock()
 		return
 	}
 
 	delete(cc.clients, client.uid)
+	cc.clientsMu.Unlock()
 	cc.closeClientSend(client)
 	if err := cc.rdb.DeleteOnline(client.uid); err != nil {
 		log.Warn("failed to delete online state for %d: %v", client.uid, err)
@@ -240,6 +245,9 @@ func (cc *ChatController) writePump(client *ChatClient) {
 	for {
 		select {
 		case message, ok := <-client.send:
+			if ok {
+				atomic.AddInt64(&client.queuedBytes, -int64(len(message)))
+			}
 			client.conn.SetWriteDeadline(time.Now().Add(CHAT_WRITE_WAIT))
 			if !ok {
 				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -256,7 +264,9 @@ func (cc *ChatController) writePump(client *ChatClient) {
 			n := len(client.send)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
-				w.Write(<-client.send)
+				next := <-client.send
+				atomic.AddInt64(&client.queuedBytes, -int64(len(next)))
+				w.Write(next)
 			}
 
 			if err := w.Close(); err != nil {
@@ -535,31 +545,48 @@ func (cc *ChatController) sendToUser(uid string, msg *ptc.ChatMessage) bool {
 	return true
 }
 
-func (cc *ChatController) trySend(client *ChatClient, data []byte) (sent bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Warn("chat safe send recovered (%d): %v", client.uid, r)
-			sent = false
-		}
-	}()
+func (cc *ChatController) trySend(client *ChatClient, data []byte) bool {
+	if client == nil {
+		return false
+	}
+	client.sendMu.Lock()
+	defer client.sendMu.Unlock()
+	if client.sendClosed || atomic.LoadInt64(&client.queuedBytes)+int64(len(data)) > 512<<10 {
+		return false
+	}
+	atomic.AddInt64(&client.queuedBytes, int64(len(data)))
 	select {
 	case client.send <- data:
 		return true
 	default:
+		atomic.AddInt64(&client.queuedBytes, -int64(len(data)))
 		return false
 	}
 }
 
 // ExistDMRoom godoc
-// @Summary      DM 채팅방 존재 여부 확인
-// @Description  인증된 사용자가 특정 대상(tid)과의 DM 채팅방이 존재하는지 조회합니다.
-// @Tags         chat
-// @Param        tid   path      string  true  "상대 사용자 UID"
-// @Success      200   {object}  map[string]bool  "exist: true(존재함) / false(존재하지 않음)"
-// @Failure      400   {object}  map[string]string  "Bad Request"
-// @Failure      401   {object}  map[string]string  "Unauthorized"
-// @Router       /dm/v01/room/exists/{tid} [get]
+// @Summary      DM 채팅방 존재 확인
+// @Description  DM 채팅방 존재 확인 API입니다.
+// @Description
+// @Description  **요청**: path tid: 상대 UID.
+// @Description
+// @Description  **처리**: JWT 사용자와 상대방의 방 존재 여부를 조회합니다.
+// @Description
+// @Description  **응답**: 최상위 exist.
+// @Tags         DM
+// @Accept       json
+// @Produce      json
 // @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        tid path string true "대상 UID. 이 파라미터가 없는 목록 경로는 JWT 본인"
+// @Success      200 {object} object{exist=bool} "최상위 exist."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /dm/v01/room/exists/{tid} [get]
+// @Example Response: {"exist":true}
+// @x-response-example {"exist":true}
+// @Example Request: GET /dm/v01/room/exists/4033287471439576593
 func (cc *ChatController) ExistDMRoom(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1006,38 +1033,27 @@ func (cc *ChatController) handleCallCancel(client *ChatClient, msg *ptc.ChatMess
 }
 
 // CreateChatRoom godoc
-// @Summary DM create chat room
-// @Description 1:1 채팅방(DM)을 생성. 생성된 방의 정보(방 아이디, 파트너 정보, 미확인 메시지 수, 생성/갱신 시각)를 반환
-// @Tags chat
-// @Accept json
-// @Produce json
-// @Param request body object{uid=uint64,tid=uint64} true "pid  partner UID"
-// @Success 200 {object} protocol.DMRoomResp "채팅방 생성 성공 및 방 정보"
-// @Failure 400 {object} protocol.RespHeader "잘못된 요청"
-// @Failure 401 {object} protocol.RespHeader "인증 실패"
-// @Failure 500 {object} protocol.RespHeader "서버 내부 오류"
-// @Router /dm/v01/mkroom/{pid} [post]
-//
-// @Example request
-// POST /dm/v01/mkroom/{pid} HTTP/1.1
-// Content-Type: application/json
-//
-// @Example success response
-//
-//	{
-//	 "roomId": 123234,
-//	 "partner": {
-//	   "pid": 234,
-//	   "nick": "testuser",
-//	   "thumbPic": "https://cdn.example.com/avatar.jpg",
-//	   "gender": "1",
-//	   "age": "22",
-//	   "area": "Seoul"
-//	 },
-//	 "unread": 0,
-//	 "atCreate": "2024-06-11T12:00:00Z",
-//	 "atUpdate": "2024-06-12T08:00:00Z"
-//	}
+// @Summary      DM 채팅방 생성 또는 조회
+// @Description  DM 채팅방 생성 또는 조회 API입니다.
+// @Description
+// @Description  **요청**: path pid: 상대 UID. body 없음.
+// @Description
+// @Description  **처리**: JWT 본인과 상대 계정으로 기존 방을 확인하거나 생성합니다.
+// @Description
+// @Description  **응답 data**: DMRoomResp.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         DM
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        pid path string true "상대 UID"
+// @Success      200 {object} protocol.RespDataHeader "data: DMRoomResp."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /dm/v01/mkroom/{pid} [post]
+// @Example Request: POST /dm/v01/mkroom/4033287471439576593
 func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1080,26 +1096,29 @@ func (cc *ChatController) CreateChatRoom(c *gin.Context) {
 
 // DeleteChatRoom godoc
 // @Summary      DM 채팅방 나가기
-// @Description  인증된 사용자가 DM 채팅방에서 나갑니다. 나간 사용자는 목록에서 숨겨지고, 남은 사용자에게 partner-left 이벤트 및 시스템 메시지가 전달됩니다.
-// @Description  st_chat: 0=양쪽 나감, 1=양쪽 참여, 2=uid 나감, 3=tid 나감
-// @Tags         chat
+// @Description  DM 채팅방 나가기 API입니다.
+// @Description
+// @Description  **요청**: path room_id: 방 인덱스.
+// @Description
+// @Description  **처리**: JWT 사용자가 참여 중인 방에서 나갑니다. 없는 방은 404, 비참여자는 403입니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         DM
 // @Accept       json
 // @Produce      json
-// @Param        room_id  path    int    true  "Room ID"
-// @Success      200  {object}  map[string]interface{}  "Chat room deleted successfully"
-// @Failure      400  {object}  map[string]string       "Bad Request"
-// @Failure      401  {object}  map[string]string       "Unauthorized"
-// @Failure      500  {object}  map[string]string       "Internal Server Error"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        room_id path string true "채팅방 ID"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      403 {object} protocol.RespHeader "권한 없음 또는 차단 관계"
+// @Failure      404 {object} protocol.RespHeader "대상 없음 또는 조회 가능한 대상 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
 // @Router       /dm/v01/rmroom/{room_id} [post]
-//
-// @Example Success Response:
-// HTTP/1.1 200 OK
-//
-//	{
-//	  "result":0,
-//	  "resultString":"Success",
-//	  "data":{"msg":"success"}
-//	}
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /dm/v01/rmroom/1
 func (cc *ChatController) DeleteChatRoom(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists || user == nil {
@@ -1124,7 +1143,7 @@ func (cc *ChatController) DeleteChatRoom(c *gin.Context) {
 		return
 	}
 	/* 	if !models.IsUserInDMRoom(room.STChat, room.UID, room.TID, leaverUID) {
-		cc.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+		cc.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 		return
 	} */
 
@@ -1143,37 +1162,33 @@ func (cc *ChatController) DeleteChatRoom(c *gin.Context) {
 		log.Warn("failed to set dm history cutoff on leave uid=%d room=%d: %v", leaverUID, roomID, err)
 	}
 
-	cc.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	cc.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
 // GetChatRooms godoc
-// @Summary      Get User DM Chat Rooms
-// @Description  Retrieves the list of direct message chat rooms that the currently authenticated user is participating in. Note: 'userId' query parameter is no longer required or used. Room list is based on the authenticated session.
-// @Description  request : GET /dm/v01/list/1 HTTP/1.1
-// @Description  response : {"result":0,"resultString":"Success","data":{"rooms":[{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":133,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-04-28T11:43:25Z"},{"rid":9,"partner":{"pid":5709326013809104361,"nick":"평화로운 아기 바나나","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":0,"at_crtchat":"2026-04-20T13:27:53Z","at_update":"2026-04-20T13:27:53Z"}],"total_count":2}}
-// @Description  목록 정렬: 1) unread>0 방 우선 2) unread 방은 IncrUnread :ts(최근 수신) 3) 그 외 at_update 최신순. page당 10건.
-// @Tags         chat
+// @Summary      DM 채팅방 목록 조회
+// @Description  DM 채팅방 목록 조회 API입니다.
+// @Description
+// @Description  **요청**: path page는 사용하지 않습니다. query page(기본 1)를 전달합니다.
+// @Description
+// @Description  **처리**: 방 목록을 미읽음 등 기준으로 정렬하고 페이지당 10개를 반환합니다.
+// @Description
+// @Description  **응답 data**: total_count, rooms.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         DM
 // @Accept       json
 // @Produce      json
-// @Success      200 {array}   protocol.DMRoomResp
-// @Failure      400 {object} map[string]string "Bad Request"
-// @Failure      401 {object} map[string]string "Unauthorized"
-// @Failure      500 {object} map[string]string "Internal Server Error"
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        page path int true "경로 호환용이며 무시합니다. query 값을 사용하세요."
+// @Param        page query int false "실제 조회 페이지" default(1)
+// @Success      200 {object} protocol.RespDataHeader "data: total_count, rooms."
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
 // @Router       /dm/v01/list/{page} [get]
-//
-// Host: localhost:8080
-// Authorization: Bearer {access_token}
-//
-// @Example Resp:
-//
-// {"result":0,"resultString":"Success","data":{"rooms":[{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumbPic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":7,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-04-28T11:43:25Z"},{"rid":9,"partner":{"pid":5709326013809104361,"nick":"평화로운 아기 바나나","thumbPic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":0,"at_crtchat":"2026-04-20T13:27:53Z","at_update":"2026-04-20T13:27:53Z"}],"totalcount":1}}
-//
-// @Example Success Response:
-//
-//	HTTP/1.1 200 OK
-//
-// Content-Type: application/json
-// {"result":0,"resultString":"Success","data":{"rooms":[{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":30,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-04-28T11:43:25Z"},{"rid":9,"partner":{"pid":5709326013809104361,"nick":"평화로운 아기 바나나","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"서울"},"total":0,"unread":0,"at_crtchat":"2026-04-20T13:27:53Z","at_update":"2026-04-20T13:27:53Z"}],"total_count":1}}
+// @Example Response: {"result":0,"resultString":"Success","data":{"total_count":0,"rooms":[]}}
+// @x-response-example {"result":0,"resultString":"Success","data":{"total_count":0,"rooms":[]}}
+// @Example Request: GET /dm/v01/list/1
 func (cc *ChatController) GetChatRooms(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1241,31 +1256,29 @@ func (cc *ChatController) GetChatRooms(c *gin.Context) {
 }
 
 // GetChatRoomByRID godoc
-// @Summary      DM 채팅방 단건 조회
-// @Description  인증된 사용자가 참여 중인 DM 채팅방(room_id = chat_his.idx)의 상세 정보를 조회합니다.
-// @Description  상대방 프로필, 최근 메시지, 전체/미읽음 메시지 수, 생성·수정 시각을 반환합니다.
-// @Description  요청자가 방 생성자(uid)이면 tid 사용자 정보를, 초대받은 사용자(tid)이면 uid 사용자 정보를 상대방으로 반환합니다.
+// @Summary      DM 채팅방 상세 조회 및 읽음 갱신
+// @Description  DM 채팅방 상세 조회 및 읽음 갱신 API입니다.
 // @Description
-// @Description  [요청 예시]
-// @Description    GET /dm/v01/rinfo/10 HTTP/1.1
-// @Description    Authorization: Bearer {access_token}
+// @Description  **요청**: path room_id, query mid(선택).
 // @Description
-// @Description  [응답 예시]
-// @Description	 last_msg: txt, img일 경우 'img'로 반환
-// @Description  {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
-// @Tags           chat
-// @Accept         json
-// @Produce        json
-// @Param          room_id   path     string  true   "채팅방 ID (chat_his.idx)"
-// @Param          mid       query    string  false  "방 입장 시 마지막으로 읽은 메시지 mid (없으면 최신 메시지로 갱신)"
-// @Success        200 {object} map[string]interface{} "room_id, room, my_last_mid, partner_last_mid"
-// @Failure        400 {object} map[string]string "room_id 누락"
-// @Failure        401 {object} map[string]string "인증 실패"
-// @Failure        500 {object} map[string]string "서버 내부 에러"
-// @Router         /dm/v01/rinfo/{room_id} [get]
-// @Example Request: GET /dm/v01/rinfo/10?mid=client-msg-id-xxx
-// @Example Response: {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"dfd","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
-// @Example Response: {"result":0,"resultString":"Success","data":{"my_last_mid":"m-1783587208891","partner_last_mid":"","room":{"rid":10,"partner":{"pid":4033287471439576593,"nick":"푸른 아름다운 양","thumb_pic":"https://i.ibb.co/99MhfMXt/icon-male-03.webp","gender":"1","age":"34","area":"seoul"},"last_msg":"img","partner_left":false,"total":45,"unread":0,"at_crtchat":"2026-04-28T11:43:25Z","at_update":"2026-07-09T08:53:28Z"},"room_id":"10"}}
+// @Description  **처리**: 활성 참여자만 조회할 수 있습니다. mid 또는 최신 메시지로 읽음 위치와 미읽음 수를 갱신합니다.
+// @Description
+// @Description  **응답 data**: room_id, room, my_last_mid, partner_last_mid.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         DM
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        room_id path string true "채팅방 ID"
+// @Param        mid query string false "마지막으로 읽은 메시지 ID (생략 시 최신)"
+// @Success      200 {object} protocol.RespDataHeader "data: room_id, room, my_last_mid, partner_last_mid."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      403 {object} protocol.RespHeader "권한 없음 또는 차단 관계"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /dm/v01/rinfo/{room_id} [get]
+// @Example Request: GET /dm/v01/rinfo/1
 func (cc *ChatController) GetChatRoomByRID(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1311,39 +1324,28 @@ func (cc *ChatController) GetChatRoomByRID(c *gin.Context) {
 	})
 }
 
-// GetTotalUnread 사용자 전체 unread 합계 조회
 // GetTotalUnread godoc
-// @Summary     Get total unread message count for user
-// @Description Returns the sum of unread messages across all chat rooms for the user, as well as per-room counts. (변경사항 반영됨: userId 파라미터는 더 이상 필요하지 않음, 인증된 사용자 기준)
-// @Description  request : GET /dm/v01/total/unread HTTP/1.1
-// @Description  response : {"result":0,"resultString":"Success","data":{"rooms":{"10":133},"total_count":133}}
-// @Tags        chat
-// @Accept      json
-// @Produce     json
-// @Success     200 {object} map[string]interface{} "total: 전체 unread 개수, rooms: 각 방별 unread 개수"
-// @Failure     401 {object} map[string]string "인증 실패"
-// @Failure     500 {object} map[string]string "Internal server error"
-// @Router      /dm/v01/total/unread [get]
-//
-//	GET /dm/v01/total/unread HTTP/1.1
-//	Host: localhost:8080
-//	Authorization: Bearer {access_token}
-//
-// @Example Resp:
-//
-// {"result":0,"resultString":"Success","data":{"rooms":{"10":30},"total_count":30}}
-//
-// @Example Success Response:
-//
-//	HTTP/1.1 200 OK
-//	Content-Type: application/json
-//	{
-//	  "total_count": 7,
-//	  "rooms": {
-//	    "101": 5,
-//	    "202": 2
-//	  }
-//	}
+// @Summary      DM 미읽음 수 조회
+// @Description  DM 미읽음 수 조회 API입니다.
+// @Description
+// @Description  **요청**: 별도 입력 없음.
+// @Description
+// @Description  **처리**: JWT 사용자의 전체 및 방별 미읽음 수를 조회합니다.
+// @Description
+// @Description  **응답 data**: total_count, rooms(방 ID별 카운트).
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         DM
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Success      200 {object} protocol.RespDataHeader "data: total_count, rooms(방 ID별 카운트)."
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /dm/v01/total/unread [get]
+// @Example Response: {"result":0,"resultString":"Success","data":{"total_count":0,"rooms":{}}}
+// @x-response-example {"result":0,"resultString":"Success","data":{"total_count":0,"rooms":{}}}
+// @Example Request: GET /dm/v01/total/unread
 func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1369,43 +1371,30 @@ func (cc *ChatController) GetTotalUnread(c *gin.Context) {
 }
 
 // GetChatList godoc
-// @Summary      채팅 기록 조회 (커서 페이지네이션)
-// @Description  특정 채팅방(room_id)의 과거 메시지 목록을 커서 기반으로 페이징하여 조회합니다.
-// @Description  실시간 신규 메시지는 WebSocket으로 수신하고, 본 API는 과거 구간(기록/이력) 보완용입니다.
-// @Description  cursor 미지정시 최신 limit개를 반환하며, 이전 응답의 next_cursor를 전달하면 해당 커서보다 오래된 메시지를 조회합니다.
-// @Description  응답에 my_last_mid / partner_last_mid (Redis DM:READ, TTL 3일) 를 포함합니다. 조회만 하며 mid를 갱신하지 않습니다.
+// @Summary      DM 메시지 이력 조회
+// @Description  DM 메시지 이력 조회 API입니다.
 // @Description
-// @Description  [요청 예시]
-// @Description    GET /dm/v01/history/10?limit=20 HTTP/1.1
-// @Description    GET /dm/v01/history/10?limit=20&cursor=086572 HTTP/1.1
-// @Description    Authorization: Bearer {access_token}
+// @Description  **요청**: path room_id, query cursor(선택), limit(기본 2). pgSize는 사용하지 않습니다.
 // @Description
-// @Description  [응답 예시]
-// @Description    {
-// @Description      "result": 0,
-// @Description      "resultString": "Success",
-// @Description      "data": {
-// @Description        "messages": [...],
-// @Description        "total_count": 109,
-// @Description        "next_cursor": "086572",
-// @Description        "has_more": true,
-// @Description        "my_last_mid": "mid-aaa",
-// @Description        "partner_last_mid": "mid-bbb"
-// @Description      }
-// @Description    }
-// @Tags           chat
-// @Accept         json
-// @Produce        json
-// @Param          room_id   path     string  true   "채팅방 ID"
-// @Param          limit     query    int     false  "가져올 메시지 개수 (기본값: 20, 최대 pgSize 제한)"
-// @Param          cursor    query    string  false  "이전 응답의 next_cursor 값"
-// @Param          pgSize    query    int     false  "limit의 최대값 상한 (기본 50)"
-// @Success        200 {object} map[string]interface{} "messages, total_count, next_cursor, has_more, my_last_mid, partner_last_mid"
-// @Failure        400 {object} map[string]string "잘못된 요청(잘못된 cursor 등)"
-// @Failure        401 {object} map[string]string "인증 실패"
-// @Failure        403 {object} map[string]string "방 참여자 아님"
-// @Failure        500 {object} map[string]string "서버 내부 에러"
-// @Router         /dm/v01/history/{room_id} [get]
+// @Description  **처리**: 활성 참여자 여부와 방 이력 시작 위치를 적용합니다. 잘못된 cursor는 400입니다. limit ≤ 0이면 빈 목록이며 현재 명시적인 최대 limit 제한은 없습니다.
+// @Description
+// @Description  **응답 data**: total_count, messages, next_cursor, has_more, my_last_mid, partner_last_mid.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         DM
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        room_id path string true "채팅방 ID"
+// @Param        cursor query string false "이전 응답의 next_cursor"
+// @Param        limit query int false "요청 메시지 수 (0 이하: 빈 목록)" default(2)
+// @Success      200 {object} protocol.RespDataHeader "data: total_count, messages, next_cursor, has_more, my_last_mid, partner_last_mid."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      403 {object} protocol.RespHeader "권한 없음 또는 차단 관계"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /dm/v01/history/{room_id} [get]
+// @Example Request: GET /dm/v01/history/1
 func (cc *ChatController) GetChatList(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -1509,26 +1498,34 @@ func (cc *ChatController) SendDMNotification(toUserID string, msg *ptc.ChatMessa
 	cc.sendToUser(toUserID, &cp)
 }
 
-// UploadImage 채팅 이미지 업로드
-// @Summary 채팅 이미지 업로드
-// @Description 인증된 사용자가 채팅에 이미지를 업로드합니다. 이미지는 Cloudflare Images에 저장되며, 여러 장(최대 5장, 각 5MB 이하) 업로드 가능. 업로드 성공 시 Cloudflare 이미지 URL 목록 반환 (data에 포함).
-// @Description 요청 예시(curl):
-// @Description curl -X POST "http://localhost:8080/dm/v01/upload/img" -H "Authorization: Bearer {jwt-access-token}" -F "file=@/home/tmp/chat1.jpg" -F "file=@/home/tmp/chat2.jpg"
-// @Description 성공 응답 예시:
-// @Description {"result":0,"resultString":"Success","data":{"msg":"success","data":{"chat1.jpg":"https://imagedelivery.net/.../public","chat2.jpg":"https://imagedelivery.net/.../public"}}}
-// @Description 실패 응답 예시(400): {"error":"file required"}
-// @Description 실패 응답 예시(401): {"error":"User not authenticated"}
-// @Description 실패 응답 예시(500): {"error":"Failed to upload image"}
-// @Tags chat
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param file formData file true "업로드할 채팅 이미지 파일 (여러 개 가능, 최대 5개 첨부)"
-// @Success 200 {object} map[string]interface{} "성공 응답 예시"
-// @Failure 400 {object} map[string]string "요청 형식 오류 예시"
-// @Failure 401 {object} map[string]string "인증 오류 예시"
-// @Failure 500 {object} map[string]string "서버 에러 예시"
-// @Router /dm/v01/upload/img [post]
+// UploadImage godoc
+// @Summary      DM 이미지 업로드
+// @Description  DM 이미지 업로드 API입니다.
+// @Description
+// @Description  **요청**: multipart files: 최대 5개, 각 5MiB 이하.
+// @Description
+// @Description  **처리**: JWT 인증과 simpleImgUploadCF 검증·업로드 후 파일명별 URL을 반환합니다.
+// @Description
+// @Description  **응답 data**: msg, data(파일명 → URL 맵).
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Description  업로드 미들웨어 오류는 JSON 문자열 또는 error 객체일 수 있으며 핸들러의 RespHeader 오류와 형식이 다릅니다.
+// @Description  **업로드 공통 제한**: 요청 전체 크기·동시 업로드 제한을 초과하면 413/503입니다. 기본값은 530MiB/8건이며 서버 설정에 따라 달라집니다.
+// @Tags         DM
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        files formData file true "업로드 파일 (동일 필드명으로 여러 파일 전송 가능)"
+// @Success      200 {object} protocol.RespDataHeader "data: msg, data(파일명 → URL 맵)."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      413 {object} map[string]interface{} "업로드 요청 크기 제한 초과"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Failure      503 {object} map[string]interface{} "서버 동시 처리·연결 한도 초과"
+// @Router       /dm/v01/upload/img [post]
+// @Example Response: {"result":0,"resultString":"Success","data":{"msg":"ok","data":{"photo.jpg":"https://imagedelivery.net/example/public"}}}
+// @x-response-example {"result":0,"resultString":"Success","data":{"msg":"ok","data":{"photo.jpg":"https://imagedelivery.net/example/public"}}}
+// @Example Request: POST /dm/v01/upload/img
 func (cc *ChatController) UploadImage(c *gin.Context) {
 	// JWT 인증 검사
 	_, exists := c.Get("user")
@@ -1553,7 +1550,7 @@ func (cc *ChatController) UploadImage(c *gin.Context) {
 	}
 
 	cc.ctl.SendDataResponse(c, http.StatusOK, gin.H{
-		"msg":  "success",
+		"msg":  "ok",
 		"data": cldFlrInfos, // 업로드된 Cloudflare 이미지 URL (파일명: URL 맵)
 	})
 }

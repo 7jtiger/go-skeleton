@@ -46,25 +46,28 @@ func NewSetController(ctl *Controller, rep *models.Repositories) (*SetController
 }
 
 // GetSetting godoc
-// @Summary Get user notification settings
-// @Description Retrieves notification settings for authenticated users via JWT token.
-// @Description Notification settings are managed using bit flags:
-// @Tags Setting
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param Authorization header string true "Bearer {token}"
-// @Param uid path string true "User ID"
-// @Success 200 {object} protocol.RespHeader{data=int} "Notification setting value (0-15)"
-// @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /user/v01/getset/{uid} [get]
-// @Example request
-// GET /user/v01/set/8697414060736839837
-// @Example response 200
-// {"code": 200, "message": "success", "data": 5}
-// @Example response 401
-// {"code": 401, "message": "No JWT"}
+// @Summary      본인 알림 설정 조회
+// @Description  본인 알림 설정 조회 API입니다.
+// @Description
+// @Description  **요청**: path uid는 호환용이며 무시합니다.
+// @Description
+// @Description  **처리**: JWT 본인의 알림 비트 값을 조회합니다.
+// @Description
+// @Description  **응답 data**: 정수 알림 설정 값.
+// @Description  응답은 `{"result":0,"resultString":"Success","data":...}` 형식입니다.
+// @Tags         Setting
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        uid path string true "호환용 값. 실제 대상은 JWT 본인"
+// @Success      200 {object} protocol.RespDataHeader{data=int} "data: 정수 알림 설정 값."
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /user/v01/getset/{uid} [get]
+// @Example Response: {"result":0,"resultString":"Success","data":0}
+// @x-response-example {"result":0,"resultString":"Success","data":0}
+// @Example Request: GET /user/v01/getset/4033287471439576593
 func (p *SetController) GetSetting(c *gin.Context) {
 	// {test243 8697414060736839837  test243@test.com 홍두께 건강한 꼬마 오렌지 1 24 1990-01-01T00:00:00Z 서울 0 https://i.ibb.co/QF37KRST/male-ai-02.webp https://i.ibb.co/C5c51dYg/icon-male-04.webp 반가워요 큐피톡에서 만나요!}
 	user, exists := c.Get("user")
@@ -92,32 +95,32 @@ func (p *SetController) GetSetting(c *gin.Context) {
 }
 
 // SetSetting godoc
-// @Summary Update user settings
-// @Description Updates user settings based on category. Currently supports notification alert settings.
-// @Description Alert settings use bit flags (0-15) with XOR operation to toggle:
-// @Description - noti=1 (notification), call=2 (call), msg=4 (message), rvr=8 (reserve)
-// @Description - 0 = all alerts enabled
-// @Description - 15 = all alerts disabled
-// @Description - Example: To toggle notification, send value "1"
-// @Tags Setting
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param Authorization header string true "Bearer {token}"
-// @Param cate path string true "Setting category (e.g. alert)"
-// @Param value path string true "Setting value"
-// @Success 200 {object} map[string]interface{} "Setting updated successfully"
-// @Failure 400 {object} protocol.RespHeader "Invalid request - Missing or invalid parameters"
-// @Failure 401 {object} protocol.RespHeader "Authentication failed - No JWT token"
-// @Failure 500 {object} protocol.RespHeader "Internal server error"
-// @Router /user/v01/set/{cate}/{value} [post]
-// @Example request
-// POST /user/v01/set
-// {"cate": "alert", "value": "1"}
-// @Example response 200
-// {"code": 200, "message": "success", "data": {"msg": "success"}}
-// @Example response 400
-// {"code": 400, "message": "cate and value are required"}
+// @Summary      본인 알림 설정 토글
+// @Description  본인 알림 설정 토글 API입니다.
+// @Description
+// @Description  **요청**: 실제 입력은 JSON body cate, value(필수 문자열). path cate/value는 무시합니다.
+// @Description
+// @Description  **처리**: cate는 alert만 허용합니다. value를 정수로 변환하여 기존 알림 값과 XOR하고 저장합니다.
+// @Description
+// @Description  **응답**: 최상위 msg.
+// @Tags         Setting
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Authorization header string true "Bearer access token"
+// @Param        cate path string true "호환용 값. 실제 입력은 body cate"
+// @Param        value path string true "호환용 값. 실제 입력은 body value"
+// @Param        request body object{cate=string,value=string} true "필수 문자열 필드: cate, value"
+// @Success      200 {object} map[string]interface{} "최상위 msg."
+// @Failure      400 {object} protocol.RespHeader "요청 형식·값 검증 실패"
+// @Failure      401 {object} protocol.RespHeader "인증 실패 또는 사용자 컨텍스트 없음"
+// @Failure      500 {object} protocol.RespHeader "내부 처리 실패"
+// @Router       /user/v01/set/{cate}/{value} [post]
+// @Example Response: {"msg":"ok"}
+// @x-response-example {"msg":"ok"}
+// @Example Request: POST /user/v01/set/alert/1
+// @Example Request Body: {"cate":"alert","value":"1"}
+// @x-request-example {"cate":"alert","value":"1"}
 func (p *SetController) SetSetting(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -156,7 +159,7 @@ func (p *SetController) SetSetting(c *gin.Context) {
 		return
 	}
 
-	p.ctl.SimpleRespOK(c, gin.H{"msg": "success"})
+	p.ctl.SimpleRespOK(c, gin.H{"msg": "ok"})
 }
 
 func (p *SetController) setAlert(uid uint64, value string) error {

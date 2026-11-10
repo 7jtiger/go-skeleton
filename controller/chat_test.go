@@ -396,7 +396,7 @@ func Test_UploadChatImage(t *testing.T) {
 		t.Fatalf("Failed to read response: %v", err)
 	}
 
-	//"{\"result\":0,\"resultString\":\"Success\",\"data\":{\"data\":{\"rewq.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1356a6c4-6a5a-4627-a316-268a452d1700/public\",\"wet1.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4ec7eb26-a181-43fd-efdd-caf8f8669b00/public\"},\"msg\":\"success\"}}"
+	//"{\"result\":0,\"resultString\":\"Success\",\"data\":{\"data\":{\"rewq.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1356a6c4-6a5a-4627-a316-268a452d1700/public\",\"wet1.jpg\":\"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4ec7eb26-a181-43fd-efdd-caf8f8669b00/public\"},\"msg\":\"ok\"}}"
 	fmt.Printf("Status: %d, Response: %s\n", resp.StatusCode, string(respBody))
 
 }

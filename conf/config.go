@@ -35,18 +35,22 @@ type Networks struct {
 
 type Config struct {
 	Server struct {
-		Name       string
-		Mode       string
-		Port       string
-		HCheck     string
-		HCPort     string
-		BaseKey    string
-		FcmKeyPath string
-		JWTSecret  string
-		CfId       string
-		CfToken    string
-		CronJob    string
-		SchWorker  string
+		Name              string
+		Mode              string
+		Port              string
+		HCheck            string
+		HCPort            string
+		BaseKey           string
+		FcmKeyPath        string
+		JWTSecret         string
+		UploadMaxBytes    int64
+		UploadConcurrency int
+		CommentAdminUIDs  []uint64 // Explicit comment moderation allowlist; no body-supplied role.
+		ProfileAdminUIDs  []uint64 // Server-managed profile moderation allowlist; empty denies everyone.
+		CfId              string
+		CfToken           string
+		CronJob           string
+		SchWorker         string
 	}
 
 	WebRTC struct {

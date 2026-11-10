@@ -524,6 +524,41 @@ func resolveUpdCntsType(fh *multipart.FileHeader) (string, error) {
 	return detectCntsType(fh)
 }
 
+func uploadResourceLimits(maxBytes int64, concurrent int) gin.HandlerFunc {
+	if maxBytes <= 0 {
+		maxBytes = 530 << 20
+	} // Five 100 MiB videos plus thumbnails and form data.
+	if concurrent <= 0 {
+		concurrent = 8
+	}
+	slots := make(chan struct{}, concurrent)
+	return func(c *gin.Context) {
+		if !strings.HasPrefix(strings.ToLower(c.GetHeader("Content-Type")), "multipart/form-data") {
+			c.Next()
+			return
+		}
+		if c.Request.ContentLength > maxBytes {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "upload is too large"})
+			return
+		}
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		default:
+			c.Header("Retry-After", "1")
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "upload capacity reached"})
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		defer func() {
+			if c.Request.MultipartForm != nil {
+				_ = c.Request.MultipartForm.RemoveAll()
+			}
+		}()
+		c.Next()
+	}
+}
+
 func (p *Router) simpleImgUploadCF(maxFiles int, size int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		contentType := c.GetHeader("Content-Type")

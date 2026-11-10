@@ -10,999 +10,552 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	ptl "ms-gateway/protocol"
-	// "gocv.io/x/gocv"
 )
 
-// ----  stroy ----------------
+// Every endpoint URL is fixed to localhost:8080 and the literal qurl below.
+// Server and URL parameters do not use command-line flags.
+// Run selected tests against test accounts only: writes change stories/relations.
+//
+//	go test ./controller -run '^TestGetStoryViewCount$' -args \
+//	  -dm_token <JWT>
+//
+// Profile endpoints already covered in stry_prf_test.go remain there.
+var (
+	storyTestIdx        = flag.String("story_idx", "3", "test story ID for view/like/comment/edit tests (original default: 3)")
+	storyTestCommentIdx = flag.String("story_comment_idx", "1", "existing test comment ID")
+	storyTestPicIdx     = flag.String("story_pic_idx", "1", "media slot to delete from test story")
+	storyTestFiles      = flag.String("story_files", "/home/jino/tmp/next1.mp4", "comma-separated upload file paths, maximum 5")
+	storyTestThumbs     = flag.String("story_thumbnails", "/home/jino/tmp/bc1.jpg", "comma-separated video thumbnail paths in video order")
+	storyTestMedia      = flag.String("story_media_json", "", "JSON file containing upload response data.media only")
+)
 
-func Test_UploadPicStory(t *testing.T) {
-	// story.POST("/create", p.ValidateFileUpload(5, 5), p.st.CreateStory)
-	// "./bak/tmpimg/qwer.jpg"
-	// "./bak/tmpimg/rewq.jpg"
-	// "./bak/tmpimg/wet1.jpg"
-
-	// This test demonstrates a multipart/form POST to the /story/v01/create API.
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	flag.Parse()
-
-	uploadUrl := fmt.Sprintf("http://%s/story/v01/create", *targetUrl)
-
-	// Prepare test files (ensure these files exist!)
-	// img1 := "/home/jino/go/src/ms-gateway/bak/tmpimg/qwer.jpg"
-	img1 := "/home/jino/go/src/ms-gateway/bak/tmpimg/wet1.jpg"
-	img2 := "/home/jino/go/src/ms-gateway/bak/tmpimg/rewq.jpg"
-
-	var b bytes.Buffer
-	writer := multipart.NewWriter(&b)
-
-	// Add files part (maximum 2 images for this test)
-	files := []string{img1, img2}
-	for _, fname := range files {
-		file, err := os.Open(fname)
-		if err != nil {
-			t.Fatalf("Failed to open file %s: %v", fname, err)
-		}
-		defer file.Close()
-
-		part, err := writer.CreateFormFile("files", filepath.Base(fname))
-		if err != nil {
-			t.Fatalf("Failed to create form file for %s: %v", fname, err)
-		}
-		if _, err := io.Copy(part, file); err != nil {
-			t.Fatalf("Failed to copy file data for %s: %v", fname, err)
-		}
+func storyFixture(t *testing.T, value, name string) string {
+	t.Helper()
+	n, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || n == 0 {
+		t.Skipf("set -%s to a positive test fixture ID", name)
 	}
+	return value
+}
 
-	// Add sinfo part (story info)
-	// Simulate a realistic user
-	sinfo := map[string][]string{
-		"stat":  {"1"},
-		"sbody": {"tasdfsafdest 테스트 스토리 본문 story body from automated test"},
-	}
-	// Flat form fields (also compatible with sinfo[key] via middleware normalize)
-	for k, vs := range sinfo {
-		for _, v := range vs {
-			if err := writer.WriteField(k, v); err != nil {
-				t.Fatalf("Failed to add sinfo field %s: %v", k, err)
-			}
-		}
-	}
+// Multipart/create requests retain the original explicit HTTP request template.
+func storyRequest(t *testing.T, target, qurl, contentType string, body io.Reader) string {
+	t.Helper()
+	return storyHTTPResponse(t, http.MethodPost, target, qurl, contentType, body, *dmToken)
+}
 
-	// Set the requested access token in the header for authentication
-	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
-
-	if err := writer.Close(); err != nil {
-		t.Fatalf("Failed to close multipart writer: %v", err)
-	}
-
-	// Build the HTTP request
-	req, err := http.NewRequest("POST", uploadUrl, &b)
+// Keep HTTP and application errors from passing as successful integration tests.
+func storyHTTPResponse(t *testing.T, method, target, qurl, contentType string, body io.Reader, token string) string {
+	t.Helper()
+	req, err := http.NewRequest(method, "http://"+target+qurl, body)
 	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
+		t.Fatal(err)
 	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+testToken)
-
-	client := &http.Client{}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", contentType)
+	client := &http.Client{Timeout: 2 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("Failed to perform request: %v", err)
+		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatalf("Failed to read response: %v", err)
+		t.Fatal(err)
 	}
-
-	fmt.Printf("Status: %d, Response: %s\n", resp.StatusCode, string(respBody))
-
-}
-
-// Test_UploadContents POST /story/v01/upload — UploadStoryContent (동영상 + thbnl 1:1)
-func Test_UploadContents(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	flag.Parse()
-
-	uploadURL := fmt.Sprintf("http://%s/story/v01/upload", *targetUrl)
-
-	vd1 := "/home/jino/tmp/next1.mp4"
-	thb1 := "/home/jino/tmp/bc1.jpg"
-	videoFiles := []string{vd1}
-	thumbFiles := []string{thb1}
-
-	for _, path := range append(videoFiles, thumbFiles...) {
-		if _, err := os.Stat(path); err != nil {
-			t.Skipf("test media not found %s: %v", path, err)
-		}
-	}
-
-	var bodyBuf bytes.Buffer
-	writer := multipart.NewWriter(&bodyBuf)
-
-	for _, fname := range videoFiles {
-		file, err := os.Open(fname)
-		if err != nil {
-			t.Fatalf("Failed to open video file %s: %v", fname, err)
-		}
-		func(f *os.File, path string) {
-			defer f.Close()
-			part, err := writer.CreateFormFile("files", filepath.Base(path))
-			if err != nil {
-				t.Fatalf("Failed to create form file for %s: %v", path, err)
-			}
-			if _, err := io.Copy(part, f); err != nil {
-				t.Fatalf("Failed to copy file data for %s: %v", path, err)
-			}
-		}(file, fname)
-	}
-
-	for _, tname := range thumbFiles {
-		file, err := os.Open(tname)
-		if err != nil {
-			t.Fatalf("Failed to open thumbnail file %s: %v", tname, err)
-		}
-		func(f *os.File, path string) {
-			defer f.Close()
-			part, err := writer.CreateFormFile("thbnl", filepath.Base(path))
-			if err != nil {
-				t.Fatalf("Failed to create form file for thumbnail %s: %v", path, err)
-			}
-			if _, err := io.Copy(part, f); err != nil {
-				t.Fatalf("Failed to copy thumbnail data for %s: %v", path, err)
-			}
-		}(file, tname)
-	}
-
-	if err := writer.Close(); err != nil {
-		t.Fatalf("Failed to close multipart writer: %v", err)
-	}
-
-	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
-
-	req, err := http.NewRequest(http.MethodPost, uploadURL, &bodyBuf)
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+testToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("Failed to perform request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response: %v", err)
-	}
-
-	fmt.Printf("Status: %d, Response: %s\n", resp.StatusCode, string(respBody))
-
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(respBody))
+		t.Fatalf("%s %s: HTTP %d: %s", method, qurl, resp.StatusCode, raw)
 	}
-
-	var apiResp struct {
-		Result       int    `json:"result"`
-		ResultString string `json:"resultString"`
-		Data         struct {
-			Msg   string                        `json:"msg"`
-			Media map[string]ptl.StoryMediaItem `json:"media"`
-		} `json:"data"`
+	var result struct {
+		Result       *int            `json:"result"`
+		ResultString string          `json:"resultString"`
+		Data         json.RawMessage `json:"data"`
+		Msg          string          `json:"msg"`
 	}
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		t.Fatalf("failed to parse response JSON: %v", err)
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("%s %s: invalid JSON: %s", method, qurl, raw)
 	}
-	if apiResp.Result != 0 {
-		t.Fatalf("expected result=0, got %d (%s)", apiResp.Result, apiResp.ResultString)
+	if result.Result != nil {
+		if *result.Result != 0 || result.ResultString != "Success" || len(result.Data) == 0 || string(result.Data) == "null" {
+			t.Fatalf("%s %s: unsuccessful response: %s", method, qurl, raw)
+		}
+	} else if result.Msg != "ok" {
+		t.Fatalf("%s %s: unexpected response: %s", method, qurl, raw)
 	}
-	if apiResp.Data.Msg != "ok" {
-		t.Fatalf("expected data.msg=ok, got %q", apiResp.Data.Msg)
-	}
-	if len(apiResp.Data.Media) == 0 {
-		t.Fatalf("expected data.media with slots, got empty")
-	}
-	item, ok := apiResp.Data.Media["1"]
-	if !ok || item.Type != ptl.StoryMediaTypeVdo || item.URL == "" || item.Thumb == "" {
-		t.Fatalf("expected media[1] vdo with url+thumb, got %+v", item)
-	}
-
-	fmt.Printf("UploadStoryContent OK — media: %+v\n", apiResp.Data.Media)
+	return string(raw)
 }
 
-// Test_CreateStory POST /story/v01/create — CreateStory (upload 응답 media로 JSON 저장 테스트)
+func storyJSONRequest(t *testing.T, method, target, qurl string, keys, values []string, token string) string {
+	t.Helper()
+	if len(keys) != len(values) {
+		t.Fatal("request keys and values must have equal lengths")
+	}
+	payload := make(map[string]string, len(keys))
+	for i, key := range keys {
+		payload[key] = values[i]
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body io.Reader
+	if method == http.MethodPost {
+		body = bytes.NewReader(raw)
+	}
+	return storyHTTPResponse(t, method, target, qurl, "application/json", body, token)
+}
 
+// POST /story/v01/upload
+func Test_UploadContents(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/upload"
+	if *storyTestFiles == "" {
+		t.Skip("set -story_files and, for videos, -story_thumbnails")
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for field, paths := range map[string]string{"files": *storyTestFiles, "thbnl": *storyTestThumbs} {
+		if paths == "" {
+			continue
+		}
+		for _, path := range strings.Split(paths, ",") {
+			path = strings.TrimSpace(path)
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			part, err := writer.CreateFormFile(field, filepath.Base(path))
+			if err == nil {
+				_, err = io.Copy(part, file)
+			}
+			file.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	res := storyRequest(t, targetUrl, qurl, writer.FormDataContentType(), &body)
+	fmt.Println(res)
+}
+
+// POST /story/v01/create
 func Test_CreateStory_Test(t *testing.T) {
-	targetURL := flag.String("target", "localhost:8080", "target server url")
-	flag.Parse()
-
-	createStoryURL := fmt.Sprintf("http://%s/story/v01/create", *targetURL)
-
-	// POST /story/v01/upload 성공 응답의 data.media 객체 (실제 파일 업로드 생략)
-	uploadedMedia := ptl.StoryStrImg{
-		"1": {
-			Type:  ptl.StoryMediaTypeVdo,
-			URL:   "https://storage.googleapis.com/stream-example-bucket/video.mp4",
-			Thumb: "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public",
-		},
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/create"
+	// Original upload-response fixture; an optional file can override it.
+	media := ptl.StoryStrImg{"1": {Type: ptl.StoryMediaTypeVdo, URL: "https://storage.googleapis.com/stream-example-bucket/video.mp4", Thumb: "https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}}
+	if *storyTestMedia != "" {
+		raw, err := os.ReadFile(*storyTestMedia)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = json.Unmarshal(raw, &media); err != nil {
+			t.Fatal(err)
+		}
 	}
-
-	testToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4Njk3NDE0MDYwNzM2ODM5ODM3IiwiZXhwIjo0OTMxMTQ3NDQ4fQ.3_r7sDc90IoeLEXO78d5MIp4Ejn3RHpYWixjdrHFrfE"
-
-	createPayload, err := json.Marshal(map[string]interface{}{
-		"stat":  1,
-		"sbody": "테스트 동영상 스토리 — CreateStory from automated video+thumb test",
-		"price": 100,
-		"media": uploadedMedia,
-	})
+	payload, err := json.Marshal(ptl.CreateStoryReq{Stat: 1, Sbody: "테스트 동영상 스토리 — CreateStory from automated video+thumb test", Price: 100, Media: media})
 	if err != nil {
-		t.Fatalf("Failed to marshal create request: %v", err)
+		t.Fatal(err)
 	}
-
-	createReq, err := http.NewRequest(http.MethodPost, createStoryURL, bytes.NewReader(createPayload))
-	if err != nil {
-		t.Fatalf("Failed to create story request: %v", err)
-	}
-	createReq.Header.Set("Content-Type", "application/json")
-	createReq.Header.Set("Authorization", "Bearer "+testToken)
-
-	createResp, err := http.DefaultClient.Do(createReq)
-	if err != nil {
-		t.Fatalf("Failed to perform create request: %v", err)
-	}
-	defer createResp.Body.Close()
-
-	createRespBody, err := io.ReadAll(createResp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read create response: %v", err)
-	}
-	fmt.Printf("Create status: %d, Response: %s\n", createResp.StatusCode, string(createRespBody))
-
-	if createResp.StatusCode != http.StatusOK {
-		t.Fatalf("create expected status 200, got %d: %s", createResp.StatusCode, string(createRespBody))
-	}
-
-	var createAPIResp struct {
-		Msg string `json:"msg"`
-		Idx int64  `json:"idx"`
-	}
-	if err := json.Unmarshal(createRespBody, &createAPIResp); err != nil {
-		t.Fatalf("failed to parse create response JSON: %v", err)
-	}
-	if createAPIResp.Msg != "ok" {
-		t.Fatalf("expected msg=ok, got %q", createAPIResp.Msg)
-	}
-	if createAPIResp.Idx <= 0 {
-		t.Fatalf("expected idx > 0, got %d", createAPIResp.Idx)
-	}
-
-	fmt.Printf("CreateStory OK — idx: %d, media: %+v\n", createAPIResp.Idx, uploadedMedia)
+	res := storyRequest(t, targetUrl, qurl, "application/json", bytes.NewReader(payload))
+	fmt.Println(res)
 }
 
-// 개인 피드에서 idx 피드 상세 조회 변경
-// 개개인별 피드 리스트 -> 클릭 -> 해당 개인 디테일 -> 컨텐츠 + 본문 + 댓글 리스트 조회
-// 타겟 uid
+// GET /story/v01/detail/15
 func TestGetStoryDetail(t *testing.T) {
-	// story.GET("/detail/:idx/:page/:limit/:tid", p.st.GetStoryDetail)
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	// idx := "15"
-	tid := "4033287471439576593"
-	qurl := fmt.Sprintf("/story/v01/list/1/20/%s", tid)
-	// qurl := fmt.Sprintf("/story/v01/detail/%s/1/20", idx)
-
-	// res, err := Get(*targetUrl, qurl, nil, nil)
-	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to get story detail: %v", err)
-	}
-	/*
-		{"result":0,"resultString":"Success","data":{"story":[
-		{"idx":15,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"E 둘다","stat":3,"qt_good":16,"qt_view":6,"content_total":3,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"},"3":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"comment_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","wgender":"0","wage":"2019-01-02T00:00:00Z","warea":"10","body":"dsafasdfqwerwqe","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]},
-		{"idx":14,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"D 혼합","stat":2,"qt_good":15,"qt_view":7,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":0,"comment_list":null},
-		{"idx":13,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"C 동영상만","stat":1,"qt_good":14,"qt_view":8,"content_total":1,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:23Z","cmt_count":0,"comment_list":null},
-		{"idx":12,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"테스트 B 디코딩JSON","stat":1,"qt_good":13,"qt_view":9,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"}},"at_create":"2026-09-02T13:34:58Z","cmt_count":0,"comment_list":null},
-		{"idx":10,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"[claude] img+thbnl","stat":1,"qt_good":11,"qt_view":11,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/669744da-bd95-4226-b618-291f36529c00/public"}},"at_create":"2026-08-26T15:15:18Z","cmt_count":0,"comment_list":null},
-		{"idx":9,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"나나나나나","stat":1,"qt_good":9,"qt_view":12,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/38fff373-1d2e-4f15-d7bc-bbf6516ebd00/public"}},"at_create":"2026-08-26T14:15:37Z","cmt_count":0,"comment_list":null},
-		{"idx":8,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"t","stat":1,"qt_good":8,"qt_view":13,"content_total":2,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"}},"at_create":"2026-08-26T14:15:18Z","cmt_count":0,"comment_list":null},
-		{"idx":7,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"t","stat":3,"qt_good":7,"qt_view":14,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5fa14918-f7a2-4063-b83b-1fac891f7700/public"}},"at_create":"2026-08-26T14:15:16Z","cmt_count":0,"comment_list":null},
-		{"idx":6,"uid":4033287471439576593,"nick":"푸른 아름다운 양","body":"[claude] 업로드 응답 형태 확인용 테스트","stat":1,"qt_good":6,"qt_view":15,"content_total":1,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/59f51a37-c5b7-424e-75dd-a9706280e300/public"}},"at_create":"2026-08-26T14:14:21Z","cmt_count":0,"comment_list":null}],"total_count":14}}
-	*/
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/detail/20"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"is_locked":0,"good_byme":0,"idx":20,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"1123","stat":0,"qt_like":21,"qt_view":2,"ctnt_total":5,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1f5d729f-2a65-4352-9dc3-825550ee4300/public"},"3":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/c05cad48-7448-493e-6653-55980b54f600/public"},"4":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0ca94b70-b7f6-4282-1d00-910a1c0caf00/public"},"5":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4a8b1692-78fa-4216-889d-aef67d024400/public"}},"at_create":"2026-09-09T12:56:23Z","cmt_count":0,"cmt_list":null}}
 	fmt.Println(res)
 }
 
+// GET /story/v01/list/1/10/7766493213763375817
 func TestGetDefStoryList(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	// qurl := "/story/v01/list/1/10"
-	qurl := "/story/v01/list/1/10/7766493213763375817"
-	// qurl := "/story/v01/list"
-
-	// var key = []string{"uid"}
-	// var value = []string{"7766493213763375817"}
-
-	// res, err := GetWithToken(*targetUrl, qurl, key, value, *dmToken)
-	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
-	if err != nil {
-		t.Errorf("Failed to get story list: %v", err)
-	}
-	/*
-	   [{"idx": 20, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 5, "cnt_url": "https://imaged", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-09T12:56:23Z"},
-	   {"idx": 19, "uid": "403", "nick": "푸양", "stat": 1,"cnt_count": 2, "cnt_url": "https://imag", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-09T12:08:23Z"},
-	   {"idx": 17, "uid": "403", "nick": "푸양", "stat": 2, "cnt_count": 2, "cnt_url": "https://image", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-08T13:16:21Z"},
-	   {"idx": 16, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://imaged", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-04T10:57:04Z"},
-	   {"idx": 15, "uid": "403", "nick": "푸양", "stat": 3, "cnt_count": 3, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:35:24Z"},
-	   {"idx": 14, "uid": "403", "nick": "푸양", "stat": 2, "cnt_count": 2, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:35:24Z"},
-	   {"idx": 13, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://video.mp4", "cnt_type": "vdo", "cnt_thumb": "https://imaged", "at_create": "2026-09-02T13:35:23Z"},
-	   {"idx": 12, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 2, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-09-02T13:34:58Z"},
-	   {"idx": 11, "uid": "869", "nick": "건지", "stat": 1, "cnt_count": 1, "cnt_url": "https://st/video.mp4", "cnt_type": "vdo", "cnt_thumb": "https://imaged", "at_create": "2026-08-28T15:01:54Z"},
-	   {"idx": 10, "uid": "403", "nick": "푸양", "stat": 1, "cnt_count": 1, "cnt_url": "https://imagede", "cnt_type": "img", "cnt_thumb": "", "at_create": "2026-08-26T15:15:18Z"}]
-	*/
-
+	targetUrl := "localhost:8080"
+	// qurl := "/story/v01/list/1/10/7766493213763375817"
+	qurl := "/story/v01/list/1/10/"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmPeerToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":10,"page":1,"story":[{"is_locked":0,"good_byme":0,"idx":26,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 2번 재배선 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/68598dcf-315f-483e-403a-87b3af033a00/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/004c2b76-559e-46ba-0ffe-0a304604d900/public"}},"at_create":"2026-10-20T14:28:35Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":25,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 슬롯2-thumb1","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5863ede1-a716-4f60-b58f-83050f59e000/public"}},"at_create":"2026-10-20T13:34:33Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":24,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] stat9 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"}},"at_create":"2026-10-20T13:32:43Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":23,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 슬롯 2,3 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"}},"at_create":"2026-10-20T13:32:42Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":22,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] thumb1 검증","stat":3,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5863ede1-a716-4f60-b58f-83050f59e000/public"}},"at_create":"2026-10-20T13:32:42Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":21,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude 1020] create 응답 형태 확인용","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b9322450-c140-4e1b-b174-985b7c597e00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/a31bc924-d655-4274-43f8-622e2b776b00/public"}},"at_create":"2026-10-20T13:23:26Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":20,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"1123","stat":0,"qt_like":21,"qt_view":2,"ctnt_total":5,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1f5d729f-2a65-4352-9dc3-825550ee4300/public"},"3":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/c05cad48-7448-493e-6653-55980b54f600/public"},"4":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0ca94b70-b7f6-4282-1d00-910a1c0caf00/public"},"5":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4a8b1692-78fa-4216-889d-aef67d024400/public"}},"at_create":"2026-09-09T12:56:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":19,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"P5-0 B: imgs 손조립","stat":0,"qt_like":20,"qt_view":2,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/269023c3-7e1b-4bac-c89e-65e0c12a6000/public"}},"at_create":"2026-09-09T12:08:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":18,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"P5-0 A: vdos 손조립(순서반전)","stat":0,"qt_like":19,"qt_view":3,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ff91b39d-bb4f-47a7-f2a2-cf1ff98a5300/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"}},"at_create":"2026-09-09T12:08:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":17,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"12","stat":2,"qt_like":18,"qt_view":4,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5339e07e-cd0b-4a8d-d419-02c64cc91e00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/abd900bf-4d25-4ae5-547c-494144963000/public"}},"at_create":"2026-09-08T13:16:21Z","cmt_count":0,"cmt_list":null}],"total_count":20}}
 	fmt.Println(res)
 }
 
-// condition : area / stat / type / latest
-// paging
-// area :   // all = 0, seoul, gyeonggi, incheon, busan, daejeon/sejong/chungnam
-// chungbuk/cheonju/chungju, daegu/gyeongbuk, gyeongnam/ulsan, gwangju/jeonnam
-// jeonbuk/jeonju, gangwon/chuncheon, jeju
-// stat : 0=PUB(public 전체공개), 1=FLW(follower only), 2=PAY(paid only), 3=PRV(Private 비공개), 4=DEL(Deleted) 5=RSV(reserved)
-// type : 0=IMG(only img), 1 = VDO(only video), 2 = ALL(img + video), 3=RSV(reserved)
-// order : 0=OLD(oldest), 1=NEW(latest), 2=CMT(comMost), 3=GOD(goodMost), 4=VIEW(viewMost), 5=RSV(reserved)
-// gen : target gender 0=WMN(woman), 1=MAN(man), 2=RSV(reserved)
-// page : 1, 2, 3, ...
-// limit : 10, 20, 30, ...
-// response : {"result":0,"resultString":"Success","data":{"story_home_list":{"1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","2":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","3":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5512db27-6340-43cd-b5ab-85d7b9bd4800/public"}}}
+// GET /story/v01/list/1/10/2345091823
+func TestGetStoryListByUid(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/list/1/10/2345091823"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":10,"page":1,"story":[{"is_locked":1,"good_byme":0,"idx":2,"uid":2345091823,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"","stat":1,"qt_like":2,"qt_view":20,"ctnt_total":3,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public"},"3":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"}},"at_create":"2026-02-02T07:27:44Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":1,"uid":2345091823,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"테스트 스토리 내용입니다","stat":0,"qt_like":1,"qt_view":20,"ctnt_total":3,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public"},"3":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"}},"at_create":"2026-02-02T07:24:25Z","cmt_count":0,"cmt_list":null}],"total_count":2}}
+	fmt.Println(res)
+}
+
+// GET /story/v01/cndt/list/all/pub/img/new/1/1/20
 func TestGetCondStoryList(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	area := "all"
-	stat := "pub"
-	mtype := "img"
-	order := "new" // 최신순
-	gen := "1"
-	page := "1"
-	limit := "20"
+	targetUrl := "localhost:8080"
+	// qurl := "/story/v01/cndt/list/all/pub/img/new/1/1/20"
+	qurl := "/story/v01/cndt/list/all/all/all/new/1/1/20"
 
-	qurl := fmt.Sprintf("/story/v01/condition/list/%s/%s/%s/%s/%s/%s/%s", area, stat, mtype, order, gen, page, limit)
-
-	// res, err := Get(*targetUrl, qurl, nil, nil)
-	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
-	if err != nil {
-		t.Errorf("Failed to get conditional story list: %v", err)
-		return
-	}
-
-	//"result":0,"resultString":"Success","data":[{"idx":1,"uid":2345091823,"nick":"testnick","stat":0,"cnt_count":3,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-02-02T07:24:25Z"}]}
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmPeerToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":20,"page":1,"story":[{"is_locked":0,"good_byme":0,"idx":28,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"테스트 동영상 스토리 — CreateStory from automated video+thumb test","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":100,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}},"at_create":"2026-10-28T08:48:47Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":26,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 2번 재배선 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/68598dcf-315f-483e-403a-87b3af033a00/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/004c2b76-559e-46ba-0ffe-0a304604d900/public"}},"at_create":"2026-10-20T14:28:35Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":25,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 슬롯2-thumb1","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5863ede1-a716-4f60-b58f-83050f59e000/public"}},"at_create":"2026-10-20T13:34:33Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":24,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] stat9 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"}},"at_create":"2026-10-20T13:32:43Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":23,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] 슬롯 2,3 검증","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public"}},"at_create":"2026-10-20T13:32:42Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":22,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] thumb1 검증","stat":3,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5863ede1-a716-4f60-b58f-83050f59e000/public"}},"at_create":"2026-10-20T13:32:42Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":21,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude 1020] create 응답 형태 확인용","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b9322450-c140-4e1b-b174-985b7c597e00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/a31bc924-d655-4274-43f8-622e2b776b00/public"}},"at_create":"2026-10-20T13:23:26Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":20,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"1123","stat":0,"qt_like":21,"qt_view":2,"ctnt_total":5,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1f5d729f-2a65-4352-9dc3-825550ee4300/public"},"3":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/c05cad48-7448-493e-6653-55980b54f600/public"},"4":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0ca94b70-b7f6-4282-1d00-910a1c0caf00/public"},"5":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4a8b1692-78fa-4216-889d-aef67d024400/public"}},"at_create":"2026-09-09T12:56:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":19,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"P5-0 B: imgs 손조립","stat":0,"qt_like":20,"qt_view":2,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/269023c3-7e1b-4bac-c89e-65e0c12a6000/public"}},"at_create":"2026-09-09T12:08:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":18,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"P5-0 A: vdos 손조립(순서반전)","stat":0,"qt_like":19,"qt_view":3,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ff91b39d-bb4f-47a7-f2a2-cf1ff98a5300/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"}},"at_create":"2026-09-09T12:08:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":17,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"12","stat":2,"qt_like":18,"qt_view":4,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5339e07e-cd0b-4a8d-d419-02c64cc91e00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/abd900bf-4d25-4ae5-547c-494144963000/public"}},"at_create":"2026-09-08T13:16:21Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":16,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"P2 배선 검증","stat":1,"qt_like":17,"qt_view":8,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/269023c3-7e1b-4bac-c89e-65e0c12a6000/public"}},"at_create":"2026-09-04T10:57:04Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":15,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"E 둘다","stat":2,"qt_like":16,"qt_view":7,"ctnt_total":3,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"},"3":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"cmt_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","wgender":"0","wage":"2019-01-02","warea":"10","body":"dsafasdfqwerwqe","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]},{"is_locked":0,"good_byme":0,"idx":14,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"D 혼합","stat":2,"qt_like":15,"qt_view":7,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public"},"2":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":13,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"C 동영상만","stat":1,"qt_like":14,"qt_view":8,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:23Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":12,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"테스트 B 디코딩JSON","stat":1,"qt_like":13,"qt_view":9,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"}},"at_create":"2026-09-02T13:34:58Z","cmt_count":0,"cmt_list":null},{"is_locked":1,"good_byme":0,"idx":11,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"","stat":1,"qt_like":12,"qt_view":11,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}},"at_create":"2026-08-28T15:01:54Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":10,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"[claude] img+thbnl","stat":1,"qt_like":11,"qt_view":11,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/669744da-bd95-4226-b618-291f36529c00/public"}},"at_create":"2026-08-26T15:15:18Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":9,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나나","stat":1,"qt_like":9,"qt_view":12,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/38fff373-1d2e-4f15-d7bc-bbf6516ebd00/public"}},"at_create":"2026-08-26T14:15:37Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":8,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"t","stat":1,"qt_like":8,"qt_view":13,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/014e40aa-9eb6-4fce-fdbc-95db19fa4600/public"}},"at_create":"2026-08-26T14:15:18Z","cmt_count":0,"cmt_list":null}],"total_count":27}}
 	fmt.Println(res)
 }
 
-// story.GET("/pcs/list/:page/:limit", p.st.GetPurchaseList)
-// story.POST("/buy/:idx", p.st.BuyStory)
+// GET /story/v01/flwlist/1/10
+func TestGetFollowingStory(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/flwlist/1/10"
+
+	// res, err := GetWithToken(targetUrl, qurl, nil, nil, *dmToken)
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmPeerToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":10,"page":1,"story":[],"total_count":0}}
+	fmt.Println(res)
+}
+
+// POST /story/v01/buy/15
+func TestBuyStory(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/buy/15"
+
+	// res, err := PostWithToken(targetUrl, qurl, nil, nil, *dmPeerToken)
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"msg":"ok","psc_stat":1}}
+	fmt.Println(res)
+}
+
+// GET /story/v01/pcs/list/1/10
 func TestGetPurchaseList(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
+	targetUrl := "localhost:8080"
 	qurl := "/story/v01/pcs/list/1/10"
 
-	res, err := GetWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
-	if err != nil {
-		t.Errorf("Failed to get purchase list: %v", err)
-	}
-
-	/*
-	   {"result":0,"resultString":"Success","data":{"list":[
-	   {"idx":20,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":1,"cnt_count":5,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-09T12:56:23Z"},
-	   {"idx":18,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":0,"cnt_count":2,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ff91b39d-bb4f-47a7-f2a2-cf1ff98a5300/public","at_create":"2026-09-09T12:08:23Z"},
-	   {"idx":17,"uid":4033287471439576593,"nick":"푸른 아름다운 양","stat":2,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5339e07e-cd0b-4a8d-d419-02c64cc91e00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-08T13:16:21Z"}],"msg":"success","total_count":3}}
-	*/
-
+	// res, err := GetWithToken(targetUrl, qurl, nil, nil, *dmPeerToken)
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":10,"page":1,"story":[{"is_locked":0,"good_byme":0,"idx":15,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","body":"E 둘다","stat":2,"qt_like":16,"qt_view":7,"ctnt_total":3,"price":0,"is_paid":1,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/4cf842e8-0818-415b-39e3-afe1a23ede00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b31063b0-5475-4df7-3a52-959acb050f00/public"},"3":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/d1028e90-de2e-4662-1acf-2226999a9c00/public"}},"at_create":"2026-09-02T13:35:24Z","cmt_count":1,"cmt_list":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","wgender":"0","wage":"2019-01-02","warea":"10","body":"dsafasdfqwerwqe","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}]}],"total_count":1}}
 	fmt.Println(res)
 }
 
-func TestBuyStory(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/buy/20"
-
-	// res, err := PostWithToken(*targetUrl, qurl, nil, nil, *dmToken)
-	res, err := PostWithToken(*targetUrl, qurl, nil, nil, *dmPeerToken)
-	if err != nil {
-		t.Errorf("Failed to buy story: %v", err)
-	}
-	//{"result":0,"resultString":"Success","data":{"msg":"success"}}
+// GET /story/v01/view/count/3
+func TestGetStoryViewCount(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/view/count/3"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"count":21,"msg":"ok"}}
 	fmt.Println(res)
 }
 
-func TestGetStoryListByUid(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	uid := "2345091823"
-	qurl := fmt.Sprintf("/story/v01/list/%s", uid)
-
-	res, err := Get(*targetUrl, qurl, nil, nil)
-	if err != nil {
-		t.Errorf("Failed to get story list by uid: %v", err)
-	}
-
-	/*
-		{"result":0,"resultString":"Success","data":[{"idx":2,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:27:44Z"},
-		{"idx":1,"nick":"testnick","str_img":{"bc1.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ec0a726c-132f-4f0e-c603-35cfefd13d00/public","bc2.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/919d8a0d-37a2-4d61-099b-a879322fc200/public","bc3.jpg":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e811ff8b-6646-4fee-b5f6-9aba8e393f00/public"},"at_create":"2026-02-02T07:24:25Z"}]}
-	*/
-	fmt.Println(res)
-}
-
+// POST /story/v01/view/update/3
 func TestUpdateStoryView(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/view/update"
-
-	var key = []string{"idx"}
-	var value = []string{"3"}
-
-	res, err := PostWithToken(*targetUrl, qurl, key, value, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to update story view: %v", err)
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/view/update/3"
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"msg":"ok"}}
 	fmt.Println(res)
 }
 
-func TestDeleteStrPic(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/delpic"
-
-	var key = []string{"idx", "pic_idx"}
-	var value = []string{"3", "1"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to delete str pic: %v", err)
-	}
-
+// GET /story/v01/like/count/3
+func TestGetStoryLikeCount(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/like/count/3"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"count":4,"msg":"ok"}}
 	fmt.Println(res)
 }
 
-func TestCreateStrComment(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/comment/create"
-
-	var key = []string{"str_idx", "wuid", "nick", "stat", "body"}
-	var value = []string{"3", "77645423234236541", "test", "1", "111111 test comment body"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to create str comment: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func TestGetStrCommentList(t *testing.T) {
-	//story.GET("/comment/:idx/:page",
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := fmt.Sprintf("/story/v01/comment/%s/%s", "3", "1")
-
-	res, err := Get(*targetUrl, qurl, nil, nil)
-	if err != nil {
-		t.Errorf("Failed to get str comment list: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func TestUpdateStrBody(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/updbody"
-
-	var key = []string{"idx", "body"}
-	var value = []string{"3", "updated story body content"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to update str body: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func TestUpdateStoryStat(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/updstat"
-
-	var key = []string{"idx", "stat"}
-	var value = []string{"3", "2"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to update story stat: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func TestUpdateStrBodyComment(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/updbody"
-
-	var key = []string{"idx", "body"}
-	var value = []string{"1", "updated comment body"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to update str body comment: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func Test_UpdStatComment(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/comment/updstat"
-
-	var key = []string{"idx", "stat"}
-	var value = []string{"1", "3"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to update str stat comment: %v", err)
-	}
-
-	fmt.Println(res)
-}
-
-func TestToggleStoryLike(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
+// POST /story/v01/like/toggle
+func TestUpdateStoryLike(t *testing.T) {
+	targetUrl := "localhost:8080"
 	qurl := "/story/v01/like/toggle"
+	key := []string{"story_idx"}
+	value := []string{"3"}
 
-	var key = []string{"story_idx", "uid"}
-	var value = []string{"3", "77645423234236541"}
-
-	// res, err := PostJson(*targetUrl, qurl, key, value)
-	res, err := PostWithToken(*targetUrl, qurl, key, value, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to toggle story like: %v", err)
-		return
-	}
-	//{"like_count":3,"liked":false,"msg":"Successfully toggled story like"}
-	fmt.Println(string(res))
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"like_cnt":3,"msg":"ok"}
+	fmt.Println(res)
 }
 
+// POST /story/v01/delpic
+func TestDeleteStrPic(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := storyFixture(t, *storyTestIdx, "story_idx")
+	qurl := "/story/v01/delpic"
+	key := []string{"idx", "pic_idx"}
+	value := []string{idx, *storyTestPicIdx}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 404; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Story not found]"}
+	fmt.Println(res)
+}
+
+// POST /story/v01/comment/create
+func TestCreateStrComment(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := storyFixture(t, *storyTestIdx, "story_idx")
+	qurl := "/story/v01/comment/create"
+	key := []string{"str_idx", "wuid", "nick", "stat", "body"}
+	value := []string{idx, "77645423234236541", "test", "1", "111111 test comment body"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 403; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Story content is locked]"}
+	fmt.Println(res)
+}
+
+// GET /story/v01/comment/3/1/10
+func TestGetStrCommentList(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/comment/15/1/10"
+
+	// res, err := GetWithToken(targetUrl, qurl, nil, nil, *dmToken)
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmPeerToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"comment":[{"idx":3,"str_idx":15,"wuid":77645423236541,"nick":"test1","thumb_url":"https://icon.prof.com","wgender":"0","wage":"2019-01-02T00:00:00Z","warea":"10","body":"dsafasdfqwerwqe","stat":1,"at_create":"2026-02-02T13:50:06Z","at_update":"2026-02-02T13:50:06Z"}],"limit":10,"page":1,"total_cnt":1}}
+	fmt.Println(res)
+}
+
+// POST /story/v01/updbody
+func TestUpdateStrBody(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := "4" // Existing story owned by the default dmToken user.
+	qurl := "/story/v01/updbody"
+	key := []string{"idx", "body"}
+	value := []string{idx, "updated story body content"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"msg":"ok","res":1}
+	fmt.Println(res)
+}
+
+// POST /story/v01/updstat
+func TestUpdateStoryStat(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := "4" // Existing story owned by the default dmToken user.
+	qurl := "/story/v01/updstat"
+	key := []string{"idx", "stat"}
+	value := []string{idx, "2"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"msg":"ok","res":1}
+	fmt.Println(res)
+}
+
+// POST /story/v01/comment/updbody
+func TestUpdateStrBodyComment(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := storyFixture(t, *storyTestCommentIdx, "story_comment_idx")
+	qurl := "/story/v01/comment/updbody"
+	key := []string{"idx", "body"}
+	value := []string{idx, "updated comment body"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 404; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Story or comment not found]"}
+	fmt.Println(res)
+}
+
+// POST /story/v01/comment/updstat
+func Test_UpdStatComment(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := storyFixture(t, *storyTestCommentIdx, "story_comment_idx")
+	qurl := "/story/v01/comment/updstat"
+	key := []string{"idx", "stat"}
+	value := []string{idx, "3"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 404; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Story or comment not found]"}
+	fmt.Println(res)
+}
+
+// POST /story/v01/like/toggle
+func TestToggleStoryLike(t *testing.T) {
+	targetUrl := "localhost:8080"
+	idx := storyFixture(t, *storyTestIdx, "story_idx")
+	qurl := "/story/v01/like/toggle"
+	key := []string{"story_idx", "uid"}
+	value := []string{idx, "77645423234236541"}
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, key, value, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"like_cnt":4,"msg":"ok"}
+	fmt.Println(res)
+}
+
+// POST /story/v01/follow/set/7766493213763375817
 func TestFollowUser(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/follow/create"
-
-	var key = []string{"follower_uid", "followee_uid"}
-	var value = []string{"77645423234236541", "7766493213763375817"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to follow user: %v", err)
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/follow/set/7766493213763375817"
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"msg":"ok","res":2}
 	fmt.Println(res)
 }
 
+// POST /story/v01/follow/cancel/7766493213763375817
 func TestUnfollowUser(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/follow/cancel"
-
-	var key = []string{"follower_uid", "followee_uid"}
-	var value = []string{"77645423234236541", "7766493213763375817"}
-
-	res, err := PostJson(*targetUrl, qurl, key, value)
-	if err != nil {
-		t.Errorf("Failed to unfollow user: %v", err)
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/follow/cancel/7766493213763375817"
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"msg":"ok","res":1}
 	fmt.Println(res)
 }
 
+// GET /story/v01/follower/list/1/10
 func TestGetFollowerList(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/follow/follower/7766493213763375817/1"
-
-	res, err := Get(*targetUrl, qurl, nil, nil)
-	if err != nil {
-		t.Errorf("Failed to get follower list: %v", err)
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/follower/list/1/10"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"list":[],"total_count":0}}
 	fmt.Println(res)
 }
 
+// GET /story/v01/following/list/1/10
 func TestGetFollowingList(t *testing.T) {
-	targetUrl := flag.String("target", "localhost:8080", "target server url")
-	qurl := "/story/v01/follow/following/77645423234236541/1"
-
-	res, err := Get(*targetUrl, qurl, nil, nil)
-	if err != nil {
-		t.Errorf("Failed to get following list: %v", err)
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/following/list/1/10"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"list":[],"total_count":0}}
 	fmt.Println(res)
 }
 
-// -------------------- user cut out ---------------------------------
-// ---- story cutout (JWT: -dm_token, 대상 uid: -dm_peer_uid, 서버: -dm_target) ----
+// POST /story/v01/cutout/set/4033287471439576593
 func Test_SetCutoutUser(t *testing.T) {
-	flag.Parse()
-	qurl := fmt.Sprintf("/story/v01/cutout/set/%s", *dmPeerUID)
-
-	// tk := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MDMzMjg3NDcxNDM5NTc2NTkzIiwiZXhwIjo0OTMxMTQ3Mjk2fQ.cphoVA_rhSlXTEgbnYsHIGV4PxKvePGh1e-Y7mJmPkI"
-	// res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, tk)
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to set cutout user: %v", err)
-		return
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/cutout/set/4033287471439576593"
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"msg":"ok","res":2}}
 	fmt.Println(res)
 }
 
+// POST /story/v01/cutout/cancel/4033287471439576593
 func Test_UnsetCutoutUser(t *testing.T) {
-	flag.Parse()
-	qurl := fmt.Sprintf("/story/v01/cutout/cancel/%s", *dmPeerUID)
-
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to unset cutout user: %v", err)
-		return
-	}
-
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/cutout/cancel/4033287471439576593"
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"msg":"ok","res":1}}
 	fmt.Println(res)
 }
 
+// POST /story/v01/cutout/count
 func Test_GetCutoutCount(t *testing.T) {
-	flag.Parse()
+	targetUrl := "localhost:8080"
 	qurl := "/story/v01/cutout/count"
-
-	res, err := PostWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to get cutout count: %v", err)
-		return
-	}
-
+	res := storyJSONRequest(t, http.MethodPost, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"count":0,"msg":"ok"}}
 	fmt.Println(res)
 }
 
+// GET /story/v01/cutout/list/1/10
 func Test_GetCutoutList(t *testing.T) {
-	flag.Parse()
+	targetUrl := "localhost:8080"
 	qurl := "/story/v01/cutout/list/1/10"
-
-	res, err := GetWithToken(*dmTargetHost, qurl, nil, nil, *dmToken)
-	if err != nil {
-		t.Errorf("Failed to get cutout list: %v", err)
-		return
-	}
-
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"list":[],"msg":"ok","total_count":0}}
 	fmt.Println(res)
 }
 
-// -------------------- user cut out ---------------------------------
-// ---- story end ----
-
-// ---- file upload ----
-func TestUploadStoryPic(t *testing.T) {
-	accountID := "3a5160a653bf6175ea5c5b24ee01e344"
-	apiToken := "lhmeGe8y_2zCunsLcr8g4eUxJdPTkPGNMI_pNEWU"
-
-	// for _, file := range files {
-	// Open the file
-	src, err := os.Open("/home/jino/tmp/bc1.jpg")
-	if err != nil {
-		fmt.Println("Failed to open file: ", err.Error())
-		return
-	}
-	defer src.Close()
-
-	// Create multipart form data
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Add file to form
-	part, err := writer.CreateFormFile("file", "bc1.jpg")
-	if err != nil {
-		fmt.Println("Failed to create form file: ", err.Error())
-		return
-	}
-
-	if _, err := io.Copy(part, src); err != nil {
-		fmt.Println("Failed to copy file: ", err.Error())
-		return
-	}
-
-	/* 	// Add requireSignedURLs field
-	   	if err := writer.WriteField("requireSignedURLs", "true"); err != nil {
-	   		fmt.Println("Failed to write requireSignedURLs field: ", err.Error())
-	   		return
-	   	}
-
-	*/ // // Add id field if exists in putInfo
-	// if info, ok := putInfo[file.Filename]; ok {
-	// 	if id, exists := info["key"]; exists {
-	// 		writer.WriteField("id", id)
-	// 	}
-	// }
-
-	// Get content type before closing writer
-	contentType := writer.FormDataContentType()
-	writer.Close()
-
-	// Create request
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/images/v1", accountID)
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		fmt.Println("Failed to create request: ", err.Error())
-		return
-	}
-
-	// Set headers - Content-Type must be set before Authorization
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
-
-	// Send request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Failed to upload to Cloudflare: ", err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Failed to read response body: ", err.Error())
-		return
-	}
-
-	// Check response
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Cloudflare upload failed with status %d: %s\n", resp.StatusCode, string(bodyBytes))
-		fmt.Printf("Request URL: %s\n", url)
-		fmt.Printf("Authorization header: Bearer %s\n", apiToken)
-		return
-	}
-
-	fmt.Println("Successfully uploaded bc1.jpg to Cloudflare")
-	fmt.Println("Response:", string(bodyBytes))
-	// }
-
-}
-
-func TestRequestFileUpload(t *testing.T) {
-	// Test file upload to story endpoint
-	// This test simulates: curl -X POST http://localhost:8080/story/v01/upload -F "files=@/home/jino/tmp/bc1.jpg" -H "X-Totp: test" -v
-
+// GET /story/v01/prf/story/list/1/10
+func TestGetPrfStoryList(t *testing.T) {
 	targetUrl := "localhost:8080"
-	endpoint := "/story/v01/upload"
-	filePath := "/home/jino/tmp/bc1.jpg"
-
-	// Create multipart form data
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		t.Errorf("Failed to open file: %v", err)
-		return
-	}
-	defer file.Close()
-
-	// Create form file field
-	part, err := writer.CreateFormFile("files", filepath.Base(filePath))
-	if err != nil {
-		t.Errorf("Failed to create form file: %v", err)
-		return
-	}
-
-	// Copy file content to form
-	_, err = io.Copy(part, file)
-	if err != nil {
-		t.Errorf("Failed to copy file content: %v", err)
-		return
-	}
-
-	// Get content type before closing writer
-	contentType := writer.FormDataContentType()
-	writer.Close()
-
-	// Create request
-	url := fmt.Sprintf("http://%s%s", targetUrl, endpoint)
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		t.Errorf("Failed to create request: %v", err)
-		return
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("X-Totp", "test")
-
-	// Send request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Errorf("Failed to upload file: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Failed to read response body: %v", err)
-		return
-	}
-
-	// Check response
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response: %s\n", string(bodyBytes))
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Upload failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-		return
-	}
-
-	fmt.Println("Successfully uploaded file to story endpoint")
-
+	qurl := "/story/v01/prf/story/list/1/10"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":[{"is_locked":0,"good_byme":0,"idx":28,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","stat":0,"cnt_count":1,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","at_create":"2026-10-28T08:48:47Z"},{"is_locked":0,"good_byme":0,"idx":27,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","stat":3,"cnt_count":1,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","at_create":"2026-10-23T07:26:47Z"},{"is_locked":0,"good_byme":0,"idx":11,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","stat":1,"cnt_count":1,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public","at_create":"2026-08-28T15:01:54Z"},{"is_locked":0,"good_byme":0,"idx":5,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","stat":1,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e7b2b58b-a7ec-49a1-5e6d-175e42609b00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-05-29T09:09:24Z"},{"is_locked":0,"good_byme":0,"idx":4,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","stat":2,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-05-29T09:08:15Z"}]}
+	fmt.Println(res)
 }
 
-func Test_GetFilename(t *testing.T) {
-	fullPath := "home/jino/tmp/bc1.jpg"
-	parts := strings.Split(fullPath, "/")
-	// filename := parts[len(parts)-1]
-	var filename string
-	if len(parts) > 1 {
-		filename = parts[len(parts)-1]
-	}
-	fmt.Println(filename)
-}
-
-func TestMultiFileUpload(t *testing.T) {
-	// Test file upload to story endpoint
-	// This test simulates: curl -X POST http://localhost:8080/story/v01/upload -F "files=@/home/jino/tmp/bc1.jpg" -F "uid=test_user_123" -F "index_0=0" -H "X-Totp: test" -v
-
+// GET /story/v01/prf/story/list/1/10/4033287471439576593
+func TestGetPrfStoryListByUID(t *testing.T) {
 	targetUrl := "localhost:8080"
-	endpoint := "/story/v01/upload"
-	filePath := "/home/jino/tmp/bc1.jpg"
-	filePath2 := "/home/jino/tmp/bc2.jpg"
-	filePath3 := "/home/jino/tmp/bc3.jpg"
-	testUid := "7766493213763375817" // 테스트용 uid
-
-	// Create multipart form data
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// List of files to upload
-	filePaths := []string{filePath, filePath2, filePath3}
-
-	// Add uid field first
-	err := writer.WriteField("uid", testUid)
-	if err != nil {
-		t.Errorf("Failed to write uid field: %v", err)
-		return
-	}
-
-	err = writer.WriteField("stat", "1")
-	if err != nil {
-		t.Errorf("Failed to write stat field: %v", err)
-		return
-	}
-
-	err = writer.WriteField("nick", "testnick")
-	if err != nil {
-		t.Errorf("Failed to write stat field: %v", err)
-		return
-	}
-
-	err = writer.WriteField("sbody", "teqewrqwreqwreqwerqwreqwreqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerqwerwqerqwerstteststsetsteewststestsetsetestestesetsetestestestsetestseetestestestestsetestestestestsetestestsetestestsetsetestesetestestsetsetestsetsetestestewsterstewrtkldsjgklsdjklsdfajklasfjdlkjaklsjfaljfaskdljfklasjfklasjfdlkasjklfjaslkfjkalsjfklasjfklasjfkljasklfjasklfjlkasfd")
-	if err != nil {
-		t.Errorf("Failed to write uid field: %v", err)
-		return
-	}
-
-	// Add each file to the multipart form with index
-	for _, fp := range filePaths {
-		// Open the file
-		file, err := os.Open(fp)
-		if err != nil {
-			t.Errorf("Failed to open file %s: %v", fp, err)
-			return
-		}
-		defer file.Close()
-
-		// Create form file field
-		part, err := writer.CreateFormFile("files", filepath.Base(fp))
-		if err != nil {
-			t.Errorf("Failed to create form file for %s: %v", fp, err)
-			return
-		}
-
-		// Copy file content to form
-		_, err = io.Copy(part, file)
-		if err != nil {
-			t.Errorf("Failed to copy file content for %s: %v", fp, err)
-			return
-		}
-		/*
-			parts := strings.Split(fp, "/")
-			var fname = ""
-			if len(parts) > 1 {
-				fname = parts[len(parts)-1]
-			} else {
-				fname = fp
-			}
-
-			// Add index field for this file
-			indexFieldName := fmt.Sprintf("idx_%d", idx)
-			err = writer.WriteField(indexFieldName, fmt.Sprintf("%s", fname))
-			if err != nil {
-				t.Errorf("Failed to write index field for %s: %v", fp, err)
-				return
-			} */
-	}
-
-	// Get content type before closing writer
-	contentType := writer.FormDataContentType()
-	writer.Close()
-
-	// Create request
-	url := fmt.Sprintf("http://%s%s", targetUrl, endpoint)
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		t.Errorf("Failed to create request: %v", err)
-		return
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("X-Totp", "test")
-
-	// Send request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Errorf("Failed to upload file: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Failed to read response body: %v", err)
-		return
-	}
-
-	// Check response
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response: %s\n", string(bodyBytes))
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Upload failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-		return
-	}
-
-	fmt.Println("Successfully uploaded multiple files to story endpoint")
-
+	qurl := "/story/v01/prf/story/list/1/10/4033287471439576593"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":[{"is_locked":0,"good_byme":0,"idx":26,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/68598dcf-315f-483e-403a-87b3af033a00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-10-20T14:28:35Z"},{"is_locked":0,"good_byme":0,"idx":25,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-10-20T13:34:33Z"},{"is_locked":0,"good_byme":0,"idx":24,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":1,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-10-20T13:32:43Z"},{"is_locked":0,"good_byme":0,"idx":23,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/998098f0-dd4f-40e1-bcea-052b742dc500/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-10-20T13:32:42Z"},{"is_locked":0,"good_byme":0,"idx":21,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/b9322450-c140-4e1b-b174-985b7c597e00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-10-20T13:23:26Z"},{"is_locked":0,"good_byme":0,"idx":20,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":5,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/99bb2943-201b-4c20-9851-8ba2146cdc00/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-09T12:56:23Z"},{"is_locked":0,"good_byme":0,"idx":19,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/1fd64301-d801-4dcf-4081-e7b0fb2da500/public","cnt_type":"img","cnt_thumb":"","at_create":"2026-09-09T12:08:23Z"},{"is_locked":0,"good_byme":0,"idx":18,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":0,"cnt_count":2,"cnt_url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","cnt_type":"vdo","cnt_thumb":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/ff91b39d-bb4f-47a7-f2a2-cf1ff98a5300/public","at_create":"2026-09-09T12:08:23Z"},{"is_locked":1,"good_byme":0,"idx":17,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":2,"cnt_count":2,"cnt_url":"","cnt_type":"","cnt_thumb":"","at_create":"2026-09-08T13:16:21Z"},{"is_locked":1,"good_byme":0,"idx":16,"uid":4033287471439576593,"nick":"","main_pic":"","gender":0,"area":"all","age":"","stat":1,"cnt_count":1,"cnt_url":"","cnt_type":"","cnt_thumb":"","at_create":"2026-09-04T10:57:04Z"}]}
+	fmt.Println(res)
 }
 
-func Test_StoryProcess(t *testing.T) {
-	Test_UploadPicStory(t)
-	Test_UploadContents(t)
+// GET /story/v01/prf/pic/waiting/1/10
+func TestGetPrfPicWaitingList(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/prf/pic/waiting/1/10"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 403; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Profile administrator required]"}
+	fmt.Println(res)
+}
 
-	TestGetStoryDetail(t)
+// POST /story/v01/prf/pic/stat
+func TestSetPrfPicStat(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/prf/pic/stat"
+	uid, err := strconv.ParseUint(storyFixture(t, *dmPeerUID, "dm_peer_uid"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, err := strconv.Atoi(*storyTestPicIdx)
+	if err != nil || slot < 1 || slot > 5 {
+		t.Fatal("story_pic_idx must be 1..5")
+	}
+	// This request requires numeric uid/slot, unlike PostWithToken's string map.
+	payload, err := json.Marshal(ptl.SetPrfPicStatReq{Uid: uid, Slot: slot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := storyRequest(t, targetUrl, qurl, "application/json", bytes.NewReader(payload))
+	// 실제 응답 (2026-11-10, HTTP 403; 검증 실패로 res 대입 전 종료):
+	// {"result":1,"resultString":"Failed","msg":"[Profile administrator required]"}
+	fmt.Println(res)
+}
 
-	TestGetDefStoryList(t)
+// GET /story/v01/list/1/10
+func TestGetMyStoryList(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/list/1/10"
+	res := storyJSONRequest(t, http.MethodGet, targetUrl, qurl, nil, nil, *dmToken)
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"result":0,"resultString":"Success","data":{"limit":10,"page":1,"story":[{"is_locked":0,"good_byme":0,"idx":28,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"테스트 동영상 스토리 — CreateStory from automated video+thumb test","stat":0,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":100,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}},"at_create":"2026-10-28T08:48:47Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":27,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"테스트 동영상 스토리 — CreateStory from automated video+thumb test","stat":3,"qt_like":0,"qt_view":0,"ctnt_total":1,"price":100,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}},"at_create":"2026-10-23T07:26:47Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":11,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"테스트 동영상 스토리 — CreateStory from automated video+thumb test","stat":1,"qt_like":12,"qt_view":11,"ctnt_total":1,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"vdo","url":"https://storage.googleapis.com/stream-example-bucket/video.mp4","thumb1":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/5bca857f-75b1-4548-af93-ffa9fdd05600/public"}},"at_create":"2026-08-28T15:01:54Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":5,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"tasdfsafdest 테스트 스토리 본문 story body from automated test","stat":1,"qt_like":5,"qt_view":16,"ctnt_total":2,"price":0,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/e7b2b58b-a7ec-49a1-5e6d-175e42609b00/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0ccf1266-7407-4612-8c5a-0d8af75dd500/public"}},"at_create":"2026-05-29T09:09:24Z","cmt_count":0,"cmt_list":null},{"is_locked":0,"good_byme":0,"idx":4,"uid":8697414060736839837,"nick":"prf_test_nick","main_pic":"https://cdn.artkoreatv.com/news/photo/202604/101974_322779_5337.jpg","gender":1,"area":"seoul","age":"34","body":"updated story body content","stat":2,"qt_like":4,"qt_view":17,"ctnt_total":2,"price":100,"is_paid":0,"flw_cnt":0,"is_flwd":0,"str_img":{"1":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/510f55ea-3262-46ba-4fa3-b92c7c738000/public"},"2":{"type":"img","url":"https://imagedelivery.net/bhnuJ7hC7hq1zO__1yxVLg/0125d18e-aa56-45a0-98ac-853ecd3c1600/public"}},"at_create":"2026-05-29T09:08:15Z","cmt_count":0,"cmt_list":null}],"total_count":5}}
+	fmt.Println(res)
+}
 
-	TestGetCondStoryList(t)
-
-	TestGetStoryListByUid(t)
-
-	TestDeleteStrPic(t)
-
-	TestCreateStrComment(t)
-
-	TestGetStrCommentList(t)
+// POST /story/v01/updprice
+func TestUpdStoryPriceInfo(t *testing.T) {
+	targetUrl := "localhost:8080"
+	qurl := "/story/v01/updprice"
+	// Same owned fixture as TestUpdateStrBody and TestUpdateStoryStat.
+	price := 100
+	payload, err := json.Marshal(ptl.UpdateStoryPriceReq{Idx: "4", Stat: "2", Price: &price})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := storyRequest(t, targetUrl, qurl, "application/json", bytes.NewReader(payload))
+	var result struct {
+		Res *int64 `json:"res"`
+	}
+	if err := json.Unmarshal([]byte(res), &result); err != nil || result.Res == nil || *result.Res < 0 || *result.Res > 1 {
+		t.Fatalf("expected res=0 or res=1: %s", res)
+	}
+	// 실제 응답 (2026-11-10, HTTP 200):
+	// {"msg":"ok","res":1}
+	fmt.Println(res)
 }

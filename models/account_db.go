@@ -65,15 +65,15 @@ CREATE TABLE `user_fav` (
 CREATE TABLE `user_block` (
   `idx` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `uid` BIGINT UNSIGNED NOT NULL,
-  `bid` BIGINT UNSIGNED NOT NULL,
+  `tid` BIGINT UNSIGNED NOT NULL,
   `reason` VARCHAR(128) DEFAULT NULL,
   `stat` TINYINT NOT NULL DEFAULT 1 COMMENT '1:block, 0:unblock',
   `at_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `at_update` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_block_pair` (`uid`, `bid`),
+  UNIQUE KEY `uk_block_pair` (`uid`, `tid`),
   KEY `idx_blocker_stat` (`uid`, `stat`, `at_update`),
-  KEY `idx_blocked_stat` (`bid`, `stat`, `at_update`)
+  KEY `idx_blocked_stat` (`tid`, `stat`, `at_update`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_info` (
@@ -755,9 +755,9 @@ func (p *AccountDB) CountBlockUsers(uid uint64) (int64, error) {
 	return count, nil
 }
 
-func (p *AccountDB) SetUnblock(uid, bid uint64) (int64, error) {
-	query := `UPDATE user_block SET stat = 0, at_update = NOW() WHERE uid = ? AND bid = ?`
-	result, err := p.conndb.Exec(query, uid, bid)
+func (p *AccountDB) SetUnblock(uid, tid uint64) (int64, error) {
+	query := `UPDATE user_block SET stat = 0, at_update = NOW() WHERE uid = ? AND tid = ?`
+	result, err := p.conndb.Exec(query, uid, tid)
 	if err != nil {
 		return 0, err
 	}
@@ -786,9 +786,9 @@ func (p *AccountDB) GetBlockList(uid uint64, page, limit int) (*[]ptc.BlockUserI
 
 	// 2. Get paged list
 	query := `
-		SELECT ub.bid, COALESCE(u.nick, ''), COALESCE(u.thmb_pic, ''), COALESCE(ub.reason, ''), ub.at_update
+		SELECT ub.tid, COALESCE(u.nick, ''), COALESCE(u.thmb_pic, ''), COALESCE(ub.reason, ''), ub.at_update
 		FROM user_block ub
-		LEFT JOIN user_info u ON u.uid = ub.bid
+		LEFT JOIN user_info u ON u.uid = ub.tid
 		WHERE ub.uid = ? AND ub.stat = 1
 		ORDER BY ub.at_update DESC
 		LIMIT ? OFFSET ?
@@ -815,7 +815,7 @@ func (p *AccountDB) IsBlockedPair(uidA, uidB uint64) (bool, error) {
 		SELECT 1
 		FROM user_block
 		WHERE stat = 1
-			AND ((uid = ? AND bid = ?) OR (uid = ? AND bid = ?))
+			AND ((uid = ? AND tid = ?) OR (uid = ? AND tid = ?))
 		LIMIT 1
 	`
 	var one int
@@ -964,10 +964,10 @@ CREATE TABLE `story` (
   `pic3` varchar(145) DEFAULT NULL,
   `pic4` varchar(145) DEFAULT NULL,
   `pic5` varchar(145) DEFAULT NULL,
-  `stat` tinyint DEFAULT NULL COMMENT 'stat = 0 공개, stat = 1 비공객, stat = 2 유료공개, stat=4 삭제',
+  `stat` tinyint DEFAULT NULL COMMENT 'stat: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV; 6=ALL(query only)',
   `at_create` datetime DEFAULT CURRENT_TIMESTAMP,
   `at_update` datetime DEFAULT CURRENT_TIMESTAMP,
-  `qt_good` int DEFAULT NULL,
+  `qt_like` int DEFAULT NULL,
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 

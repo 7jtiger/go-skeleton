@@ -9,6 +9,10 @@
 
 ## Basic Cache Management Functions
 - `SetCache()`: Function to store key-value pairs in Redis with 30-minute TTL
+- `SetStory1000()`: `story:top1000`에 스토리 1000건 JSON(`total_count`, `list`) 저장. TTL 30분
+- `GetStoryList(page, limit)`: `story:top1000` 페이지 조회. 구매/팔로우 표시는 호출측에서 `uid` 기준으로 갱신
+- `DelStory1000()`: `story:top1000` 키 전체 삭제
+- `SetViewHistory(uid, strIdx)` / `GetViewHistory(uid, strIdx)`: `story:view:{uid}:{strIdx}` 조회 기록. TTL 24시간. 있으면 당일 조회수 증가를 건너뜀
 - `SetCacheMintime()`: Function to store key-value pairs with specified TTL in minutes
 - `SetBytes()`: Function to store byte data in Redis (currently no implementation - commented out)
 - `GetCache()`: Function to retrieve value by key from Redis

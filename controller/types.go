@@ -87,14 +87,17 @@ func getPageAndLimit(page string, limit string) (int, int, error) {
 	}
 
 	nPage, err := strconv.Atoi(page)
-	if err != nil {
+	if err != nil || nPage < 1 {
 		return 0, 0, errors.New("page is invalid")
 	}
 	nLimit, err := strconv.Atoi(limit)
-	if err != nil {
-		return 0, 0, errors.New("limit is invalid")
+	if err != nil || nLimit < 1 || nLimit > 100 {
+		return 0, 0, errors.New("limit must be between 1 and 100")
 	}
 
+	if nPage-1 > int(^uint(0)>>1)/nLimit {
+		return 0, 0, errors.New("page offset is too large")
+	}
 	return nPage, nLimit, nil
 }
 

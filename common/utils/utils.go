@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/gomail.v2"
 )
@@ -230,6 +230,8 @@ func uplCldflrStream(file *multipart.FileHeader, accountID, apiToken string) (st
 	return playback, nil
 }
 
+var cloudflareUploadClient = &http.Client{Timeout: 5 * time.Minute}
+
 func postCldflrMultipart(apiURL string, file *multipart.FileHeader, apiToken string) ([]byte, int, error) {
 	src, err := file.Open()
 	if err != nil {
@@ -237,36 +239,47 @@ func postCldflrMultipart(apiURL string, file *multipart.FileHeader, apiToken str
 	}
 	defer src.Close()
 
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", file.Filename)
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	multipartWriter := multipart.NewWriter(writer)
+	req, err := http.NewRequest(http.MethodPost, apiURL, reader)
 	if err != nil {
 		return nil, 0, err
 	}
-	if _, err := io.Copy(part, src); err != nil {
-		return nil, 0, err
-	}
-	if err := writer.Close(); err != nil {
-		return nil, 0, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, apiURL, body)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiToken))
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, 0, err
+	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	done := make(chan error, 1)
+	go func() {
+		part, err := multipartWriter.CreateFormFile("file", file.Filename)
+		if err == nil {
+			_, err = io.Copy(part, src)
+		}
+		if err == nil {
+			err = multipartWriter.Close()
+		}
+		_ = writer.CloseWithError(err)
+		done <- err
+	}()
+	resp, requestErr := cloudflareUploadClient.Do(req)
+	// Unblock the producer even when the server rejects the upload early.
+	_ = reader.Close()
+	writeErr := <-done
+	if requestErr != nil {
+		return nil, 0, requestErr
 	}
 	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
+	if writeErr != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil, resp.StatusCode, writeErr
+	}
+	const maxResponse = 1 << 20
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
+	if len(bodyBytes) > maxResponse {
+		return nil, resp.StatusCode, fmt.Errorf("upload response exceeds 1 MiB")
+	}
+
 	return bodyBytes, resp.StatusCode, nil
 }
 

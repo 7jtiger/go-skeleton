@@ -107,7 +107,7 @@ func (c *APIClient) RegistUser(registReq protocol.RegistReq) error {
 	if resp.StatusCode != http.StatusOK {
 		var errResp protocol.RespHeader
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return fmt.Errorf("registration failed: %s (code: %d)", errResp.Desc, errResp.Result)
+			return fmt.Errorf("registration failed: %s (code: %d)", errResp.Msg, errResp.Result)
 		}
 		return fmt.Errorf("registration failed with status %d: %s", resp.StatusCode, string(body))
 	}
@@ -155,7 +155,7 @@ func (c *APIClient) LoginUser(loginReq protocol.LoginReq) (*protocol.LoginUserRe
 	if resp.StatusCode != http.StatusOK {
 		var errResp protocol.RespHeader
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("login failed: %s (code: %d)", errResp.Desc, errResp.Result)
+			return nil, fmt.Errorf("login failed: %s (code: %d)", errResp.Msg, errResp.Result)
 		}
 		return nil, fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(body))
 	}
@@ -200,7 +200,7 @@ func (c *APIClient) GetHomeData(accessToken string) (*HomeData, error) {
 	if resp.StatusCode != http.StatusOK {
 		var errResp protocol.RespHeader
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("failed to get home data: %s (code: %d)", errResp.Desc, errResp.Result)
+			return nil, fmt.Errorf("failed to get home data: %s (code: %d)", errResp.Msg, errResp.Result)
 		}
 		return nil, fmt.Errorf("failed to get home data with status %d: %s", resp.StatusCode, string(body))
 	}

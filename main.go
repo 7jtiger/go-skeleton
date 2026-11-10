@@ -1,8 +1,14 @@
-﻿package main
+package main
 
 // @title ms-gateway API
-// @version 1.0
-// @description ms-gateway API server
+// @version 0.9.1
+// @description ms-gateway API server. 각 API의 요청 형식, 응답 래퍼 및 현재 구현 제한은 개별 문서를 참고하세요.
+// @description 공통 오류 응답은 {"result":1,"resultString":"Failed","msg":"오류 내용"}입니다. 성공 응답의 data 래퍼 유무는 각 엔드포인트 스키마를 따릅니다.
+// @description 스토리 상태: 0=PUB, 1=FLW, 2=PAY, 3=PRV, 4=DEL, 5=RSV. 조건 조회는 0/pub, 1/flw, 2/pay, 3/prv, 6/all만 허용하며 6은 저장하지 않습니다.
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Bearer access_token 형식으로 입력합니다.
 
 import (
 	"context"
@@ -152,17 +158,19 @@ func runServer(cf *conf.Config) error {
 	logger.Info("Router initialized successfully")
 
 	// Context 생성 (graceful shutdown용)
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go controller.LogResourceUsage(ctx)
 
 	// HTTP 서버 설정
 	server := &http.Server{
-		Addr:           cf.Server.Port,
-		Handler:        router.Idx(),
-		ReadTimeout:    serverReadTimeout,
-		WriteTimeout:   serverWriteTimeout,
-		IdleTimeout:    serverIdleTimeout,
-		MaxHeaderBytes: serverMaxHeaderBytes,
+		Addr:              cf.Server.Port,
+		Handler:           router.Idx(),
+		ReadTimeout:       serverReadTimeout,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
+		MaxHeaderBytes:    serverMaxHeaderBytes,
 	}
 
 	serverErr := make(chan error, 1)
